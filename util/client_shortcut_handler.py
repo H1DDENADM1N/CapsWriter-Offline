@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from util.client_send_audio import send_audio
 from util.my_status import Status
 from pycaw.pycaw import AudioUtilities
-
+from util.client_key_press_counter import key_press_counter, KeyPressCounter
 task = asyncio.Future()
 status = Status('开始录音', spinner='point')
 pool = ThreadPoolExecutor()
@@ -168,6 +168,10 @@ def hold_mode(e: keyboard.KeyboardEvent):
     if e.event_type == 'down' and not Cosmic.on:
         # 记录开始时间
         launch_task()
+    elif KeyPressCounter.exceed_time:
+        finish_task()
+        KeyPressCounter.exceed_time = False
+        launch_task()
     elif e.event_type == 'up':
         # 记录持续时间，并标识录音线程停止向队列放数据
         duration = time.time() - Cosmic.on
@@ -198,6 +202,8 @@ def hold_handler(e: keyboard.KeyboardEvent) -> None:
 
     # 长按模式
     hold_mode(e)
+    if Config.auto_type != 0: # 每 * 秒自动输出
+        key_press_counter(e)
 
 
 def click_handler(e: keyboard.KeyboardEvent) -> None:
