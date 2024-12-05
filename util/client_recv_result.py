@@ -10,7 +10,7 @@ from util.client_rename_audio import rename_audio
 from util.client_strip_punc import strip_punc
 from util.client_type_result import type_result
 from util.client_write_md import write_md
-
+from util.client_shortcut_handler import update_opposite_state, read_opposite_state
 if not Cosmic.transcribe_subtitles:
     from util.client_translate_offline import translate_offline
     from util.client_translate_online import translate_online
@@ -101,10 +101,21 @@ async def recv_result():
                 await type_result(online_translated_text)
                 online_translate_done = False
             elif convert_to_traditional_chinese_done:
-                await type_result(traditional_text)
+                # 根据'简/繁'转换设定,来选择输出内容的逻辑
+                opposite_state = read_opposite_state()
+                if Config.convert_to_traditional_chinese_main == '简' and opposite_state:
+                    await type_result(traditional_text)
+                elif Config.convert_to_traditional_chinese_main == '简' and not opposite_state:
+                    await type_result(text)
+                if Config.convert_to_traditional_chinese_main == '繁' and opposite_state:
+                    await type_result(text)
+                elif Config.convert_to_traditional_chinese_main == '繁' and not opposite_state:
+                    await type_result(traditional_text)
                 convert_to_traditional_chinese_done = False
-            else:
+            elif not Config.convert_to_traditional_chinese:
                 await type_result(text)
+            if Config.convert_to_traditional_chinese:
+                update_opposite_state(False)  # 复原切换状态`opposite_state`
 
     except websockets.ConnectionClosedError:
         console.print("[red]连接断开\n")

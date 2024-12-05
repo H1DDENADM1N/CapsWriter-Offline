@@ -1,7 +1,7 @@
 import keyboard
 from util.client_cosmic import Cosmic, console
 from config import ClientConfig as Config
-
+import json  # 我不会其他传递变量的方法, 先用写入文件的方法吧
 import time
 import asyncio
 from threading import Event
@@ -20,6 +20,7 @@ released = True
 event = Event()
 unpause_needed = False
 
+
 def shortcut_correct(e: keyboard.KeyboardEvent):
     # 在我的 Windows 电脑上，left ctrl 和 right ctrl 的 keycode 都是一样的，
     # keyboard 库按 keycode 判断触发
@@ -31,17 +32,20 @@ def shortcut_correct(e: keyboard.KeyboardEvent):
     if key_expect != key_actual: return False
     return True
 
+
 def mute_all_sessions():
     sessions = AudioUtilities.GetAllSessions()
     for session in sessions:
         volume = session.SimpleAudioVolume
         volume.SetMute(1, None)
 
+
 def unmute_all_sessions():
     sessions = AudioUtilities.GetAllSessions()
     for session in sessions:
         volume = session.SimpleAudioVolume
         volume.SetMute(0, None)
+
 
 def launch_task():
     # 确认是否需要翻译
@@ -76,7 +80,6 @@ def launch_task():
     if Config.pause_other_audio and audio_playering_app_name() != None:
         pause_other_audio()
         unpause_needed = True
-    
 
     # 通知录音线程可以向队列放数据了
     Cosmic.on = t1
@@ -114,6 +117,7 @@ def cancel_task():
         Cosmic.stream.stop()
         Cosmic.stream.close()
 
+
 def finish_task():
     global task
 
@@ -145,6 +149,7 @@ def finish_task():
         # 结束音频流
         Cosmic.stream.stop()
         Cosmic.stream.close()
+
 
 # =================单击模式======================
 
@@ -198,7 +203,6 @@ def click_mode(e: keyboard.KeyboardEvent):
         event.set()
 
 
-
 # ======================长按模式==================================
 
 
@@ -226,13 +230,10 @@ def hold_mode(e: keyboard.KeyboardEvent):
                 keyboard.send(Config.speech_recognition_shortcut)
 
 
-
-
 # ==================== 绑定 handler ===============================
 
 
 def hold_handler(e: keyboard.KeyboardEvent) -> None:
-
     # 验证按键名正确
     if not shortcut_correct(e):
         return
@@ -242,13 +243,18 @@ def hold_handler(e: keyboard.KeyboardEvent) -> None:
 
 
 def click_handler(e: keyboard.KeyboardEvent) -> None:
-
     # 验证按键名正确
     if not shortcut_correct(e):
         return
 
     # 单击模式
     click_mode(e)
+
+
+def alt_handler():
+    # 我不会其他传递变量的方法, 先用写入文件的方法吧
+    ff = update_opposite_state("")
+    print(f"切换状态 : {ff}")
 
 
 def bond_shortcut():
@@ -258,3 +264,42 @@ def bond_shortcut():
         # 单击模式，必须得阻塞快捷键
         # 收到长按时，再模拟发送按键
         keyboard.hook_key(Config.speech_recognition_shortcut, click_handler, suppress=True)
+
+    # 1. 新增几个'简/繁'转换状态的快捷键(实际上只增加了一个`opposite_state_shortcut`)
+    # 2. `suppress=True` 是导致`Shift` 启动原来的功能出现延迟的原因
+    # 2.1 延迟的状况如下: 选择文本 → 按`shift`键能选择光标至到鼠标的范围. 但是注册了以下的组合热键之后, 大约一秒钟才能选择光标至到鼠标范围的文本.
+    # 3. 尝试用过`autohotkey`的`return`方法來阻塞原按鍵的功能, 但是可能导致某些中文输入法和`Capslock`按鍵有冲突
+    # 3.1 冲突的状况如下: 在输入中文状态下, 按下`Capslock`和`opposite_state_shortcut`致使一直循环松开和按下该`Capslock`按鍵, 导致语音输入的功能一直在重复开关。直到某一段时间之后才能正常运行.
+    # 4. `keyboard.add_hotkey` 算是比较好的方法, 主要是能实现阻塞功能.
+    if Config.convert_to_traditional_chinese:
+        # caps lock + tab (预设)
+        keyboard.add_hotkey(Config.speech_recognition_shortcut + "+" + Config.opposite_state_shortcut,
+                            alt_handler, suppress=True, trigger_on_release=True)
+        # caps lock + left shift + tab (离线翻译预设)
+        keyboard.add_hotkey(
+            Config.speech_recognition_shortcut + "+" + Config.offline_translate_shortcut + "+" + Config.opposite_state_shortcut,
+            alt_handler, suppress=True, trigger_on_release=True)
+        # caps lock + right shift + tab (在线翻译预设)
+        keyboard.add_hotkey(
+            Config.speech_recognition_shortcut + "+" + Config.online_translate_shortcut + "+" + Config.opposite_state_shortcut,
+            alt_handler, suppress=True, trigger_on_release=True)
+
+# ==================== 传递变量 `opposite_state`===============
+
+
+def update_opposite_state(aa):
+    # 我不会其他传递变量的方法, 先用写入文件的方法吧
+    if aa is False:
+        opposite_state = False
+    else:
+        opposite_state = not read_opposite_state()
+    with open('opposite_state.json', 'w') as f:
+        json.dump(opposite_state, f)
+    return opposite_state
+
+
+def read_opposite_state():
+    # 我不会其他传递变量的方法, 先用写入文件的方法吧
+    with open('opposite_state.json', 'r') as f:
+        opposite_state = json.load(f)
+    return opposite_state
