@@ -91,7 +91,8 @@ class ClientConfig:
                                                             # 方便调试
     hint_while_recording_at_cursor_position = True  # 是否启用 跟随鼠标光标位置的新版输入状态提示功能
     convert_to_traditional_chinese = False          # 是否启用简繁体中文转换
-    convert_to_traditional_chinese_main = '简'      # `简/繁` 中文作为主要输出
+    convert_to_traditional_chinese_main = '繁'      # `简/繁` 中文作为主要输出
+    enable_opposite_state_shortcut = False          # 是否在启动程式的时候，注册这个新的快捷键(这个是用来在没解决按鍵延迟的问题等临时设置) 如果为`False`下面的快捷键不起作用,临时转换简/繁体输出的功能也不会啟动
     opposite_state_shortcut = 'tab'                 # 转换形态的快捷键, 作用在切换 `简/繁` 中文的输出, 或者其他功能
     opencc_converter = "s2t.json"                   # OpenCC转换器
                                                     # s2t.json Simplified Chinese to Traditional Chinese 簡體到繁體

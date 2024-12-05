@@ -271,7 +271,7 @@ def bond_shortcut():
     # 3. 尝试用过`autohotkey`的`return`方法來阻塞原按鍵的功能, 但是可能导致某些中文输入法和`Capslock`按鍵有冲突
     # 3.1 冲突的状况如下: 在输入中文状态下, 按下`Capslock`和`opposite_state_shortcut`致使一直循环松开和按下该`Capslock`按鍵, 导致语音输入的功能一直在重复开关。直到某一段时间之后才能正常运行.
     # 4. `keyboard.add_hotkey` 算是比较好的方法, 主要是能实现阻塞功能.
-    if Config.convert_to_traditional_chinese:
+    if Config.convert_to_traditional_chinese and Config.enable_opposite_state_shortcut:
         # caps lock + tab (预设)
         keyboard.add_hotkey(Config.speech_recognition_shortcut + "+" + Config.opposite_state_shortcut,
                             alt_handler, suppress=True, trigger_on_release=True)
