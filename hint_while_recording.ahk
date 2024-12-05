@@ -1,7 +1,6 @@
 ﻿; 为原来的脚本提供了另一种显示方式(使用BeautifulToolTip库),并且提供修改配置的功能,在这个`hint_while_recording.ini`文件修改。
-; 使用BeautifulToolTip库显示的好处是不会改变焦点,从而退出全屏幕模式(单独测试过没有问题,但是`start_client_gui.exe`一起用就不一定了)。另外比较漂亮。坏处是增加了30MB记忆体的占用。
-; 改善了在使用翻译功能时,有可能错误地显示状态的情况。
-; 增加了一个这个脚本的图标，方便识别。
+; 使用BeautifulToolTip库显示的好处是不会改变焦点,从而退出全屏幕模式(需要在`config.py` 的 `hint_while_recording_at_cursor_position = False`配合使用)。另外比较漂亮。坏处是增加了30MB记忆体的占用。
+; 改善在游戏中错误启动提示的情况: 延迟`hotkeyTurnOnDelay毫秒`后重新启用热键
 ; hint_while_recording:
 ; Author:[H1DDENADM1N](https://github.com/H1DDENADM1N/CapsWriter-Offline)
 ; Contributor: [JoanthanWu](https://github.com/JoanthanWu/CapsWriter-Offline)
@@ -46,7 +45,7 @@ OwnStyle2:= {TextColorLinearGradientStart:enTxtClolorA        ; ARGB
         , FontStyle:"Bold"}
 
 chineseVoice(ThisHotkey) {
-    Hotkey "~" chineseKey, "Off"
+    Hotkey "~" chineseKey, "Off" ; 关闭快捷键功能,以免重复触发
     Hotkey "~" englishKey chineseKey, "Off"
     if hwnd := GetCaretPosEx(&x, &y, &w, &h){
         ; 能够获取到文本光标时，提示信息在光标位置，且x坐标向右偏移5
@@ -67,7 +66,7 @@ chineseVoice(ThisHotkey) {
 }
 
 englishVoice(ThisHotkey) {
-    Hotkey "~" chineseKey, "Off"
+    Hotkey "~" chineseKey, "Off" ; 关闭快捷键功能,以免重复触发
     Hotkey "~" englishKey chineseKey, "Off"
     if hwnd := GetCaretPosEx(&x, &y, &w, &h){
         ; 能够获取到文本光标时，提示信息在光标位置，且x坐标向右偏移5
@@ -93,7 +92,11 @@ BttRemove(ThisHotkey) {
         btt(,,,20)
     else
         ToolTip()
-    Hotkey "~" chineseKey, "On"
+    SetTimer EnableShortcutKeys, hotkeyTurnOnDelay ; 改善在游戏中错误启动提示的情况: 延迟`hotkeyTurnOnDelay毫秒`后重新启用热键
+}
+
+EnableShortcutKeys(*) {
+    Hotkey "~" chineseKey, "On" ; 恢复快捷键功能
     Hotkey "~" englishKey chineseKey, "On"
 }
 
@@ -171,6 +174,7 @@ GetCaretPosEx(&x?, &y?, &w?, &h?) {
 
 DefaultIni() {
     IniWrite("1", IniFile, "BeautifulToolTip", "enableBTT")
+    IniWrite("-67", IniFile, "BeautifulToolTip", "hotkeyTurnOnDelay")
     IniWrite("✦语音输入中‧‧‧", IniFile, "ShowText", "cnTxt")
     IniWrite("✦VoiceTrans‧‧‧", IniFile, "ShowText", "enTxt")    
     IniWrite("CapsLock", IniFile, "Hotkey", "chineseKey")
@@ -185,6 +189,7 @@ DefaultIni() {
 
 ReadIni() {
     global enableBTT := IniRead(IniFile, "BeautifulToolTip", "enableBTT")
+    global hotkeyTurnOnDelay := IniRead(IniFile, "BeautifulToolTip", "hotkeyTurnOnDelay")
     global cnTxt := IniRead(IniFile, "ShowText", "cnTxt")
     global enTxt := IniRead(IniFile, "ShowText", "enTxt")
     global chineseKey := IniRead(IniFile, "Hotkey", "chineseKey")
