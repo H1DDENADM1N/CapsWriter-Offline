@@ -274,11 +274,6 @@ def click_handler(e: keyboard.KeyboardEvent) -> None:
     click_mode(e)
 
 
-def alt_handler():
-    # 我不会其他传递变量的方法, 先用写入文件的方法吧
-    update_opposite_state("")
-
-
 def bond_shortcut():
     if Config.hold_mode:
         keyboard.hook_key(Config.speech_recognition_shortcut, hold_handler, suppress=Config.suppress)
@@ -287,24 +282,6 @@ def bond_shortcut():
         # 收到长按时，再模拟发送按键
         keyboard.hook_key(Config.speech_recognition_shortcut, click_handler, suppress=True)
 
-    # 1. 新增几个'简/繁'转换状态的快捷键(实际上只增加了一个`opposite_state_shortcut`)
-    # 2. `suppress=True` 是导致`Shift` 启动原来的功能出现延迟的原因
-    # 2.1 延迟的状况如下: 选择文本 → 按`shift`键能选择光标至到鼠标的范围. 但是注册了以下的组合热键之后, 大约一秒钟才能选择光标至到鼠标范围的文本.
-    # 3. 尝试用过`autohotkey`的`return`方法來阻塞原按鍵的功能, 但是可能导致某些中文输入法和`Capslock`按鍵有冲突
-    # 3.1 冲突的状况如下: 在输入中文状态下, 按下`Capslock`和`opposite_state_shortcut`致使一直循环松开和按下该`Capslock`按鍵, 导致语音输入的功能一直在重复开关。直到某一段时间之后才能正常运行.
-    # 4. `keyboard.add_hotkey` 算是比较好的方法, 主要是能实现阻塞功能.
-    if Config.convert_to_traditional_chinese and Config.enable_opposite_state_shortcut:
-        # caps lock + tab (预设)
-        keyboard.add_hotkey(Config.speech_recognition_shortcut + "+" + Config.opposite_state_shortcut,
-                            alt_handler, suppress=True, trigger_on_release=True)
-        # caps lock + left shift + tab (离线翻译预设)
-        keyboard.add_hotkey(
-            Config.speech_recognition_shortcut + "+" + Config.offline_translate_shortcut + "+" + Config.opposite_state_shortcut,
-            alt_handler, suppress=True, trigger_on_release=True)
-        # caps lock + right shift + tab (在线翻译预设)
-        keyboard.add_hotkey(
-            Config.speech_recognition_shortcut + "+" + Config.online_translate_shortcut + "+" + Config.opposite_state_shortcut,
-            alt_handler, suppress=True, trigger_on_release=True)
 
 # ==================== 传递变量 `opposite_state`===============
 
