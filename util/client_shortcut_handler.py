@@ -19,7 +19,7 @@ pressed = False
 released = True
 event = Event()
 unpause_needed = False
-
+opposite_state_need = False
 
 def shortcut_correct(e: keyboard.KeyboardEvent):
     # 在我的 Windows 电脑上，left ctrl 和 right ctrl 的 keycode 都是一样的，
@@ -208,9 +208,12 @@ def click_mode(e: keyboard.KeyboardEvent):
 
 def hold_mode(e: keyboard.KeyboardEvent):
     """像对讲机一样，按下录音，松开停止"""
-    global task
+    global task, opposite_state_need
 
     if e.event_type == 'down' and not Cosmic.on:
+        # 根據上一次是否短時間內(`duration < Config.threshold`)按下錄音鍵,來判斷是否需要輸出 `簡/繁`
+        if opposite_state_need and Config.enable_double_click_opposite_state:
+            update_opposite_state("")
         # 记录开始时间
         launch_task()
 
@@ -220,10 +223,16 @@ def hold_mode(e: keyboard.KeyboardEvent):
 
         # 取消或停止任务
         if duration < Config.threshold:
+            # 短時間內,按下第二次錄音鍵判定爲需要輸出 `簡/繁`
+            if Config.enable_double_click_opposite_state:
+                opposite_state_need = True
             cancel_task()
+
         else:
             finish_task()
-
+            # 恢复輸出 `簡/繁` 原来的狀態
+            if Config.enable_double_click_opposite_state:
+                opposite_state_need = False
             # 松开快捷键后，再按一次，恢复 CapsLock 或 Shift 等按键的状态
             if Config.restore_key:
                 time.sleep(0.01)
@@ -253,8 +262,7 @@ def click_handler(e: keyboard.KeyboardEvent) -> None:
 
 def alt_handler():
     # 我不会其他传递变量的方法, 先用写入文件的方法吧
-    ff = update_opposite_state("")
-    print(f"切换状态 : {ff}")
+    update_opposite_state("")
 
 
 def bond_shortcut():
@@ -295,6 +303,8 @@ def update_opposite_state(aa):
         opposite_state = not read_opposite_state()
     with open('opposite_state.json', 'w') as f:
         json.dump(opposite_state, f)
+    if aa is not False:
+        print(f"切换状态 : {opposite_state}")
     return opposite_state
 
 
