@@ -244,13 +244,13 @@ def hold_mode(e: keyboard.KeyboardEvent):
 
         else:
             finish_task()
+            # 松开快捷键后，再按一次，恢复 CapsLock 或 Shift 等按键的状态
+            if Config.restore_key and not opposite_state_need:
+                time.sleep(0.01)
+                keyboard.send(Config.speech_recognition_shortcut)
             # 恢复輸出 `簡/繁` 原来的狀態
             if Config.enable_double_click_opposite_state:
                 opposite_state_need = False
-            # 松开快捷键后，再按一次，恢复 CapsLock 或 Shift 等按键的状态
-            if Config.restore_key:
-                time.sleep(0.01)
-                keyboard.send(Config.speech_recognition_shortcut)
 
 
 # ==================== 绑定 handler ===============================
