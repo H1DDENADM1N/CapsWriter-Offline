@@ -159,18 +159,27 @@ def count_down(e: Event):
     time.sleep(Config.threshold)
     e.set()
 
-
 def manage_task(e: Event):
     """
     通过检测 e 是否在 threshold 时间内被触发，判断是单击，还是长按
     进行下一步的动作
     """
+    global opposite_state_need
+
+    # 計算是否屬於短時間內按下`錄音鍵`
+    is_short_duration = True if time.time() - Cosmic.on < Config.threshold else False
+
+    # 短時間內,按下第二次錄音鍵判定爲需要輸出 `簡/繁`, 并且结束函数
+    if is_short_duration and opposite_state_need and Config.enable_double_click_opposite_state:
+        update_opposite_state("")
+        return
 
     # 记录是否有任务
     on = Cosmic.on
-
     # 先运行任务
     if not on:
+        # 觸發需要輸出 `簡/繁` 的狀態(如果在短時間內按下錄音鍵`is_short_duration`)
+        opposite_state_need = True
         launch_task()
 
     # 及时松开按键了，是单击
@@ -178,13 +187,18 @@ def manage_task(e: Event):
         # 如果有任务在运行，就结束任务
         if Cosmic.on and on:
             finish_task()
+            # 恢复輸出 `簡/繁` 原来的狀態
+            if Config.enable_double_click_opposite_state:
+                opposite_state_need = False
 
     # 没有及时松开按键，是长按
     else:
         # 就取消本栈启动的任务
         if not on:
             cancel_task()
-
+            # 恢复輸出 `簡/繁` 原来的狀態
+            if Config.enable_double_click_opposite_state:
+                opposite_state_need = False
         # 长按，发送按键
         keyboard.send(Config.speech_recognition_shortcut)
 
