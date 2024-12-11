@@ -2,6 +2,7 @@ import json
 
 import opencc
 import websockets
+import keyboard
 
 from config import ClientConfig as Config
 from util.client_check_websocket import check_websocket
@@ -11,6 +12,7 @@ from util.client_rename_audio import rename_audio
 from util.client_strip_punc import strip_punc
 from util.client_type_result import type_result
 from util.client_write_md import write_md
+from config_code import translation_format
 
 if not Cosmic.transcribe_subtitles:
     from util.client_translate_offline import translate_offline
@@ -94,10 +96,16 @@ async def recv_result():
 
             # 打字
             if offline_translate_done:
-                await type_result(offline_translated_text)
+                if Cosmic.opposite_state:
+                    exec(translation_format.config_code_offline)
+                else:
+                    await type_result(offline_translated_text)
                 offline_translate_done = False
             elif online_translate_done:
-                await type_result(online_translated_text)
+                if Cosmic.opposite_state:
+                    exec(translation_format.config_code_online)
+                else:
+                    await type_result(online_translated_text)
                 online_translate_done = False
             elif convert_to_traditional_chinese_done:
                 # 根据'简/繁'转换设定,来选择输出内容的逻辑
