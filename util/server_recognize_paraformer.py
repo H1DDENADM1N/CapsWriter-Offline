@@ -51,34 +51,34 @@ def recognize(recognizer, punc_model, task: Task):
     result.time_submit = task.time_submit
     result.time_complete = time.time()
 
+    # sherpa-onnx-paraformer-zh-int8-2025-10-07 返回的字级时间戳为空
     # 先粗去重，依据：字级时间戳
-    m = n = len(stream.result.timestamps)
-    for i, timestamp in enumerate(stream.result.timestamps, start=0):
-        if timestamp > task.overlap / 2:
-            m = i
-            break
-    for i, timestamp in enumerate(stream.result.timestamps, start=1):
-        n = i
-        if timestamp > duration - task.overlap / 2:
-            break
-    if not result.timestamps:
-        m = 0
-    if task.is_final:
-        n = len(stream.result.timestamps)
+    # m = n = len(stream.result.timestamps)
+    # for i, timestamp in enumerate(stream.result.timestamps, start=0):
+    #     if timestamp > task.overlap / 2:
+    #         m = i
+    #         break
+    # for i, timestamp in enumerate(stream.result.timestamps, start=1):
+    #     n = i
+    #     if timestamp > duration - task.overlap / 2:
+    #         break
+    # if not result.timestamps:
+    #     m = 0
+    # if task.is_final:
+    #     n = len(stream.result.timestamps)
 
     # 再细去重，依据：在端点是否有重复的字
-    if result.tokens and result.tokens[-2:] == stream.result.tokens[m:n][:2]:
-        m += 2
-    elif result.tokens and result.tokens[-1:] == stream.result.tokens[m:n][:1]:
-        m += 1
+    # if result.tokens and result.tokens[-2:] == stream.result.tokens[m:n][:2]:
+    #     m += 2
+    # elif result.tokens and result.tokens[-1:] == stream.result.tokens[m:n][:1]:
+    #     m += 1
 
     # 最后与先前的结果合并
-    result.timestamps += [t + task.offset for t in stream.result.timestamps[m:n]]
-    result.tokens += [token for token in stream.result.tokens[m:n]]
+    # result.timestamps += [t + task.offset for t in stream.result.timestamps[m:n]]
+    result.tokens += [token for token in stream.result.tokens[:]]
 
     # token 合并为文本
-    text = " ".join(result.tokens).replace("@@ ", "")
-    text = re.sub("([^a-zA-Z0-9]) (?![a-zA-Z0-9])", r"\1", text)
+    text = stream.result.text
 
     result.text = text
 

@@ -1,6 +1,6 @@
 # ======================服务端配置==================================
 [server]
-model = "Sensevoice"
+model = "Paraformer"
 # 'Sensevoice' 或 'Paraformer'
 # Sensevoice模型虽然多了粤英日韩多语种，但是，中文识别效果大不如Paraformer模型
 # 比如转录字幕不完整，识别结果不准确、丢失标点等
@@ -277,16 +277,16 @@ api = "http://127.0.0.1:1188/translate"
 model_dir = "models"
 # 模型文件目录
 
-sensevoice_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx"
+sensevoice_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09/model.int8.onnx"
 # SenseVoice 模型路径
 
-sensevoice_tokens_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/tokens.txt"
+sensevoice_tokens_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09/tokens.txt"
 # SenseVoice tokens 路径
 
-paraformer_path = "models/paraformer-offline-zh/model.int8.onnx"
+paraformer_path = "models/sherpa-onnx-paraformer-zh-int8-2025-10-07/model.int8.onnx"
 # Paraformer 模型路径
 
-paraformer_tokens_path = "models/paraformer-offline-zh/tokens.txt"
+paraformer_tokens_path = "models/sherpa-onnx-paraformer-zh-int8-2025-10-07/tokens.txt"
 # Paraformer tokens 路径
 
 punc_model_dir = "models/punc_ct-transformer_cn-en"
