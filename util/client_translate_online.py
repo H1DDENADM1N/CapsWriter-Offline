@@ -1,78 +1,57 @@
 import json
-
 import httpx
-
 from util.config import ClientConfig as Config
 from util.config import DeepLXConfig as DeepLX
 
-
-def check_deeplx_service():
-    """检查DeepLX服务是否可用"""
-    try:
-        # 简单测试服务连通性
-        response = httpx.get(DeepLX.api, timeout=10)
-        print(f"服务状态码: {response.status_code}")
-        print(f"服务响应: {response.text[:200]}")
-        return response.status_code == 200
-    except Exception as e:
-        print(f"服务检查失败: {e}")
-        return False
-
-
 def translate_online(text):
+    data = {
+        "text": text,
+        "source_lang": "auto",
+        "target_lang": Config.online_translate_target_languages,
+    }
+    
+    # 将字典转为 JSON 字符串
+    post_data = json.dumps(data)
+    
     try:
-        data = {
-            "text": text,
-            "source_lang": "auto",
-            "target_lang": Config.online_translate_target_languages,
-        }
-        print(f"请求数据: {data}")
-        print(f"API地址: {DeepLX.api}")
+        # 超时时间改为 5 秒，防止长时间卡死
+        response = httpx.post(url=DeepLX.api, data=post_data, timeout=15)
+        r = response.text
+        
+        # 检查是否返回了空数据 (解决 char 0 报错)
+        if not r or not r.strip():
+            print("【错误】服务端返回内容为空")
+            return "【翻译失败：服务未响应】"
 
-        post_data = json.dumps(data)
+        # 尝试解析 JSON (解决 char 4 报错)
+        try:
+            data = json.loads(r)
+        except json.JSONDecodeError:
+            print(f"【错误】无法解析 JSON，返回内容: {r[:50]}...") # 只打印前50个字符
+            return f"【翻译失败：返回格式错误】"
 
-        # 添加headers和更详细的超时设置
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        }
-
-        response = httpx.post(
-            url=DeepLX.api,
-            data=post_data,
-            headers=headers,
-            timeout=30.0,  # 分别设置连接和读取超时
-        )
-
-        print(f"响应状态码: {response.status_code}")
-        print(f"原始响应: {response.text}")
-
-        # 尝试解析JSON
-        data = json.loads(response.text)
-
-        if data.get("code") == 200:
-            alternatives = data.get("alternatives", [])
-            if alternatives:
-                return alternatives[0]
-            else:
-                return "翻译成功但没有返回替代文本"
+        # 处理业务逻辑
+        if data.get("code") != 200:
+            # 返回错误信息
+            return f"【错误 {data.get('code')}】: {data.get('message')}"
+            
+        # 获取翻译结果
+        alternatives = data.get("alternatives", [])
+        if alternatives:
+            return alternatives[0]
         else:
-            error_msg = data.get("message", "未知错误")
-            return f"翻译错误: {error_msg}"
+            return data.get("data", "【翻译结果为空】")
 
-    except json.JSONDecodeError as e:
-        return f"JSON解析错误: {e}，响应状态码: {response.status_code}。响应内容: {response.text[:100]}"
     except httpx.TimeoutException:
-        return "请求超时，请检查网络连接"
-    except httpx.ConnectError:
-        return f"连接失败，无法访问 {DeepLX.api}"
+        return "【翻译超时：网络连接过慢】"
+    except httpx.RequestError as e:
+        return f"【网络请求失败】：{e}"
     except Exception as e:
-        return f"未知错误: {e}"
-
+        return f"【未知错误】：{e}"
 
 if __name__ == "__main__":
-    print(f"DeepLX API: {DeepLX.api}")
-
+    print(f"API地址: {DeepLX.api}")
     text = "有朋自远方来，不亦乐乎"
+    print("正在测试翻译...")
     online_trans_text = translate_online(text)
-    print(f"翻译结果: {online_trans_text}")
+    print(f"结果: {online_trans_text}")
