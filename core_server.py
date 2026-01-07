@@ -24,9 +24,15 @@ else:
         run_online_translate_service,
     )
 
-from util.server.run_offline_translate_service import (
-    run_offline_translate_service,
-)
+if Config.offline_translate_provider == "HY":
+    from util.server.run_offline_translate_service_hy import (
+        run_offline_translate_service,
+    )
+# elif Config.offline_translate_provider == "opus":
+else:
+    from util.server.run_offline_translate_service import (
+        run_offline_translate_service,
+    )
 
 # 确保 os.getcwd() 位置正确，用相对路径加载模型
 BASE_DIR = os.getcwd()
@@ -67,7 +73,15 @@ async def main():
 
     # 启动离线翻译 WebSocket服务器
     if Config.start_offline_translate_server:
-        console.print("载入离线翻译模型中，载入时长约 20 秒，请耐心等待...")
+        if Config.offline_translate_provider == "HY":
+            console.print(
+                "载入离线翻译模型 HY-MT1.5-1.8B-FP8 中，载入时长约 20 秒，请耐心等待..."
+            )
+        # elif Config.offline_translate_provider == "opus":
+        else:
+            console.print(
+                "载入离线翻译模型 Helsinki-NLP--opus-mt-zh-en 中，载入时长约 20 秒，请耐心等待..."
+            )
         translate_offline_server_process = Process(target=run_offline_translate_service)
         translate_offline_server_process.start()
 

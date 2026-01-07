@@ -32,6 +32,11 @@ start_online_translate_server = true
 start_offline_translate_server = true
 # 是否启用离线翻译服务
 
+offline_translate_provider = "HY"
+# 离线翻译服务提供者
+# HY: HY-MT1.5-1.8B-FP8
+# opus: Helsinki-NLP--opus-mt-zh-en
+
 offline_translate_port = "6017"
 # 离线翻译服务端口
 
@@ -626,6 +631,9 @@ punc_model_dir = "models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024
 
 opus_mt_dir = "models/Helsinki-NLP--opus-mt-zh-en"
 # 离线翻译模型目录
+
+hy_mt_dir = "models/HY-MT1.5-1.8B-FP8"
+# 新版离线翻译模型目录
 
 
 # ======================SenseVoice 参数配置==================================

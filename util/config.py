@@ -29,6 +29,9 @@ class ServerConfig:
     start_offline_translate_server: bool = config["server"][
         "start_offline_translate_server"
     ]
+    offline_translate_provider: Literal["HY", "opus"] = config["server"][
+        "offline_translate_provider"
+    ]
     offline_translate_port: str = config["server"]["offline_translate_port"]
     format_num: bool = config["server"]["format_num"]
     format_punc: bool = config["server"]["format_punc"]
@@ -183,6 +186,7 @@ class ModelPaths:
     paraformer_tokens_path: Path = Path(config["model_paths"]["paraformer_tokens_path"])
     punc_model_dir: Path = Path(config["model_paths"]["punc_model_dir"])
     opus_mt_dir: Path = Path(config["model_paths"]["opus_mt_dir"])
+    hy_mt_dir: Path = Path(config["model_paths"]["hy_mt_dir"])
 
 
 # SenseVoice 参数配置

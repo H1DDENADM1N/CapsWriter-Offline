@@ -18,3 +18,8 @@ https://huggingface.co/Helsinki-NLP/opus-mt-zh-en
 https://object.pouta.csc.fi/Tatoeba-MT-models/zho-eng/opus-2020-07-17.zip
 
 将翻译模型文件解压放到软件根目录的 models\Helsinki-NLP--opus-mt-zh-en\ 文件夹中
+
+新翻译模型：
+git clone https://www.modelscope.cn/Tencent-Hunyuan/HY-MT1.5-1.8B-FP8.git
+
+将新翻译模型文件解压放到软件根目录的 models\HY-MT1.5-1.8B-FP8\ 文件夹中
