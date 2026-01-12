@@ -536,7 +536,7 @@ def display_ports_info(port_infos: list, show_privileged: bool = True):
     table = Table(
         expand=True,
         box=box.ROUNDED,
-        header_style="bold magenta",
+        header_style="bold blue",
         title_style="bold yellow",
     )
     table.add_column("端口", style="cyan", justify="center", width=8)
@@ -605,7 +605,12 @@ def display_ports_info(port_infos: list, show_privileged: bool = True):
         expand=True,
     )
     console.print(
-        Panel(combined_renderable, title="📊 端口状态", border_style="yellow")
+        Panel(
+            combined_renderable,
+            title="📊 端口状态",
+            title_align="left",
+            border_style="bold yellow",
+        )
     )
     console.print("\n")
 
@@ -682,10 +687,11 @@ if __name__ == "__main__":
     used_ports = [info for info in port_infos if info["status"] == "已占用"]
     if used_ports:
         console.print("\n[bold yellow]🔍 占用端口详细信息:[/bold yellow]")
-        for info in used_ports:
+        # for info in used_ports:
+        for i, info in enumerate(used_ports, start=1):
             console.print(
                 Rule(
-                    f"\n[yellow]━[/] [bold]端口 {info['port']}[/bold]",
+                    f"\n[yellow]━[/] [bold magenta]{i}. 端口 {info['port']}[/]",
                     align="left",
                     style="yellow",
                 )
@@ -704,9 +710,9 @@ if __name__ == "__main__":
             if info.get("process_tree"):
                 display_process_tree(info["port"], info["process_tree"])
             if info["child_processes"]:
-                console.print("\n[bold yellow]📋 子进程列表[/bold yellow]")
+                console.print("\n[bold cyan]📋 子进程列表[/bold cyan]")
                 child_table = Table(
-                    box=box.SIMPLE, show_header=True, header_style="bold magenta"
+                    box=box.SIMPLE, show_header=True, header_style="bold blue"
                 )
                 child_table.add_column("PID", style="cyan", width=10)
                 child_table.add_column("名称", style="green", width=20)
