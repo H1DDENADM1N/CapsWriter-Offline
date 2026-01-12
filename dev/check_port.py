@@ -575,15 +575,34 @@ def display_ports_info(port_infos: list, show_privileged: bool = True):
     free_ports = len(port_infos) - used_ports
     stats_columns = Columns(
         [
-            Panel(f"[bold]{len(port_infos)}[/]\n总端口数", border_style="blue"),
-            Panel(f"[bold green]{free_ports}[/]\n空闲端口", border_style="green"),
-            Panel(f"[bold red]{used_ports}[/]\n占用端口", border_style="red"),
+            Panel(
+                f"[bold]{len(port_infos)}[/]\n总端口数",
+                border_style="blue",
+                height=5,
+            ),
+            Panel(
+                f"[bold green]{free_ports}[/]\n空闲端口",
+                border_style="green",
+                height=5,
+            ),
+            Panel(
+                f"[bold red]{used_ports}[/]\n占用端口",
+                border_style="red",
+                height=5,
+            ),
         ],
+        padding=(0, 0),  # (上下, 左右) 间距
         expand=True,
     )
-    console.print(Panel(stats_columns, title="📈 统计信息", border_style="yellow"))
-    console.print("\n")
-    console.print(Panel(table, title="📊 端口状态", border_style="yellow"))
+
+    combined_renderable = Columns(
+        [stats_columns, table],
+        padding=(0, 0),  # (上下, 左右) 间距
+        expand=True,
+    )
+    console.print(
+        Panel(combined_renderable, title="📊 端口状态", border_style="yellow")
+    )
     console.print("\n")
 
 
