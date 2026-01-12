@@ -313,11 +313,13 @@ def get_child_processes(pid: int) -> list:
     return children
 
 
-def add_tree_node(tree: Tree, node_data: dict) -> Tree:
+def add_tree_node(port: int, tree: Tree, node_data: dict) -> Tree:
     """
     递归添加节点到树
 
     Args:
+        port (int): 端口号
+
         tree (rich.tree.Tree): Tree对象
 
         node_data: 节点数据
@@ -348,19 +350,21 @@ def add_tree_node(tree: Tree, node_data: dict) -> Tree:
         f"CPU: {node_data['cpu']}"
     )
     if node_data["is_target"]:
-        node_text += "  [bold]← 目标进程[/]"
+        node_text += f"  [bold]← 占用 {port} 端口的进程[/]"
 
     new_node = tree.add(node_text, style=style, guide_style=guide_style)
     for child in node_data["children"]:
-        add_tree_node(new_node, child)
+        add_tree_node(port, new_node, child)
     return new_node
 
 
-def display_process_tree(tree_info: dict):
+def display_process_tree(port: int, tree_info: dict):
     """
     显示进程树
 
     Args:
+        port (int): 端口号
+
         tree_info (dict): 进程树信息
             {
                 "root_pid": 根进程ID,
@@ -382,7 +386,7 @@ def display_process_tree(tree_info: dict):
 
     console.print("\n[bold cyan]🌳 进程树[/bold cyan]")
     tree = Tree(f"[bold]根进程 (PID: {tree_info['root_pid']})[/]", guide_style="cyan")
-    add_tree_node(tree, tree_info["tree"])
+    add_tree_node(port, tree, tree_info["tree"])
     console.print(tree)
 
 
@@ -698,7 +702,7 @@ if __name__ == "__main__":
                     f"  [yellow]权限:[/] [{info['privilege_color']}]{info['privilege_desc']}[/]"
                 )
             if info.get("process_tree"):
-                display_process_tree(info["process_tree"])
+                display_process_tree(info["port"], info["process_tree"])
             if info["child_processes"]:
                 console.print("\n[bold yellow]📋 子进程列表[/bold yellow]")
                 child_table = Table(
