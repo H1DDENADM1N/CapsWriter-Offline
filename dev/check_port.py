@@ -350,7 +350,7 @@ def add_tree_node(port: int, tree: Tree, node_data: dict) -> Tree:
         f"CPU: {node_data['cpu']}"
     )
     if node_data["is_target"]:
-        node_text += f"  [bold]← 占用 {port} 端口的进程[/]"
+        node_text += f"  [bold]👈 占用 {port} 端口的进程[/]"
 
     new_node = tree.add(node_text, style=style, guide_style=guide_style)
     for child in node_data["children"]:
