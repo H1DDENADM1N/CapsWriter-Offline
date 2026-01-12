@@ -13,6 +13,7 @@ from rich import box
 from rich.columns import Columns
 from rich.console import Console
 from rich.panel import Panel
+from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
@@ -28,52 +29,137 @@ def is_running_as_admin() -> bool:
         return False
 
 
-def is_privileged_process(pid: int) -> bool:
+def get_process_privilege_info(pid: int) -> dict:
     """
-    使用 pywin32 检查进程是否具有特权 (UAC 提升或 SYSTEM)
+    获取进程的特权归属信息。
+    重点区分：管理员组的未提升进程 (Standard) 与 提升后的管理员进程。
     """
     try:
-        # 1. 获取进程句柄 (需要 PROCESS_QUERY_INFORMATION 权限)
+        # 1. 获取进程句柄和令牌
         h_process = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION, False, pid)
-
-        # 2. 打开进程令牌
         h_token = win32security.OpenProcessToken(h_process, win32con.TOKEN_QUERY)
 
-        # 3. 检查提升状态 - 这通常意味着 "以管理员身份运行"
-        # 返回值通常为 0 (False) 或 1 (True)
-        is_elevated = win32security.GetTokenInformation(
-            h_token, win32security.TokenElevation
+        # 2. 获取用户 SID
+        token_user = win32security.GetTokenInformation(
+            h_token, win32security.TokenUser
+        )[0]
+        sid_str = win32security.ConvertSidToStringSid(token_user)
+
+        # 3. 检查特定的系统高权限账户 SID
+        if sid_str == "S-1-5-18":
+            return {
+                "role": "SYSTEM",
+                "description": "SYSTEM (Local System)",
+                "color": "bold red",
+            }
+        if sid_str == "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464":
+            return {
+                "role": "TrustedInstaller",
+                "description": "TrustedInstaller (Highest Privilege)",
+                "color": "bold magenta",
+            }
+        if sid_str == "S-1-5-19":
+            return {"role": "LocalSvc", "description": "Local Service", "color": "cyan"}
+        if sid_str == "S-1-5-20":
+            return {
+                "role": "NetworkSvc",
+                "description": "Network Service",
+                "color": "cyan",
+            }
+
+        # 4. 检查是否属于 Administrators 组
+        admins_sid = win32security.ConvertStringSidToSid("S-1-5-32-544")
+        token_groups = win32security.GetTokenInformation(
+            h_token, win32security.TokenGroups
         )
-        if is_elevated:
-            return True
 
-        # 4. 检查是否为 SYSTEM 账户 (SID: S-1-5-18)
-        # 获取令牌用户 SID
-        token_user = win32security.GetTokenInformation(h_token, win32security.TokenUser)
-        user_sid = token_user[0]  # PySID object
+        is_in_admin_group = False
+        for group_sid, attrs in token_groups:
+            # 注意：group_sid 也是 PySID 对象，可以直接和 PySID 对象比较
+            if group_sid == admins_sid:
+                is_in_admin_group = True
+                break
 
-        # 转换为字符串比较
-        if str(user_sid) == "S-1-5-18":
-            return True
+        # 获取账户名用于显示
+        try:
+            account_name, domain_name, _ = win32security.LookupAccountSid(
+                None, token_user
+            )
+            user_str = f"{domain_name}\\{account_name}"
+        except:
+            user_str = sid_str
 
-        return False
+        # 5. 核心逻辑：判断是否实际提升 (UAC)
+        if is_in_admin_group:
+            is_elevated = win32security.GetTokenInformation(
+                h_token, win32security.TokenElevation
+            )
+            if is_elevated:
+                # 确实有管理员权限
+                return {
+                    "role": "Admin",
+                    "description": f"Administrator (Elevated): {user_str}",
+                    "color": "bold red",
+                }
+            else:
+                # 账号是管理员，但进程未提升，权限等同于普通用户
+                return {
+                    "role": "User",
+                    "description": f"Standard User (Unelevated): {user_str}",
+                    "color": "green",
+                }
+
+        # 普通用户组
+        # S-1-5-21-...-1001 这种格式就是普通域/本地用户
+        return {
+            "role": "User",
+            "description": f"Standard User: {user_str}",
+            "color": "green",
+        }
 
     except Exception:
-        # 如果进程无权限访问或其他异常，保守认为非特权
-        return False
+        # 回退逻辑：当无法读取令牌（通常因为当前脚本权限不足）时的猜测
+        try:
+            p = psutil.Process(pid)
+            username = p.username()
+
+            if "SYSTEM" in username.upper():
+                return {"role": "SYSTEM", "description": username, "color": "bold red"}
+            if "TRUSTEDINSTALLER" in username.upper():
+                return {
+                    "role": "TrustedInstaller",
+                    "description": username,
+                    "color": "bold magenta",
+                }
+
+            # 如果用户名包含 Administrator，但无法验证令牌状态
+            # 为了防止误判为高权限，保守判定为普通用户
+            parts = username.split("\\")
+            actual_user_name = parts[-1] if parts else username
+            if actual_user_name.upper() == "ADMINISTRATOR":
+                return {
+                    "role": "User",
+                    "description": f"Admin Group (Unknown Status): {username}",
+                    "color": "yellow",
+                }
+
+            return {"role": "User", "description": username, "color": "green"}
+        except:
+            return {
+                "role": "Unknown",
+                "description": "Access Denied / Unknown",
+                "color": "dim",
+            }
 
 
 def get_process_tree(pid: int) -> dict:
     """
     获取进程树。
     向上追溯到根进程，向下显示目标进程的所有子孙。
-    在目标进程的父层级显示所有兄弟进程，在更高层级只显示路径上的进程。
     """
     try:
         target = psutil.Process(pid)
 
-        # 1. 追溯完整路径：从目标进程直到根进程
-        # path_pids 包含: [目标, 父, 祖父, 曾祖父, ..., 根]
         path_pids = []
         current = target
         root_process = target
@@ -89,12 +175,10 @@ def get_process_tree(pid: int) -> dict:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 break
 
-        # 2. 确定目标进程的直接父进程PID
         target_parent_pid = None
         if len(path_pids) > 1:
             target_parent_pid = path_pids[1]
 
-        # 3. 递归构建树
         def build_tree(
             process: psutil.Process, target_pid: int, parent_pid: int
         ) -> dict:
@@ -102,20 +186,9 @@ def get_process_tree(pid: int) -> dict:
                 children = []
                 immediate_children = process.children(recursive=False)
 
-                # 确定当前节点的子进程过滤策略
-                # 1. 如果是父进程层级：显示所有子进程（目标+兄弟）
-                # 2. 如果是目标进程层级：显示所有子进程（目标自己的子孙）
-                # 3. 如果是更高层级（祖辈）：只显示路径上的进程（过滤叔伯）
-                # 4. 如果是目标进程的子孙：显示所有子进程（继续递归）
-
                 is_target_parent_level = process.pid == parent_pid
                 is_target_process = process.pid == target_pid
                 is_ancestor = process.pid in path_pids
-
-                # 如果是祖先但不是父进程 -> 需要严格过滤 (只走路径)
-                # 如果是父进程 -> 不需要过滤 (显示所有)
-                # 如果是目标进程 -> 不需要过滤 (显示所有子孙)
-                # 如果是目标的子孙 -> 不需要过滤 (显示所有)
 
                 should_filter = is_ancestor and (
                     not is_target_parent_level and not is_target_process
@@ -123,13 +196,10 @@ def get_process_tree(pid: int) -> dict:
 
                 for child in immediate_children:
                     should_include = False
-
                     if should_filter:
-                        # 祖辈层级：只保留路径上的进程
                         if child.pid in path_pids:
                             should_include = True
                     else:
-                        # 父辈、自身、子孙层级：保留所有子进程
                         should_include = True
 
                     if should_include:
@@ -143,16 +213,13 @@ def get_process_tree(pid: int) -> dict:
                     "status": process.status(),
                     "memory": f"{process.memory_info().rss / 1024 / 1024:.1f} MB",
                     "cpu": f"{process.cpu_percent(interval=0.1):.1f}%",
-                    # 仅当当前进程ID等于目标ID时高亮，子孙进程不会高亮
                     "is_target": process.pid == target_pid,
                     "children": children,
                 }
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 return None
 
-        # 从最顶层的根进程开始构建
         tree_data = build_tree(root_process, pid, target_parent_pid)
-
         return {
             "root_pid": root_process.pid,
             "target_pid": pid,
@@ -183,23 +250,15 @@ def get_child_processes(pid: int) -> list:
                 continue
     except psutil.NoSuchProcess:
         pass
-
     return children
 
 
 def add_tree_node(tree: Tree, node_data: dict) -> Tree:
     """递归添加节点到树"""
-    # 确定图标和样式
-    if node_data["is_target"]:
-        icon = "🔴"
-        style = "bold red"
-        guide_style = "red bold"
-    else:
-        icon = "🔵"
-        style = ""
-        guide_style = "yellow"
+    icon = "🔴" if node_data["is_target"] else "🔵"
+    style = "bold red" if node_data["is_target"] else ""
+    guide_style = "red bold" if node_data["is_target"] else "yellow"
 
-    # 创建节点文本
     node_text = (
         f"{icon} [yellow]PID:[/] {node_data['pid']} | "
         f"[green]{node_data['name']}[/] | "
@@ -207,17 +266,12 @@ def add_tree_node(tree: Tree, node_data: dict) -> Tree:
         f"内存: {node_data['memory']} | "
         f"CPU: {node_data['cpu']}"
     )
-
     if node_data["is_target"]:
-        node_text += " [bold]← 目标进程[/]"
+        node_text += "  [bold]← 目标进程[/]"
 
-    # 添加节点
     new_node = tree.add(node_text, style=style, guide_style=guide_style)
-
-    # 递归添加子节点
     for child in node_data["children"]:
         add_tree_node(new_node, child)
-
     return new_node
 
 
@@ -227,21 +281,15 @@ def display_process_tree(tree_info: dict):
         console.print("[yellow]⚠ 无法获取进程树信息[/yellow]")
         return
 
-    console.print("\n[bold cyan]🌳 进程树 (包含完整祖先路径及子孙进程)[/bold cyan]")
-
-    # 创建根树
+    console.print("\n[bold cyan]🌳 进程树[/bold cyan]")
     tree = Tree(f"[bold]根进程 (PID: {tree_info['root_pid']})[/]", guide_style="cyan")
-
-    # 递归添加节点
     add_tree_node(tree, tree_info["tree"])
-
     console.print(tree)
 
 
 def check_port(port: int, check_privileged: bool = True) -> dict:
     """
     检查指定端口占用情况，返回端口信息字典
-    :param check_privileged: 是否检查进程特权状态（需要管理员权限）
     """
     for conn in psutil.net_connections():
         if conn.laddr.port == port:
@@ -250,7 +298,9 @@ def check_port(port: int, check_privileged: bool = True) -> dict:
                 "pid": conn.pid,
                 "status": "已占用",
                 "status_style": "red",
-                "is_privileged": False,
+                "privilege_role": "Unknown",
+                "privilege_desc": "Unknown",
+                "privilege_color": "dim",
             }
             try:
                 p = psutil.Process(conn.pid)
@@ -264,13 +314,19 @@ def check_port(port: int, check_privileged: bool = True) -> dict:
                         "cpu_percent": p.cpu_percent(interval=0.1),
                         "memory_percent": p.memory_percent(),
                         "memory_rss": p.memory_info().rss,
-                        "is_privileged": is_privileged_process(conn.pid)
-                        if check_privileged
-                        else False,
                     }
                 )
 
-                # 获取进程树和子进程信息
+                if check_privileged:
+                    priv_info = get_process_privilege_info(conn.pid)
+                    info["privilege_role"] = priv_info["role"]
+                    info["privilege_desc"] = priv_info["description"]
+                    info["privilege_color"] = priv_info["color"]
+                else:
+                    info["privilege_role"] = "User"
+                    info["privilege_desc"] = info["username"]
+                    info["privilege_color"] = "dim"
+
                 tree_info = get_process_tree(conn.pid)
                 info["process_tree"] = tree_info
                 info["child_processes"] = get_child_processes(conn.pid)
@@ -288,7 +344,9 @@ def check_port(port: int, check_privileged: bool = True) -> dict:
                         "memory_rss": "N/A",
                         "process_tree": None,
                         "child_processes": [],
-                        "is_privileged": False,
+                        "privilege_role": "N/A",
+                        "privilege_desc": "N/A",
+                        "privilege_color": "dim",
                     }
                 )
             return info
@@ -308,7 +366,9 @@ def check_port(port: int, check_privileged: bool = True) -> dict:
         "memory_rss": "N/A",
         "process_tree": None,
         "child_processes": [],
-        "is_privileged": False,
+        "privilege_role": "N/A",
+        "privilege_desc": "N/A",
+        "privilege_color": "dim",
     }
 
 
@@ -323,7 +383,6 @@ def display_single_port(port_info: dict, show_privileged: bool = True):
             )
         )
 
-        # 创建详细信息表
         table = Table(box=box.ROUNDED, show_header=False, style="cyan")
         table.add_column("属性", style="bold yellow", width=15)
         table.add_column("值", style="white")
@@ -332,16 +391,13 @@ def display_single_port(port_info: dict, show_privileged: bool = True):
         table.add_row("进程ID", str(port_info["pid"]))
         table.add_row("进程名称", port_info["name"])
 
-        # 特权状态显示（仅在管理员模式下显示）
         if show_privileged:
-            priv_status = (
-                "[bold red]是 ⚡[/]" if port_info["is_privileged"] else "[green]否[/]"
-            )
-            table.add_row("特权状态", priv_status)
+            role_text = Text(port_info["privilege_desc"])
+            role_text.style = port_info["privilege_color"]
+            table.add_row("特权/权限", role_text)
 
         table.add_row("启动用户", port_info["username"])
 
-        # 添加性能信息
         if port_info["cpu_percent"] != "N/A":
             table.add_row("CPU使用率", f"{port_info['cpu_percent']:.1f}%")
             table.add_row("内存使用率", f"{port_info['memory_percent']:.1f}%")
@@ -350,13 +406,10 @@ def display_single_port(port_info: dict, show_privileged: bool = True):
 
         table.add_row("执行路径", port_info["exe"])
         table.add_row("命令行", port_info["cmdline"])
-
         console.print(table)
 
-        # 显示进程树
         display_process_tree(port_info["process_tree"])
 
-        # 显示子进程
         if port_info["child_processes"]:
             console.print("\n[bold yellow]📋 子进程列表[/bold yellow]")
             child_table = Table(
@@ -379,13 +432,12 @@ def display_single_port(port_info: dict, show_privileged: bool = True):
                     child["cpu"],
                     child["cmdline"],
                 )
-
             console.print(child_table)
 
     else:
         console.print(
             Panel.fit(
-                f"[bold green]✓ 端口 {port_info['port']} 可用[/bold green]",
+                f"[bold green]✓ 端口 {port_info['port']} 空闲[/bold green]",
                 border_style="green",
                 title="端口状态",
             )
@@ -402,23 +454,20 @@ def display_multiple_ports(port_infos: list, show_privileged: bool = True):
         )
     )
 
-    # 创建主表格
     table = Table(
         title="端口状态",
         box=box.ROUNDED,
         header_style="bold magenta",
         title_style="bold yellow",
     )
+    table.add_column("端口", style="cyan", justify="center", width=8)
+    table.add_column("状态", justify="center", width=8)
 
-    table.add_column("端口", style="cyan", justify="center", width=10)
-    table.add_column("状态", justify="center", width=10)
-
-    # 只在管理员模式下添加特权列
     if show_privileged:
-        table.add_column("特权", justify="center", width=8)
+        table.add_column("权限", justify="left", width=8)
 
     table.add_column("PID", justify="center", width=10)
-    table.add_column("进程名称", style="green", width=20)
+    table.add_column("进程名称", style="green", width=40)
     table.add_column("启动用户", style="yellow", width=15)
     table.add_column("CPU%", justify="right", width=8)
     table.add_column("内存", justify="right", width=10)
@@ -426,22 +475,15 @@ def display_multiple_ports(port_infos: list, show_privileged: bool = True):
     for info in port_infos:
         status_text = Text(info["status"], style=info["status_style"])
         pid_text = str(info["pid"]) if info["pid"] != "N/A" else "N/A"
+        row_data = [str(info["port"]), status_text]
 
-        # 构建行数据
-        row_data = [
-            str(info["port"]),
-            status_text,
-        ]
-
-        # 只在管理员模式下添加特权数据
         if show_privileged:
-            if info["status"] != "空闲" and info["is_privileged"]:
-                priv_text = Text("⚡", style="bold red")
+            if info["status"] != "空闲":
+                priv_text = Text(info["privilege_role"], style=info["privilege_color"])
             else:
                 priv_text = Text("-", style="dim")
             row_data.append(priv_text)
 
-        # 性能信息
         cpu_text = (
             f"{info['cpu_percent']:.1f}" if info["cpu_percent"] != "N/A" else "N/A"
         )
@@ -451,24 +493,13 @@ def display_multiple_ports(port_infos: list, show_privileged: bool = True):
             else "N/A"
         )
 
-        row_data.extend(
-            [
-                pid_text,
-                info["name"],
-                info["username"],
-                cpu_text,
-                mem_text,
-            ]
-        )
-
+        row_data.extend([pid_text, info["name"], info["username"], cpu_text, mem_text])
         table.add_row(*row_data)
 
     console.print(table)
 
-    # 显示统计信息
     used_ports = sum(1 for info in port_infos if info["status"] == "已占用")
     free_ports = len(port_infos) - used_ports
-
     stats_columns = Columns(
         [
             Panel(f"[bold]{len(port_infos)}[/]\n总端口数", border_style="blue"),
@@ -477,74 +508,74 @@ def display_multiple_ports(port_infos: list, show_privileged: bool = True):
         ],
         expand=True,
     )
-
     console.print("\n")
     console.print(Panel(stats_columns, title="📈 统计信息", border_style="yellow"))
 
 
 if __name__ == "__main__":
-    # 检查管理员权限
     is_admin = is_running_as_admin()
+    show_privileged = is_admin
 
     if not is_admin:
         console.print(
             Panel(
                 "[yellow]⚠ 当前脚本未以管理员权限运行[/]\n"
-                "[dim]无法检查占用端口的进程是否具有特权[/]",
+                "[dim]无法准确读取所有进程的详细特权令牌[/]",
                 border_style="yellow",
             )
         )
         console.print()
 
-    # 导入配置
     sys.path.append(".")
     from util.config import DeepLXConfig, ServerConfig
 
     port_arg = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
     if port_arg:
-        # 检查单个端口
         port_info = check_port(port_arg, check_privileged=is_admin)
         display_single_port(port_info, show_privileged=is_admin)
         sys.exit()
 
-    # 检查多个端口
     ports: list[int] = [
         int(ServerConfig.speech_recognition_port),
         int(ServerConfig.offline_translate_port),
         int(DeepLXConfig.online_translate_port),
     ]
 
-    # 添加端口名称说明
     port_names = {
         int(ServerConfig.speech_recognition_port): "语音识别",
         int(ServerConfig.offline_translate_port): "离线翻译",
         int(DeepLXConfig.online_translate_port): "DeepLX在线翻译",
     }
 
-    # 收集所有端口信息
     port_infos = []
     for port in ports:
         info = check_port(port, check_privileged=is_admin)
         info["name"] = f"{info['name']} ({port_names.get(port, '未知')})"
         port_infos.append(info)
 
-    # 显示多个端口信息
     display_multiple_ports(port_infos, show_privileged=is_admin)
 
-    # 如果有占用的端口，显示详细信息
     used_ports = [info for info in port_infos if info["status"] == "已占用"]
     if used_ports:
         console.print("\n[bold yellow]🔍 占用端口详细信息:[/bold yellow]")
         for info in used_ports:
             console.print(
-                f"\n[yellow]━[/] [bold]端口 {info['port']}[/bold] [yellow]━[/]"
+                Rule(
+                    f"\n[yellow]━[/] [bold]端口 {info['port']}[/bold]",
+                    align="left",
+                    style="yellow",
+                )
             )
             if info["cmdline"] != "N/A":
                 console.print(f"  [cyan]命令行:[/] {info['cmdline']}")
             if info["exe"] != "N/A":
                 console.print(f"  [cyan]执行路径:[/] {info['exe']}")
 
-            # 显示进程树
+            if show_privileged and info["privilege_desc"] != "Unknown":
+                console.print(
+                    f"  [yellow]特权/权限:[/] [{info['privilege_color']}]{info['privilege_desc']}[/]"
+                )
             if info.get("process_tree"):
                 display_process_tree(info["process_tree"])
+            console.print(Rule(style="yellow"))
