@@ -12,6 +12,7 @@
 
 import ctypes
 import sys
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import psutil
 import win32api
@@ -28,16 +29,23 @@ from rich.tree import Tree
 
 console = Console()
 
+# 类型别名
+ProcessInfo = Dict[str, Any]
+PrivilegeInfo = Dict[str, str]
+TreeNode = Dict[str, Any]
+ProcessTree = Dict[str, Any]
+PortInfo = Dict[str, Any]
+
 
 def is_running_as_admin() -> bool:
     """检查脚本是否以管理员权限运行"""
     try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except Exception:
         return False
 
 
-def get_process_privilege_info(pid: int) -> dict:
+def get_process_privilege_info(pid: int) -> PrivilegeInfo:
     """
     获取进程的特权归属信息
 
@@ -59,7 +67,7 @@ def get_process_privilege_info(pid: int) -> dict:
         h_token: int = win32security.OpenProcessToken(h_process, win32con.TOKEN_QUERY)
 
         # 2. 获取用户 SID
-        token_user: object = win32security.GetTokenInformation(
+        token_user: Tuple = win32security.GetTokenInformation(
             h_token, win32security.TokenUser
         )[0]
         sid_str: str = win32security.ConvertSidToStringSid(token_user)
@@ -87,8 +95,8 @@ def get_process_privilege_info(pid: int) -> dict:
             }
 
         # 4. 检查是否属于 Administrators 组
-        admins_sid: object = win32security.ConvertStringSidToSid("S-1-5-32-544")
-        token_groups: object = win32security.GetTokenInformation(
+        admins_sid: Any = win32security.ConvertStringSidToSid("S-1-5-32-544")
+        token_groups: Tuple = win32security.GetTokenInformation(
             h_token, win32security.TokenGroups
         )
 
@@ -171,7 +179,7 @@ def get_process_privilege_info(pid: int) -> dict:
             }
 
 
-def get_process_tree(pid: int) -> dict:
+def get_process_tree(pid: int) -> Optional[ProcessTree]:
     """
     获取进程树。
     向上追溯到根进程，向下显示目标进程的所有子孙。
@@ -202,7 +210,7 @@ def get_process_tree(pid: int) -> dict:
     try:
         target = psutil.Process(pid)
 
-        path_pids = []
+        path_pids: List[int] = []
         current = target
         root_process = target
 
@@ -217,15 +225,15 @@ def get_process_tree(pid: int) -> dict:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 break
 
-        target_parent_pid = None
+        target_parent_pid: Optional[int] = None
         if len(path_pids) > 1:
             target_parent_pid = path_pids[1]
 
         def build_tree(
-            process: psutil.Process, target_pid: int, parent_pid: int
-        ) -> dict:
+            process: psutil.Process, target_pid: int, parent_pid: Optional[int]
+        ) -> Optional[TreeNode]:
             try:
-                children = []
+                children: List[TreeNode] = []
                 immediate_children = process.children(recursive=False)
 
                 is_target_parent_level = process.pid == parent_pid
@@ -262,6 +270,9 @@ def get_process_tree(pid: int) -> dict:
                 return None
 
         tree_data = build_tree(root_process, pid, target_parent_pid)
+        if not tree_data:
+            return None
+
         return {
             "root_pid": root_process.pid,
             "target_pid": pid,
@@ -271,7 +282,7 @@ def get_process_tree(pid: int) -> dict:
         return None
 
 
-def get_child_processes(pid: int) -> list:
+def get_child_processes(pid: int) -> List[ProcessInfo]:
     """
     获取子进程信息
 
@@ -291,7 +302,7 @@ def get_child_processes(pid: int) -> list:
             },
         ]
     """
-    children = []
+    children: List[ProcessInfo] = []
     try:
         parent = psutil.Process(pid)
         for child in parent.children(recursive=True):
@@ -313,7 +324,7 @@ def get_child_processes(pid: int) -> list:
     return children
 
 
-def add_tree_node(port: int, tree: Tree, node_data: dict) -> Tree:
+def add_tree_node(port: int, tree: Tree, node_data: TreeNode) -> Tree:
     """
     递归添加节点到树
 
@@ -358,7 +369,7 @@ def add_tree_node(port: int, tree: Tree, node_data: dict) -> Tree:
     return new_node
 
 
-def display_process_tree(port: int, tree_info: dict):
+def display_process_tree(port: int, tree_info: ProcessTree) -> None:
     """
     显示进程树
 
@@ -390,7 +401,7 @@ def display_process_tree(port: int, tree_info: dict):
     console.print(tree)
 
 
-def check_port(port: int, check_privileged: bool = True) -> dict:
+def check_port(port: int, check_privileged: bool = True) -> PortInfo:
     """
     检查指定端口占用情况，返回端口信息字典
 
@@ -406,8 +417,8 @@ def check_port(port: int, check_privileged: bool = True) -> dict:
                 "pid": 占用进程ID,
                 "status": 端口状态, "已占用" 或 "空闲",
                 "status_style": 端口状态样式, "red" 或 "green",
-                "privilege_role": 端口所属角色, "User" 或 “SYSTEM”,
-                "privilege_desc": 端口所属角色描述, "Standard User" 或 ”Administrator (Elevated)“,
+                "privilege_role": 端口所属角色, "User" 或 "SYSTEM",
+                "privilege_desc": 端口所属角色描述, "Standard User" 或 "Administrator (Elevated)",
                 "privilege_color": 端口所属角色颜色, "dim" 或 "bold red",
                 "name": 占用进程名称,
                 "cmdline": 占用进程命令行参数,
@@ -423,7 +434,7 @@ def check_port(port: int, check_privileged: bool = True) -> dict:
     """
     for conn in psutil.net_connections():
         if conn.laddr.port == port:
-            info = {
+            info: PortInfo = {
                 "port": port,
                 "pid": conn.pid,
                 "status": "已占用",
@@ -502,7 +513,9 @@ def check_port(port: int, check_privileged: bool = True) -> dict:
     }
 
 
-def display_ports_info(port_infos: list, show_privileged: bool = True):
+def display_ports_info(
+    port_infos: List[PortInfo], show_privileged: bool = True
+) -> None:
     """
     显示端口概览
 
@@ -514,8 +527,8 @@ def display_ports_info(port_infos: list, show_privileged: bool = True):
                     "pid": 占用进程ID,
                     "status": 端口状态, "已占用" 或 "空闲",
                     "status_style": 端口状态样式, "red" 或 "green",
-                    "privilege_role": 端口所属角色, "User" 或 “SYSTEM”,
-                    "privilege_desc": 端口所属角色描述, "Standard User" 或 ”Administrator (Elevated)“,
+                    "privilege_role": 端口所属角色, "User" 或 "SYSTEM",
+                    "privilege_desc": 端口所属角色描述, "Standard User" 或 "Administrator (Elevated)",
                     "privilege_color": 端口所属角色颜色, "dim" 或 "bold red",
                     "name": 占用进程名称,
                     "cmdline": 占用进程命令行参数,
@@ -554,7 +567,7 @@ def display_ports_info(port_infos: list, show_privileged: bool = True):
     for info in port_infos:
         status_text = Text(info["status"], style=info["status_style"])
         pid_text = str(info["pid"]) if info["pid"] != "N/A" else "N/A"
-        row_data = [str(info["port"]), status_text]
+        row_data: List[Union[str, Text]] = [str(info["port"]), status_text]
 
         if show_privileged:
             if info["status"] != "空闲":
@@ -617,11 +630,11 @@ def display_ports_info(port_infos: list, show_privileged: bool = True):
 
 
 def display_ports_details(
-    port_infos: list[dict],
+    port_infos: List[PortInfo],
     show_privileged: bool = True,
     show_process_tree: bool = True,
     show_child_processes: bool = True,
-):
+) -> None:
     """
     显示端口详情
 
@@ -633,8 +646,8 @@ def display_ports_details(
                     "pid": 占用进程ID,
                     "status": 端口状态, "已占用" 或 "空闲",
                     "status_style": 端口状态样式, "red" 或 "green",
-                    "privilege_role": 端口所属角色, "User" 或 “SYSTEM“,
-                    "privilege_desc": 端口所属角色描述, "Standard User" 或 ”Administrator (Elevated)“,
+                    "privilege_role": 端口所属角色, "User" 或 "SYSTEM",
+                    "privilege_desc": 端口所属角色描述, "Standard User" 或 "Administrator (Elevated)",
                     "privilege_color": 端口所属角色颜色, "dim" 或 "bold red",
                     "name": 占用进程名称,
                     "cmdline": 占用进程命令行参数,
@@ -702,7 +715,7 @@ def display_ports_details(
         console.print(Rule(style="yellow"))
 
 
-def capswriter_ports_infos() -> list[dict]:
+def capswriter_ports_infos() -> List[PortInfo]:
     """
     检查 CapsWriter Offline 所需的端口占用情况
 
@@ -718,21 +731,21 @@ def capswriter_ports_infos() -> list[dict]:
     sys.path.append(".")
     from util.config import DeepLXConfig, ServerConfig
 
-    ports: list[int] = [
+    ports: List[int] = [
         int(ServerConfig.speech_recognition_port),
         int(ServerConfig.offline_translate_port),
         int(DeepLXConfig.online_translate_port),
     ]
 
-    port_names = {
+    port_names: Dict[int, str] = {
         int(ServerConfig.speech_recognition_port): "语音识别",
         int(ServerConfig.offline_translate_port): "离线翻译",
         int(DeepLXConfig.online_translate_port): "DeepLX在线翻译",
     }
 
-    port_infos = []
+    port_infos: List[PortInfo] = []
     for port in ports:
-        info: dict = check_port(port, check_privileged=is_admin)
+        info: PortInfo = check_port(port, check_privileged=is_admin)
         info["name"] = f"{info['name']} ({port_names.get(port, '未知')})"
         port_infos.append(info)
 
@@ -740,8 +753,8 @@ def capswriter_ports_infos() -> list[dict]:
 
 
 if __name__ == "__main__":
-    is_admin = is_running_as_admin()
-    show_privileged = is_admin
+    is_admin: bool = is_running_as_admin()
+    show_privileged: bool = is_admin
 
     if not is_admin:
         console.print(
@@ -753,25 +766,25 @@ if __name__ == "__main__":
         )
         console.print("\n")
 
-    ports: list[int] = []
+    ports: List[int] = []
     for arg in sys.argv[1:]:
         try:
             ports.append(int(arg))
         except ValueError:
             pass
-    port_infos: list[dict] = []
+    port_infos: List[PortInfo] = []
     match len(ports):
         case 0:
             # 无参数调用，检查 CapsWriter Offline 所需的端口占用情况
             port_infos = capswriter_ports_infos()
         case _:
             for port in ports:
-                info: dict = check_port(port, check_privileged=is_admin)
+                info: PortInfo = check_port(port, check_privileged=is_admin)
                 port_infos.append(info)
 
     display_ports_info(port_infos, show_privileged=is_admin)
 
-    used_port_infos: list[dict] = [
+    used_port_infos: List[PortInfo] = [
         info for info in port_infos if info["status"] == "已占用"
     ]
     if used_port_infos:
