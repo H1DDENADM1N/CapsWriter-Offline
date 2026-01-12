@@ -615,6 +615,92 @@ def display_ports_info(port_infos: list, show_privileged: bool = True):
     console.print("\n")
 
 
+def display_ports_details(
+    port_infos: list[dict],
+    show_privileged: bool = True,
+    show_process_tree: bool = True,
+    show_child_processes: bool = True,
+):
+    """
+    显示端口详情
+
+    Args:
+        port_infos (list[dict]): 端口信息列表
+            [
+                {
+                    "port": 端口号,
+                    "pid": 占用进程ID,
+                    "status": 端口状态, "已占用" 或 "空闲",
+                    "status_style": 端口状态样式, "red" 或 "green",
+                    "privilege_role": 端口所属角色, "User" 或 “SYSTEM“,
+                    "privilege_desc": 端口所属角色描述, "Standard User" 或 ”Administrator (Elevated)“,
+                    "privilege_color": 端口所属角色颜色, "dim" 或 "bold red",
+                    "name": 占用进程名称,
+                    "cmdline": 占用进程命令行参数,
+                    "exe": 占用进程可执行文件路径,
+                    "username": 占用进程用户名,
+                    "create_time": 占用进程创建时间,
+                    "cpu_percent": 占用进程CPU使用率,
+                    "memory_percent": 占用进程内存使用率,
+                    "memory_rss": 占用进程内存使用量,
+                    "process_tree": 占用进程树信息,
+                    "child_processes": 占用进程的子进程信息,
+                },
+                ...
+            ]
+        show_privileged (bool, optional): 是否显示端点的权限信息.
+        show_process_tree (bool, optional): 是否显示进程树. Defaults to True.
+        show_child_processes (bool, optional): 是否显示进程的子进程. Defaults to True.
+    """
+
+    console.print("\n[bold yellow]🔍 占用端口详细信息:[/bold yellow]")
+    for i, info in enumerate(used_ports, start=1):
+        console.print(
+            Rule(
+                f"\n[yellow]━[/] [bold magenta]{i}. 端口 {info['port']}[/]",
+                align="left",
+                style="yellow",
+            )
+        )
+        if info["cmdline"] != "N/A":
+            console.print(
+                Text.from_markup("  [cyan]命令行:[/] ") + Text(info["cmdline"])
+            )  # 使用Text对象，避免语法高亮
+        if info["exe"] != "N/A":
+            console.print(f"  [cyan]执行路径:[/] {info['exe']}")
+
+        if show_privileged and info["privilege_desc"] != "Unknown":
+            console.print(
+                f"  [yellow]权限:[/] [{info['privilege_color']}]{info['privilege_desc']}[/]"
+            )
+        if show_process_tree and info.get("process_tree"):
+            display_process_tree(info["port"], info["process_tree"])
+        if show_child_processes and info["child_processes"]:
+            console.print("\n[bold cyan]📋 子进程列表[/bold cyan]")
+            child_table = Table(
+                box=box.SIMPLE, show_header=True, header_style="bold blue"
+            )
+            child_table.add_column("PID", style="cyan", width=10)
+            child_table.add_column("名称", style="green", width=20)
+            child_table.add_column("状态", width=10)
+            child_table.add_column("内存", width=12)
+            child_table.add_column("CPU", width=8)
+            child_table.add_column("命令行", style="dim")
+
+            for child in info["child_processes"]:
+                status_style = "green" if child["status"] == "running" else "yellow"
+                child_table.add_row(
+                    str(child["pid"]),
+                    child["name"],
+                    f"[{status_style}]{child['status']}[/]",
+                    child["memory"],
+                    child["cpu"],
+                    child["cmdline"],
+                )
+            console.print(child_table)
+        console.print(Rule(style="yellow"))
+
+
 def capswriter_ports_infos() -> list[dict]:
     """
     检查 CapsWriter Offline 所需的端口占用情况
@@ -686,50 +772,9 @@ if __name__ == "__main__":
 
     used_ports = [info for info in port_infos if info["status"] == "已占用"]
     if used_ports:
-        console.print("\n[bold yellow]🔍 占用端口详细信息:[/bold yellow]")
-        # for info in used_ports:
-        for i, info in enumerate(used_ports, start=1):
-            console.print(
-                Rule(
-                    f"\n[yellow]━[/] [bold magenta]{i}. 端口 {info['port']}[/]",
-                    align="left",
-                    style="yellow",
-                )
-            )
-            if info["cmdline"] != "N/A":
-                console.print(
-                    Text.from_markup("  [cyan]命令行:[/] ") + Text(info["cmdline"])
-                )  # 使用Text对象，避免语法高亮
-            if info["exe"] != "N/A":
-                console.print(f"  [cyan]执行路径:[/] {info['exe']}")
-
-            if show_privileged and info["privilege_desc"] != "Unknown":
-                console.print(
-                    f"  [yellow]权限:[/] [{info['privilege_color']}]{info['privilege_desc']}[/]"
-                )
-            if info.get("process_tree"):
-                display_process_tree(info["port"], info["process_tree"])
-            if info["child_processes"]:
-                console.print("\n[bold cyan]📋 子进程列表[/bold cyan]")
-                child_table = Table(
-                    box=box.SIMPLE, show_header=True, header_style="bold blue"
-                )
-                child_table.add_column("PID", style="cyan", width=10)
-                child_table.add_column("名称", style="green", width=20)
-                child_table.add_column("状态", width=10)
-                child_table.add_column("内存", width=12)
-                child_table.add_column("CPU", width=8)
-                child_table.add_column("命令行", style="dim")
-
-                for child in info["child_processes"]:
-                    status_style = "green" if child["status"] == "running" else "yellow"
-                    child_table.add_row(
-                        str(child["pid"]),
-                        child["name"],
-                        f"[{status_style}]{child['status']}[/]",
-                        child["memory"],
-                        child["cpu"],
-                        child["cmdline"],
-                    )
-                console.print(child_table)
-            console.print(Rule(style="yellow"))
+        display_ports_details(
+            used_ports,
+            show_privileged=is_admin,
+            show_process_tree=True,
+            show_child_processes=True,
+        )
