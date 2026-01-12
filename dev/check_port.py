@@ -575,12 +575,13 @@ def display_ports_info(port_infos: list, show_privileged: bool = True):
         row_data.extend([pid_text, info["name"], info["username"], cpu_text, mem_text])
         table.add_row(*row_data)
 
-    used_ports = sum(1 for info in port_infos if info["status"] == "已占用")
-    free_ports = len(port_infos) - used_ports
+    all_ports: int = len(port_infos)
+    used_ports: int = sum(1 for info in port_infos if info["status"] == "已占用")
+    free_ports: int = all_ports - used_ports
     stats_columns = Columns(
         [
             Panel(
-                f"[bold]{len(port_infos)}[/]\n总端口数",
+                f"[bold]{all_ports}[/]\n总端口数",
                 border_style="blue",
                 height=5,
             ),
@@ -654,7 +655,7 @@ def display_ports_details(
     """
 
     console.print("\n[bold yellow]🔍 占用端口详细信息:[/bold yellow]")
-    for i, info in enumerate(used_ports, start=1):
+    for i, info in enumerate(port_infos, start=1):
         console.print(
             Rule(
                 f"\n[yellow]━[/] [bold magenta]{i}. 端口 {info['port']}[/]",
@@ -770,10 +771,12 @@ if __name__ == "__main__":
 
     display_ports_info(port_infos, show_privileged=is_admin)
 
-    used_ports = [info for info in port_infos if info["status"] == "已占用"]
-    if used_ports:
+    used_port_infos: list[dict] = [
+        info for info in port_infos if info["status"] == "已占用"
+    ]
+    if used_port_infos:
         display_ports_details(
-            used_ports,
+            used_port_infos,
             show_privileged=is_admin,
             show_process_tree=True,
             show_child_processes=True,
