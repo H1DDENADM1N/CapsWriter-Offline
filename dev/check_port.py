@@ -687,7 +687,9 @@ if __name__ == "__main__":
                 )
             )
             if info["cmdline"] != "N/A":
-                console.print(f"  [cyan]命令行:[/] {info['cmdline']}")
+                console.print(
+                    Text(f"  命令行: {info['cmdline']}"), style="cyan"
+                )  # 使用Text对象，避免语法高亮
             if info["exe"] != "N/A":
                 console.print(f"  [cyan]执行路径:[/] {info['exe']}")
 
