@@ -1,6 +1,14 @@
 # 检查端口占用
+# 无参数调用，检查 CapsWriter Offline 所需的端口占用情况
 # uv run .\dev\check_port.py
+
 # uv run .\dev\check_port.py 6016
+# uv run .\dev\check_port.py 6016 6017 1188
+
+# 需要管理员权限运行以获取完整的进程令牌信息
+# gsudo uv run .\dev\check_port.py
+# gsudo uv run .\dev\check_port.py 6016
+# gsudo uv run .\dev\check_port.py 6016 6017 1188
 
 import ctypes
 import sys
@@ -31,19 +39,30 @@ def is_running_as_admin() -> bool:
 
 def get_process_privilege_info(pid: int) -> dict:
     """
-    获取进程的特权归属信息。
-    重点区分：管理员组的未提升进程 (Standard) 与 提升后的管理员进程。
+    获取进程的特权归属信息
+
+    Args:
+        pid (int): 进程ID
+
+    Returns:
+        dict: 特权归属信息
+            {"role": "SYSTEM", "description": "SYSTEM (Local System)", "color": "bold red"}
+            {"role": "User", "description": "Standard User: Administrator", "color": "green"}
+            ...
+
     """
     try:
         # 1. 获取进程句柄和令牌
-        h_process = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION, False, pid)
-        h_token = win32security.OpenProcessToken(h_process, win32con.TOKEN_QUERY)
+        h_process: int = win32api.OpenProcess(
+            win32con.PROCESS_QUERY_INFORMATION, False, pid
+        )
+        h_token: int = win32security.OpenProcessToken(h_process, win32con.TOKEN_QUERY)
 
         # 2. 获取用户 SID
-        token_user = win32security.GetTokenInformation(
+        token_user: object = win32security.GetTokenInformation(
             h_token, win32security.TokenUser
         )[0]
-        sid_str = win32security.ConvertSidToStringSid(token_user)
+        sid_str: str = win32security.ConvertSidToStringSid(token_user)
 
         # 3. 检查特定的系统高权限账户 SID
         if sid_str == "S-1-5-18":
@@ -68,8 +87,8 @@ def get_process_privilege_info(pid: int) -> dict:
             }
 
         # 4. 检查是否属于 Administrators 组
-        admins_sid = win32security.ConvertStringSidToSid("S-1-5-32-544")
-        token_groups = win32security.GetTokenInformation(
+        admins_sid: object = win32security.ConvertStringSidToSid("S-1-5-32-544")
+        token_groups: object = win32security.GetTokenInformation(
             h_token, win32security.TokenGroups
         )
 
@@ -85,13 +104,13 @@ def get_process_privilege_info(pid: int) -> dict:
             account_name, domain_name, _ = win32security.LookupAccountSid(
                 None, token_user
             )
-            user_str = f"{domain_name}\\{account_name}"
-        except:
-            user_str = sid_str
+            user_str: str = f"{domain_name}\\{account_name}"
+        except Exception:
+            user_str: str = sid_str
 
         # 5. 核心逻辑：判断是否实际提升 (UAC)
         if is_in_admin_group:
-            is_elevated = win32security.GetTokenInformation(
+            is_elevated: bool = win32security.GetTokenInformation(
                 h_token, win32security.TokenElevation
             )
             if is_elevated:
@@ -144,7 +163,7 @@ def get_process_privilege_info(pid: int) -> dict:
                 }
 
             return {"role": "User", "description": username, "color": "green"}
-        except:
+        except Exception:
             return {
                 "role": "Unknown",
                 "description": "Access Denied / Unknown",
@@ -156,6 +175,29 @@ def get_process_tree(pid: int) -> dict:
     """
     获取进程树。
     向上追溯到根进程，向下显示目标进程的所有子孙。
+    显示目标进程的兄弟进程和所有子进程。
+
+    Args:
+        pid (int): 目标进程ID
+
+    Returns:
+        dict: 进程树字典
+        {
+            "root": "进程树根进程信息",
+            "children": [
+                {
+                    "process": "进程信息",
+                    "children": [
+                        {
+                            "process": "进程信息",
+                            "children": [...],
+                        },
+                        ...
+                    ],
+                },
+                ...
+            ],
+        }
     """
     try:
         target = psutil.Process(pid)
@@ -230,7 +272,25 @@ def get_process_tree(pid: int) -> dict:
 
 
 def get_child_processes(pid: int) -> list:
-    """获取子进程信息"""
+    """
+    获取子进程信息
+
+    Args:
+        pid (int): 父进程ID
+
+    Returns:
+        list: 子进程信息列表
+        [
+            {
+                "pid": 子进程ID,
+                "name": 子进程名称,
+                "status": 子进程状态,
+                "memory": 子进程内存使用量,
+                "cpu": 子进程CPU使用率,
+                "cmdline": 子进程命令行参数,
+            },
+        ]
+    """
     children = []
     try:
         parent = psutil.Process(pid)
@@ -254,7 +314,28 @@ def get_child_processes(pid: int) -> list:
 
 
 def add_tree_node(tree: Tree, node_data: dict) -> Tree:
-    """递归添加节点到树"""
+    """
+    递归添加节点到树
+
+    Args:
+        tree (rich.tree.Tree): Tree对象
+
+        node_data: 节点数据
+            {
+                "pid": 子进程ID,
+                "name": 子进程名称,
+                "status": 子进程状态,
+                "memory": 子进程内存使用量,
+                "cpu": 子进程CPU使用率,
+                "is_target": 是否为目标进程,
+                "children": 子进程列表,
+            }
+
+    Returns:
+        Tree (rich.tree.Tree): 添加了节点的树对象
+
+
+    """
     icon = "🔴" if node_data["is_target"] else "🔵"
     style = "bold red" if node_data["is_target"] else ""
     guide_style = "red bold" if node_data["is_target"] else "yellow"
@@ -276,7 +357,25 @@ def add_tree_node(tree: Tree, node_data: dict) -> Tree:
 
 
 def display_process_tree(tree_info: dict):
-    """显示进程树"""
+    """
+    显示进程树
+
+    Args:
+        tree_info (dict): 进程树信息
+            {
+                "root_pid": 根进程ID,
+                "target_pid": 目标进程ID,
+                "tree": {
+                    "pid": 子进程ID,
+                    "name": 子进程名称,
+                    "status": 子进程状态,
+                    "memory": 子进程内存使用量,
+                    "cpu": 子进程CPU使用率,
+                    "is_target": 是否为目标进程,
+                    "children": 子进程列表,
+                }
+            }
+    """
     if not tree_info or not tree_info.get("tree"):
         console.print("[yellow]⚠ 无法获取进程树信息[/yellow]")
         return
@@ -290,6 +389,33 @@ def display_process_tree(tree_info: dict):
 def check_port(port: int, check_privileged: bool = True) -> dict:
     """
     检查指定端口占用情况，返回端口信息字典
+
+    Args:
+        port (int): 端口号
+
+        check_privileged (bool, optional): 是否检查端口是否被root进程占用. Defaults to True.
+
+    Returns:
+        port_info (dict): 端口信息字典
+            {
+                "port": 端口号,
+                "pid": 占用进程ID,
+                "status": 端口状态, "已占用" 或 "空闲",
+                "status_style": 端口状态样式, "red" 或 "green",
+                "privilege_role": 端口所属角色, "User" 或 “SYSTEM”,
+                "privilege_desc": 端口所属角色描述, "Standard User" 或 ”Administrator (Elevated)“,
+                "privilege_color": 端口所属角色颜色, "dim" 或 "bold red",
+                "name": 占用进程名称,
+                "cmdline": 占用进程命令行参数,
+                "exe": 占用进程可执行文件路径,
+                "username": 占用进程用户名,
+                "create_time": 占用进程创建时间,
+                "cpu_percent": 占用进程CPU使用率,
+                "memory_percent": 占用进程内存使用率,
+                "memory_rss": 占用进程内存使用量,
+                "process_tree": 占用进程树信息,
+                "child_processes": 占用进程的子进程信息,
+            }
     """
     for conn in psutil.net_connections():
         if conn.laddr.port == port:
@@ -372,90 +498,39 @@ def check_port(port: int, check_privileged: bool = True) -> dict:
     }
 
 
-def display_single_port(port_info: dict, show_privileged: bool = True):
-    """显示单个端口的详细信息"""
-    if port_info["status"] == "已占用":
-        console.print(
-            Panel.fit(
-                f"[bold]端口 {port_info['port']}[/bold]",
-                border_style="red",
-                title="端口占用检查",
-            )
-        )
+def display_ports_info(port_infos: list, show_privileged: bool = True):
+    """
+    显示端口概览
 
-        table = Table(box=box.ROUNDED, show_header=False, style="cyan")
-        table.add_column("属性", style="bold yellow", width=15)
-        table.add_column("值", style="white")
+    Args:
+        port_infos (list[dict]): 端口信息列表
+            [
+                {
+                    "port": 端口号,
+                    "pid": 占用进程ID,
+                    "status": 端口状态, "已占用" 或 "空闲",
+                    "status_style": 端口状态样式, "red" 或 "green",
+                    "privilege_role": 端口所属角色, "User" 或 “SYSTEM”,
+                    "privilege_desc": 端口所属角色描述, "Standard User" 或 ”Administrator (Elevated)“,
+                    "privilege_color": 端口所属角色颜色, "dim" 或 "bold red",
+                    "name": 占用进程名称,
+                    "cmdline": 占用进程命令行参数,
+                    "exe": 占用进程可执行文件路径,
+                    "username": 占用进程用户名,
+                    "create_time": 占用进程创建时间,
+                    "cpu_percent": 占用进程CPU使用率,
+                    "memory_percent": 占用进程内存使用率,
+                    "memory_rss": 占用进程内存使用量,
+                    "process_tree": 占用进程树信息,
+                    "child_processes": 占用进程的子进程信息,
+                },
+                ...
+            ]
+        show_privileged (bool, optional): 是否显示端点的权限信息. Defaults to True.
 
-        table.add_row("状态", f"[{port_info['status_style']}]{port_info['status']}[/]")
-        table.add_row("进程ID", str(port_info["pid"]))
-        table.add_row("进程名称", port_info["name"])
-
-        if show_privileged:
-            role_text = Text(port_info["privilege_desc"])
-            role_text.style = port_info["privilege_color"]
-            table.add_row("特权/权限", role_text)
-
-        table.add_row("启动用户", port_info["username"])
-
-        if port_info["cpu_percent"] != "N/A":
-            table.add_row("CPU使用率", f"{port_info['cpu_percent']:.1f}%")
-            table.add_row("内存使用率", f"{port_info['memory_percent']:.1f}%")
-            memory_mb = port_info["memory_rss"] / 1024 / 1024
-            table.add_row("内存占用", f"{memory_mb:.1f} MB")
-
-        table.add_row("执行路径", port_info["exe"])
-        table.add_row("命令行", port_info["cmdline"])
-        console.print(table)
-
-        display_process_tree(port_info["process_tree"])
-
-        if port_info["child_processes"]:
-            console.print("\n[bold yellow]📋 子进程列表[/bold yellow]")
-            child_table = Table(
-                box=box.SIMPLE, show_header=True, header_style="bold magenta"
-            )
-            child_table.add_column("PID", style="cyan", width=10)
-            child_table.add_column("名称", style="green", width=20)
-            child_table.add_column("状态", width=10)
-            child_table.add_column("内存", width=12)
-            child_table.add_column("CPU", width=8)
-            child_table.add_column("命令行", style="dim")
-
-            for child in port_info["child_processes"]:
-                status_style = "green" if child["status"] == "running" else "yellow"
-                child_table.add_row(
-                    str(child["pid"]),
-                    child["name"],
-                    f"[{status_style}]{child['status']}[/]",
-                    child["memory"],
-                    child["cpu"],
-                    child["cmdline"],
-                )
-            console.print(child_table)
-
-    else:
-        console.print(
-            Panel.fit(
-                f"[bold green]✓ 端口 {port_info['port']} 空闲[/bold green]",
-                border_style="green",
-                title="端口状态",
-            )
-        )
-
-
-def display_multiple_ports(port_infos: list, show_privileged: bool = True):
-    """显示多个端口的概览"""
-    console.print(
-        Panel.fit(
-            "[bold cyan]📊 端口占用情况概览[/bold cyan]",
-            border_style="cyan",
-            padding=(1, 2),
-        )
-    )
-
+    """
     table = Table(
-        title="端口状态",
+        expand=True,
         box=box.ROUNDED,
         header_style="bold magenta",
         title_style="bold yellow",
@@ -496,8 +571,6 @@ def display_multiple_ports(port_infos: list, show_privileged: bool = True):
         row_data.extend([pid_text, info["name"], info["username"], cpu_text, mem_text])
         table.add_row(*row_data)
 
-    console.print(table)
-
     used_ports = sum(1 for info in port_infos if info["status"] == "已占用")
     free_ports = len(port_infos) - used_ports
     stats_columns = Columns(
@@ -508,33 +581,27 @@ def display_multiple_ports(port_infos: list, show_privileged: bool = True):
         ],
         expand=True,
     )
-    console.print("\n")
     console.print(Panel(stats_columns, title="📈 统计信息", border_style="yellow"))
+    console.print("\n")
+    console.print(Panel(table, title="📊 端口状态", border_style="yellow"))
+    console.print("\n")
 
 
-if __name__ == "__main__":
-    is_admin = is_running_as_admin()
-    show_privileged = is_admin
+def capswriter_ports_infos() -> list[dict]:
+    """
+    检查 CapsWriter Offline 所需的端口占用情况
 
-    if not is_admin:
-        console.print(
-            Panel(
-                "[yellow]⚠ 当前脚本未以管理员权限运行[/]\n"
-                "[dim]无法准确读取所有进程的详细特权令牌[/]",
-                border_style="yellow",
-            )
-        )
-        console.print()
+    语音识别端口：config.toml 中的 ServerConfig.speech_recognition_port
+    离线翻译端口：config.toml 中的 ServerConfig.offline_translate_port
+    DeepLX在线翻译端口：config.toml 中的 DeepLXConfig.online_translate_port
+        DeepLX 仅在 LiberTranslate 不可用时作为 fallback
+
+    Returns:
+        list[dict]: 端口信息列表
+    """
 
     sys.path.append(".")
     from util.config import DeepLXConfig, ServerConfig
-
-    port_arg = int(sys.argv[1]) if len(sys.argv) > 1 else 0
-
-    if port_arg:
-        port_info = check_port(port_arg, check_privileged=is_admin)
-        display_single_port(port_info, show_privileged=is_admin)
-        sys.exit()
 
     ports: list[int] = [
         int(ServerConfig.speech_recognition_port),
@@ -550,11 +617,44 @@ if __name__ == "__main__":
 
     port_infos = []
     for port in ports:
-        info = check_port(port, check_privileged=is_admin)
+        info: dict = check_port(port, check_privileged=is_admin)
         info["name"] = f"{info['name']} ({port_names.get(port, '未知')})"
         port_infos.append(info)
 
-    display_multiple_ports(port_infos, show_privileged=is_admin)
+    return port_infos
+
+
+if __name__ == "__main__":
+    is_admin = is_running_as_admin()
+    show_privileged = is_admin
+
+    if not is_admin:
+        console.print(
+            Panel(
+                "[yellow]⚠ 当前脚本未以管理员权限运行[/]\n"
+                "[dim]无法准确读取所有进程的详细特权令牌[/]",
+                border_style="yellow",
+            )
+        )
+        console.print("\n")
+
+    ports: list[int] = []
+    for arg in sys.argv[1:]:
+        try:
+            ports.append(int(arg))
+        except ValueError:
+            pass
+    port_infos: list[dict] = []
+    match len(ports):
+        case 0:
+            # 无参数调用，检查 CapsWriter Offline 所需的端口占用情况
+            port_infos = capswriter_ports_infos()
+        case _:
+            for port in ports:
+                info: dict = check_port(port, check_privileged=is_admin)
+                port_infos.append(info)
+
+    display_ports_info(port_infos, show_privileged=is_admin)
 
     used_ports = [info for info in port_infos if info["status"] == "已占用"]
     if used_ports:
@@ -574,8 +674,31 @@ if __name__ == "__main__":
 
             if show_privileged and info["privilege_desc"] != "Unknown":
                 console.print(
-                    f"  [yellow]特权/权限:[/] [{info['privilege_color']}]{info['privilege_desc']}[/]"
+                    f"  [yellow]权限:[/] [{info['privilege_color']}]{info['privilege_desc']}[/]"
                 )
             if info.get("process_tree"):
                 display_process_tree(info["process_tree"])
+            if info["child_processes"]:
+                console.print("\n[bold yellow]📋 子进程列表[/bold yellow]")
+                child_table = Table(
+                    box=box.SIMPLE, show_header=True, header_style="bold magenta"
+                )
+                child_table.add_column("PID", style="cyan", width=10)
+                child_table.add_column("名称", style="green", width=20)
+                child_table.add_column("状态", width=10)
+                child_table.add_column("内存", width=12)
+                child_table.add_column("CPU", width=8)
+                child_table.add_column("命令行", style="dim")
+
+                for child in info["child_processes"]:
+                    status_style = "green" if child["status"] == "running" else "yellow"
+                    child_table.add_row(
+                        str(child["pid"]),
+                        child["name"],
+                        f"[{status_style}]{child['status']}[/]",
+                        child["memory"],
+                        child["cpu"],
+                        child["cmdline"],
+                    )
+                console.print(child_table)
             console.print(Rule(style="yellow"))
