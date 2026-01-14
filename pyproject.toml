@@ -8,7 +8,7 @@ readme = "readme.md"
 requires-python = "==3.13.11"
 dependencies = [
     "loguru>=0.7.3",
-    "numpy>=2.4.0",
+    "numpy<2.4.0",
     "pyside6>=6.10.1",
     "rich>=14.2.0",
     "tomlkit>=0.13.3",
@@ -22,7 +22,7 @@ server = [
     "qt-material>=2.17",
     "sacremoses>=0.1.1",
     "sentencepiece>=0.2.1",
-    "sherpa-onnx>=1.12.20",
+    "sherpa-onnx==1.12.21+cuda12.cudnn9",
     "torch>=2.9.1",
     "transformers>=4.57.3",
     "websockets>=15.0.1",
@@ -55,8 +55,16 @@ editconfiggui = [
     # Note: siui is not available on PyPI, need to download and copy to .venv/Lib/site-packages and ./site-packages manually
 ]
 
+[[tool.uv.index]]
+url = "https://mirrors.ustc.edu.cn/pypi/simple"
+default = true
+
+[tool.uv.sources]
+sherpa-onnx = { url = "https://hf-mirror.com/csukuangfj/sherpa-onnx-wheels/resolve/main/cuda/1.12.21/sherpa_onnx-1.12.21+cuda12.cudnn9-cp313-cp313-win_amd64.whl" }
+# https://k2-fsa.github.io/sherpa/onnx/cuda-cn.html
+
 [project.optional-dependencies]
-dev = []
+dev = ["ipynb==0.5.1", "ipykernel>=7.1.0", "pip>=25.3", "soundfile>=0.13.1"]
 
 [project.urls]
 Repository = "https://github.com/H1DDENADM1N/CapsWriter-Offline"
