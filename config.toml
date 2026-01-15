@@ -609,19 +609,19 @@ api = "http://127.0.0.1:1188/translate"
 model_dir = "models"
 # 模型文件目录
 
-funasr_dir = "models/sherpa-onnx-funasr-nano-int8-2025-12-30"
+funasr_dir = "models/sherpa-onnx-funasr-nano-2025-12-30"
 # FunASR 路径
 
-funasr_tokenizer_dir = "models/sherpa-onnx-funasr-nano-int8-2025-12-30/Qwen3-0.6B"
+funasr_tokenizer_dir = "models/sherpa-onnx-funasr-nano-2025-12-30/Qwen3-0.6B"
 # FunASR tokens 路径
 
-funasr_encoder_adaptor_path = "models/sherpa-onnx-funasr-nano-int8-2025-12-30/encoder_adaptor.int8.onnx"
+funasr_encoder_adaptor_path = "models/sherpa-onnx-funasr-nano-2025-12-30/encoder_adaptor.onnx"
 # FunASR encoder_adaptor 模型路径
 
-funasr_embedding_path = "models/sherpa-onnx-funasr-nano-int8-2025-12-30/embedding.int8.onnx"
+funasr_embedding_path = "models/sherpa-onnx-funasr-nano-2025-12-30/embedding.onnx"
 # FunASR embedding 模型路径
 
-funasr_llm_path = "models/sherpa-onnx-funasr-nano-int8-2025-12-30/llm.int8.onnx"
+funasr_llm_path = "models/sherpa-onnx-funasr-nano-2025-12-30/llm.fp32.onnx"
 # FunASR llm 模型路径
 
 sensevoice_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx"
