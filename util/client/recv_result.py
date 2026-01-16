@@ -31,18 +31,42 @@ warnings.filterwarnings("ignore")
 async def recv_result():
     if not await check_websocket():
         return
-    console.print("[green]连接成功\n")
+
+    init_logging()
+
+    with console.resize(width=49):
+        console.rule("[green]连接成功")
+
+    console.print(
+        f"   客户端 WebSocket ID: [cyan]{Cosmic.websocket.id}[/cyan]\n", style="yellow"
+    )
+
     try:
+        # 先接收服务端的欢迎消息
+        welcome_message = await Cosmic.websocket.recv()
+        welcome_data = json.loads(welcome_message)
+
+        if welcome_data.get("type") == "connection_ack":
+            # 获取服务端分配的客户端ID
+            Cosmic.client_id = welcome_data["client_id"]
+            server_websocket_id = welcome_data["server_websocket_id"]
+            remote_address = welcome_data.get("remote_address", "未知")
+
+            console.print(f"   服务端 WebSocket ID: [dim]{server_websocket_id}[/dim]\n")
+            console.print(f"   客户端ID: [cyan]{Cosmic.client_id}[/cyan]")
+            console.print()
+
+            logger.info(
+                f"连接到服务端成功: 服务端分配的客户端ID={Cosmic.client_id}, 客户端地址={remote_address}, 客户端 WebSocker ID={Cosmic.websocket.id}, 服务端WebSocket ID={server_websocket_id}"
+            )
+
+        # 继续接收和处理音频识别结果
         while True:
             # 接收消息
             message = await Cosmic.websocket.recv()
             message = json.loads(message)
             asr_text = message["text"]
             delay = message["time_complete"] - message["time_submit"]
-
-            # 如果非最终结果或文本为空，继续等待
-            if not message["is_final"] or not asr_text.strip():
-                continue
 
             # 控制台输出
             console.print(f"    转录时延：{delay:.2f}s")
@@ -173,11 +197,13 @@ async def recv_result():
             online_translate_done = False
             Cosmic.opposite_state = False
     except websockets.ConnectionClosedError:
-        console.print("[red]连接断开\n")
+        with console.resize(width=49):
+            console.rule("[red]连接断开")
         init_logging()
         logger.error("连接断开，WebSocket连接关闭错误。")
     except websockets.ConnectionClosedOK:
-        console.print("[red]连接断开\n")
+        with console.resize(width=49):
+            console.rule("[red]连接断开")
         init_logging()
         logger.error("连接断开，WebSocket连接正常关闭。")
     except Exception as e:
