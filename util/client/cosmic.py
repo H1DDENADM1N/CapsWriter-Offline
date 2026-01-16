@@ -5,7 +5,9 @@ from typing import List, Union
 
 import sounddevice as sd
 import websockets
-from rich.console import Console
+
+# from rich.console import Console
+from util.resizeable_console import Console
 from rich.theme import Theme
 
 original_stdout = sys.stdout
