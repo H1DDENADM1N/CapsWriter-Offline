@@ -1,3 +1,8 @@
+import warnings
+
+warnings.filterwarnings("ignore", message=".*pkg_resources.*", module="jieba._compat")
+
+
 import logging
 import time
 from multiprocessing import Queue
