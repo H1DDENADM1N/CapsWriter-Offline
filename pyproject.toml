@@ -8,7 +8,7 @@ readme = "readme.md"
 requires-python = "==3.13.11"
 dependencies = [
     "loguru>=0.7.3",
-    "numpy>=2.4.1",
+    "numpy==2.3.5",
     "pyside6>=6.10.1",
     "rich>=14.2.0",
     "tomlkit>=0.14.0",
@@ -19,6 +19,7 @@ server = [
     "flask>=3.1.2",
     "httpx>=0.28.1",
     "jieba>=0.42.1",
+    "numba==0.63.1",
     "qt-material>=2.17",
     "sacremoses>=0.1.1",
     "sentencepiece>=0.2.1",
@@ -55,6 +56,10 @@ editconfiggui = [
     # siui  PySide6-SiliconUI  https://github.com/H1DDENADM1N/PySide6-SiliconUI
     # Note: siui is not available on PyPI, need to download and copy to .venv/Lib/site-packages and ./site-packages manually
 ]
+
+[[tool.uv.index]]
+url = "https://mirrors.ustc.edu.cn/pypi/simple"
+default = true
 
 [project.optional-dependencies]
 dev = []
