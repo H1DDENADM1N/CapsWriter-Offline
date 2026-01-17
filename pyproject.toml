@@ -23,6 +23,7 @@ server = [
     "sacremoses>=0.1.1",
     "sentencepiece>=0.2.1",
     "sherpa-onnx>=1.12.23",
+    "sherpa-onnx-core>=1.12.23",
     "torch>=2.9.1",
     "transformers>=4.57.5",
     "websockets>=16.0",
