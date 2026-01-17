@@ -605,20 +605,44 @@ class GUI(QMainWindow):
         match prompt_style:
             case "official":
                 self.prompt_official_action.setChecked(True)
+                self.tray_icon.showMessage(
+                    "新提示风格已启用", "正式公文", QSystemTrayIcon.Information, 2000
+                )
             case "sweetheart":
                 self.prompt_sweetheart_action.setChecked(True)
+                self.tray_icon.showMessage(
+                    "新提示风格已启用", "甜言蜜语", QSystemTrayIcon.Information, 2000
+                )
             case "social":
                 self.prompt_social_action.setChecked(True)
+                self.tray_icon.showMessage(
+                    "新提示风格已启用", "社媒文案", QSystemTrayIcon.Information, 2000
+                )
             case "poetry":
                 self.prompt_poetry_action.setChecked(True)
+                self.tray_icon.showMessage(
+                    "新提示风格已启用", "赋诗一首", QSystemTrayIcon.Information, 2000
+                )
             case "english":
                 self.prompt_english_action.setChecked(True)
+                self.tray_icon.showMessage(
+                    "新提示风格已启用", "英语大师", QSystemTrayIcon.Information, 2000
+                )
             case "academic":
                 self.prompt_academic_action.setChecked(True)
+                self.tray_icon.showMessage(
+                    "新提示风格已启用", "学术论文", QSystemTrayIcon.Information, 2000
+                )
             case "customer_service":
                 self.prompt_customer_service_action.setChecked(True)
+                self.tray_icon.showMessage(
+                    "新提示风格已启用", "客户服务", QSystemTrayIcon.Information, 2000
+                )
             case "creative_writing":
                 self.prompt_creative_writing_action.setChecked(True)
+                self.tray_icon.showMessage(
+                    "新提示风格已启用", "创意写作", QSystemTrayIcon.Information, 2000
+                )
             case _:
                 logger.warning(f"不支持的 AI 提示风格：{prompt_style}")
 

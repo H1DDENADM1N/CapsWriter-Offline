@@ -149,14 +149,38 @@ class ClientConfig:
     openai_api_key: str = config["client"]["openai"]["api_key"]
     openai_base_url: str = config["client"]["openai"]["base_url"]
     openai_model: str = config["client"]["openai"]["model"]
+    prompt_official_shortcut: str = config["client"]["prompt_style"][
+        "prompt_official_shortcut"
+    ]
     prompt_official: str = config["client"]["prompt_style"]["prompt_official"]
+    prompt_sweetheart_shortcut: str = config["client"]["prompt_style"][
+        "prompt_sweetheart_shortcut"
+    ]
     prompt_sweetheart: str = config["client"]["prompt_style"]["prompt_sweetheart"]
+    prompt_social_shortcut: str = config["client"]["prompt_style"][
+        "prompt_social_shortcut"
+    ]
     prompt_social: str = config["client"]["prompt_style"]["prompt_social"]
+    prompt_poetry_shortcut: str = config["client"]["prompt_style"][
+        "prompt_poetry_shortcut"
+    ]
     prompt_poetry: str = config["client"]["prompt_style"]["prompt_poetry"]
+    prompt_english_shortcut: str = config["client"]["prompt_style"][
+        "prompt_english_shortcut"
+    ]
     prompt_english: str = config["client"]["prompt_style"]["prompt_english"]
+    prompt_academic_shortcut: str = config["client"]["prompt_style"][
+        "prompt_academic_shortcut"
+    ]
     prompt_academic: str = config["client"]["prompt_style"]["prompt_academic"]
+    prompt_customer_service_shortcut: str = config["client"]["prompt_style"][
+        "prompt_customer_service_shortcut"
+    ]
     prompt_customer_service: str = config["client"]["prompt_style"][
         "prompt_customer_service"
+    ]
+    prompt_creative_writing_shortcut: str = config["client"]["prompt_style"][
+        "prompt_creative_writing_shortcut"
     ]
     prompt_creative_writing: str = config["client"]["prompt_style"][
         "prompt_creative_writing"

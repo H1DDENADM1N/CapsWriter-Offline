@@ -26,6 +26,20 @@
 - [🪳 提交 Bug ](https://github.com/H1DDENADM1N/CapsWriter-Offline/issues)
 
 # 👀 最新更新
+## 新增 配置项 快捷键切换 AI优化语言表达 提示风格
+> 切换后会有两秒右下角系统通知提示
+> 修改 `config.toml` 注意避免快捷键冲突
+> 默认配置如下：
+> `ctrl + alt + shift + f1` -> `正式公文`
+> `ctrl + alt + shift + f2` -> `甜言蜜语`
+> `ctrl + alt + shift + f3` -> `社媒文案`
+> `ctrl + alt + shift + f4` -> `赋诗一首`
+> `ctrl + alt + shift + f5` -> `英语大师`
+> `ctrl + alt + shift + f6` -> `学术论文`
+> `ctrl + alt + shift + f7` -> `客户服务`
+> `ctrl + alt + shift + f8` -> `创意写作`
+
+
 ## 新增 配置项 hot_rag
 > 新版 独立热词与纠错系统，整合了音素处理、相似度算法、FastRAG 加速检索
 > 不建议与 旧版 hot_zh、hot_en  一起使用
@@ -684,6 +698,10 @@ model = "Qwen/Qwen2.5-14B-Instruct"
 
 
 [client.prompt_style]
+prompt_official_shortcut = "ctrl + alt + shift + f1"
+# 切换提示风格为正式公文文本校对助手的快捷键
+# 注意避免快捷键冲突
+
 prompt_official = """
 你是一位专业的公文文本校对助手。你的任务是对语音转录生成的文本进行校对和润色，使其符合正式公文的规范要求。
 
@@ -709,6 +727,10 @@ prompt_official = """
 
 输出要求：直接呈现润色完成的规范文本，无任何额外说明。
 """
+
+prompt_sweetheart_shortcut = "ctrl + alt + shift + f2"
+# 切换提示风格为ptrue_heart的快捷键
+# 注意避免快捷键冲突
 
 prompt_sweetheart = """
 你是一位贴心的男友式文本润色助手。你的任务是对语音转录的文字进行温柔加工，让它读起来更甜蜜、更体贴。
@@ -736,6 +758,10 @@ prompt_sweetheart = """
 输出要求：直接给出润色完成的"甜度满分"文本。
 """
 
+prompt_social_shortcut = "ctrl + alt + shift + f3"
+# 切换提示风格为社交媒体文案优化助手的快捷键
+# 注意避免快捷键冲突
+
 prompt_social = """
 你是一位社交媒体文案优化助手。你的任务是对语音转录的文字进行加工，使其适合直接发布在社交平台。
 
@@ -761,6 +787,10 @@ prompt_social = """
 
 输出要求：直接给出优化完成、适合一键发布的社交文案。
 """
+
+prompt_poetry_shortcut = "ctrl + alt + shift + f4"
+# 切换提示风格为社交媒体文案优化助手的快捷键
+# 注意避免快捷键冲突
 
 prompt_poetry = """
 你是一位古诗创作助手。你的任务是根据语音转录的文字内容，创作一首符合古典诗歌风格的仿古诗。
@@ -789,6 +819,10 @@ prompt_poetry = """
 输出要求：直接呈现创作完成的古典诗歌。
 """
 
+prompt_english_shortcut = "ctrl + alt + shift + f5"
+# 切换提示风格为英文润色助手的快捷键
+# 注意避免快捷键冲突
+
 prompt_english = """
 你是一位地道的美式英语翻译与润色专家。你的任务是将语音转录的文本翻译并润色为地道的美式英语。
 
@@ -815,6 +849,10 @@ prompt_english = """
 
 输出要求：直接给出润色后的地道美式英语文本。
 """
+
+prompt_academic_shortcut = "ctrl + alt + shift + f6"
+# 切换提示风格为学术论文优化助手的快捷键
+# 注意避免快捷键冲突
 
 prompt_academic = """
 你是一位专业的学术论文润色助手。你的任务是将语音转录的文本（特别是学术讨论、研究想法或实验记录）转化为严谨、规范的学术论文语言。
@@ -845,6 +883,10 @@ prompt_academic = """
 输出要求：直接呈现符合学术规范的润色文本。
 """
 
+prompt_customer_service_shortcut = "ctrl + alt + shift + f7"
+# 切换提示风格为客户服务回复优化助手的快捷键
+# 注意避免快捷键冲突
+
 prompt_customer_service = """
 你是一位专业的客户服务回复助手。你的任务是将内部讨论的语音转录转化为专业、得体的客户服务回复。
 
@@ -871,6 +913,10 @@ prompt_customer_service = """
 
 输出要求：直接呈现专业、完整的客户服务回复文本。
 """
+
+prompt_creative_writing_shortcut = "ctrl + alt + shift + f8"
+# 切换提示风格为创意写作优化助手的快捷键
+# 注意避免快捷键冲突
 
 prompt_creative_writing = """
 你是一位创意写作助手。你的任务是将语音转录的零散想法转化为富有文学性的创意文本。
