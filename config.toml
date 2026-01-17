@@ -153,8 +153,9 @@ reduce_audio_files = true
 trash_punc = "，。,."
 # 识别结果要消除的末尾标点
 
-hot_zh = true
-# 是否启用中文热词替换，中文热词存储在 hot_zh.txt 文件里
+hot_zh = false
+# 旧版 是否启用中文热词替换，中文热词存储在 hot_zh.txt 文件里
+# 不建议与 新版 hot_rag 一起使用
 
 "多音字" = true
 # true 表示多音字匹配
@@ -162,14 +163,21 @@ hot_zh = true
 "声调" = false
 # false 表示忽略声调区别，这样「黄章」就能匹配「慌张」
 
-hot_en = true
-# 是否启用英文热词替换，英文热词存储在 hot_en.txt 文件里
+hot_en = false
+# 旧版 是否启用英文热词替换，英文热词存储在 hot_en.txt 文件里
+# 不建议与 新版 hot_rag 一起使用
 
 hot_rule = true
 # 是否启用自定义规则替换，自定义规则存储在 hot_rule.txt 文件里
 
 hot_kwd = true
 # 是否启用关键词日记功能，自定义关键词存储在 keyword.txt 文件里
+
+hot_rag = true
+# 新版 独立热词与纠错系统，整合了音素处理、相似度算法、FastRAG 加速检索
+# 不建议与 旧版 hot_zh、hot_en  一起使用
+# 不用重新编辑 hot-rag.txt 文件
+# hot-en.txt 和 hot-zh.txt 文件仍然有效
 
 mic_seg_duration = 15
 # 麦克风听写时分段长度：15 秒

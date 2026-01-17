@@ -90,6 +90,7 @@ class ClientConfig:
     hot_en: bool = config["client"]["hot_en"]
     hot_rule: bool = config["client"]["hot_rule"]
     hot_kwd: bool = config["client"]["hot_kwd"]
+    hot_rag: bool = config["client"]["hot_rag"]
     mic_seg_duration: int = config["client"]["mic_seg_duration"]
     mic_seg_overlap: int = config["client"]["mic_seg_overlap"]
     file_seg_duration: int = config["client"]["file_seg_duration"]

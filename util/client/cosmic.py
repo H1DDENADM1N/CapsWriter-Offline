@@ -6,6 +6,7 @@ from typing import List, Union
 import sounddevice as sd
 import websockets
 from rich.theme import Theme
+from util.client.hot_sub_rag import PhonemeCorrector
 
 # from rich.console import Console
 from util.resizeable_console import Console
@@ -39,3 +40,4 @@ class Cosmic:
     online_translate_needed = False
     offline_translate_needed = False
     opposite_state = False
+    corrector = PhonemeCorrector(threshold=0.7)

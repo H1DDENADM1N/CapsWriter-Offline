@@ -11,11 +11,10 @@ MB
 GB
 TB
 PB
-
-
 PDF
 DPI
 
+# Apple
 Apple
 Apple Watch
 Apple Vision
@@ -29,10 +28,10 @@ Siri
 Hey Siri
 
 Samsung
-
 Android
 Google
 
+# 接口/硬件
 Micro-USB
 Mini-USB
 Type-C
@@ -42,16 +41,18 @@ SD
 Readme
 3M
 
-
+# 航天
 SpaceX
 StarShip
 Falcon
 Raptor
 Merlin
 
+# AI/ML
 Transformer
 Paraformer
 
+# 国家
 China
 Chinese
 England
@@ -73,25 +74,24 @@ Korean
 # 数字开头
 7-Zip
 
-# A开头
+# A
 Adobe
 After Effects
 AI
 Airbnb
 Amazon
 AMD
-Apple
 Audition
 AutoCAD
 App
+Anthropic
 
-
-# B开头
+# B
 Bandizip
 BIOS
 Blender
 
-# C开头
+# C
 CAD
 CameraRAW
 CD
@@ -107,14 +107,17 @@ Creative Cloud
 Cubase
 ChatGPT
 CapsWriter
+CapsWriter-Offline
+Claude
+Claude Code
 
-# D开头
+# D
 Dell
 Dolby
 Dropbox
 Directory OPUS
 
-# E开头
+# E
 Edge
 EPA
 Epic
@@ -123,7 +126,7 @@ Evernote
 Excel
 EXIF
 
-# F开头
+# F
 Facebook
 FBI
 FCC
@@ -133,10 +136,9 @@ Final Cut Pro
 Firefox
 FTP
 
-# G开头
+# G
 GDP
 GitHub
-Google
 Google Docs
 Google Drive
 Google Sheets
@@ -145,40 +147,39 @@ GPT
 GUI
 GPU
 
-# H开头
+# H
 HD
 
-# I开头
+# I
 IBM
 Illustrator
 IMF
 InDesign
 Instagram
 Intel
-iPhone
 
-
-# J开头
+# J
 Java
 JavaScript
 
-# K开头
+# K
 Kotlin
 KPI
 
-# L开头
+# L
 Lightroom
 LinkedIn
 Linux
 Logic Pro
 Lua
+LLM
 
-# M开头
+# M
 Maya
 Microsoft
 Markdown
 
-# N开头
+# N
 NASA
 Netflix
 Notepad
@@ -186,7 +187,7 @@ Notion
 NSA
 NVIDIA
 
-# O开头
+# O
 OBS
 OCR
 OneNote
@@ -194,7 +195,7 @@ OpenAI
 Oracle
 Outlook
 
-# P开头
+# P
 Photoshop
 PHP
 Pinterest
@@ -205,10 +206,10 @@ Premiere Pro
 Pro Tools
 Python
 
-# Q开头
+# Q
 QQ
 
-# R开头
+# R
 RAM
 RAW
 Reddit
@@ -216,7 +217,7 @@ RGB
 Ruby
 Rust
 
-# S开头
+# S
 Sketch
 Skype
 Slack
@@ -225,7 +226,7 @@ SolidWorks
 SSD
 Steam
 
-# T开头
+# T
 Teams
 Telegram
 Tencent
@@ -235,21 +236,20 @@ TV
 Twitter
 TypeScript
 
-# U开头
+# U
 Uber
 UEFI
 UI
 UNESCO
 UNICEF
-USB
 
-# V开头
+# V
 VIP
 VPN
 VR
 VRChat
 
-# W开头
+# W
 WeChat
 WhatsApp
 WHO
@@ -261,12 +261,13 @@ Word
 WordPress
 WTO
 
-# X开头
+# X
 Xbox
 XD
 
-# Y开头
+# Y
 YouTube
 
-# Z开头
+# Z
 Zoom
+

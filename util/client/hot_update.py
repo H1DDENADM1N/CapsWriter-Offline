@@ -9,7 +9,7 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from util.client import hot_kwds, hot_sub_en, hot_sub_rule, hot_sub_zh
-from util.client.cosmic import console
+from util.client.cosmic import Cosmic, console
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tomlkit import parse
@@ -20,6 +20,7 @@ path_zh = Path() / "hot-zh.txt"
 path_en = Path() / "hot-en.txt"
 path_rule = Path() / "hot-rule.txt"
 path_kwds = Path() / "keywords.txt"
+path_rag = Path() / "hot-rag.txt"
 config_toml_path = Path() / "config.toml"
 
 
@@ -75,6 +76,21 @@ def update_hot_kwds():
     with open(path_kwds, "r", encoding="utf-8") as f:
         num_kwd = hot_kwds.do_updata_kwd(f.read())
     console.print(f"已载入 [green4]{num_kwd:5}[/] 条日记关键词")
+
+
+def update_hot_rag():
+    if not path_rag.exists():
+        with open(path_rag, "w", encoding="utf-8") as f:
+            f.write(
+                """
+# 热词文件
+# 每行一个热词，井号开头的行为注释，会被忽略
+# 使用音素 RAG 匹配，支持中英文混合
+"""
+            )
+    # Cosmic.corrector.load_hotwords_file(path_rag, append_mode=False)
+    Cosmic.corrector.load_hotwords_file(path_zh, append_mode=True)
+    Cosmic.corrector.load_hotwords_file(path_en, append_mode=True)
 
 
 def update_config():
@@ -243,6 +259,7 @@ def update_hot_all():
     update_hot_en()
     update_hot_rule()
     update_hot_kwds()
+    update_hot_rag()
     console.line()
 
 
@@ -263,6 +280,7 @@ class HotHandler(FileSystemEventHandler):
         path_en: update_hot_en,
         path_rule: update_hot_rule,
         path_kwds: update_hot_kwds,
+        path_rag: update_hot_rag,
         config_toml_path: update_config,
     }
 

@@ -7,7 +7,6 @@ CapsWriter-Offline 独立热词与纠错系统 (Portable Standalone)
 """
 
 import re
-import sys
 import threading
 import time
 from collections import defaultdict
@@ -25,9 +24,10 @@ from rich.console import Console
 from rich.rule import Rule
 from rich.table import Table
 
+from util.safe_logger import init_logging
+
 # 配置日志
-logger.remove()
-logger.add(sys.stderr, level="TRACE", backtrace=True, diagnose=True)
+init_logging()
 
 # 配置控制台
 console = Console()
@@ -987,6 +987,27 @@ def find_best_match(
     return 1.0 - (min_dist / n), best_start, end_pos
 
 
+def 热词替换(句子):
+    """
+    从热词词典中查找匹配的热词，替换句子
+
+    句子：       被查找和替换的句子
+    """
+    from util.client.cosmic import Cosmic, console
+
+    now = time.time()
+    result = Cosmic.corrector.correct(句子)
+    dur = time.time() - now
+
+    # if result.matchs:
+    #     for wrong, right, score in result.matchs:
+    #         console.print(
+    #             f"hot_sub_rag Result: [{score_to_color(score)}]{wrong} -> {right} [/]    Score: {score:.2f}    Duration: {dur:.2f}s"
+    #         )
+
+    return result.text
+
+
 def score_to_color(score: float) -> str:
     """将分数转换为颜色"""
     colors = [
@@ -1006,6 +1027,14 @@ def score_to_color(score: float) -> str:
 
 
 if __name__ == "__main__":
+    # import sys
+
+    # sys.path.append("..")
+    # from util.client.cosmic import Cosmic
+
+    # Cosmic.corrector.load_hotwords_file(Path("hot-rag.txt"), append_mode=False)
+
+    # print(热词替换("我家哥哥在齐铺路"))
     # =============================================================================
     # 7. 数据准备与主流演示
     # =============================================================================
