@@ -90,20 +90,20 @@ class Deduplicator:
 
 
 if __name__ == "__main__":
-    file_path = Path("hot-rag.txt")
+    files: list[Path] = [Path("hot-en.txt"), Path("hot-zh.txt")]
+    for file_path in files:
+        if file_path.exists():
+            dedup = Deduplicator()
+            stats = dedup.deduplicate_file(file_path)
 
-    if file_path.exists():
-        dedup = Deduplicator()
-        stats = dedup.deduplicate_file(file_path)
+            logger.info(f"{file_path} 文件总行数: {stats['total']}")
+            logger.info(f"跳过行数（空行/#开头）: {stats['skipped']}")
+            logger.info(f"实际处理行数: {stats['processed']}")
+            logger.info(f"重复行数: {stats['duplicates']}")
+            logger.info(f"去重后非重复行数: {stats['unique']}")
+            logger.info(f"最终文件总行数: {stats['final_total']}")
+            logger.success("去重完成!")
 
-        logger.info(f"文件总行数: {stats['total']}")
-        logger.info(f"跳过行数（空行/#开头）: {stats['skipped']}")
-        logger.info(f"实际处理行数: {stats['processed']}")
-        logger.info(f"重复行数: {stats['duplicates']}")
-        logger.info(f"去重后非重复行数: {stats['unique']}")
-        logger.info(f"最终文件总行数: {stats['final_total']}")
-        logger.success("去重完成!")
-
-        dedup.close()
-    else:
-        logger.error(f"文件不存在: {file_path}")
+            dedup.close()
+        else:
+            logger.error(f"文件不存在: {file_path}")
