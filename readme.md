@@ -26,36 +26,53 @@
 - [🪳 提交 Bug ](https://github.com/H1DDENADM1N/CapsWriter-Offline/issues)
 
 # 👀 最新更新
+
+<details>
+<summary><h1">展开最近更新</h1></summary>
+
 ## 新增 配置项 快捷键切换 AI优化语言表达 提示风格
 > 切换后会有两秒右下角系统通知提示
+> 
 > 修改 `config.toml` 注意避免快捷键冲突
+> 
 > 默认配置如下：
+> 
 > `ctrl + alt + shift + f1` -> `正式公文`
+> 
 > `ctrl + alt + shift + f2` -> `甜言蜜语`
+> 
 > `ctrl + alt + shift + f3` -> `社媒文案`
+> 
 > `ctrl + alt + shift + f4` -> `赋诗一首`
+> 
 > `ctrl + alt + shift + f5` -> `英语大师`
+> 
 > `ctrl + alt + shift + f6` -> `学术论文`
+> 
 > `ctrl + alt + shift + f7` -> `客户服务`
+> 
 > `ctrl + alt + shift + f8` -> `创意写作`
 
 
 ## 新增 配置项 hot_rag
 > 新版 独立热词与纠错系统，整合了音素处理、相似度算法、FastRAG 加速检索
-> 不建议与 旧版 hot_zh、hot_en  一起使用
-> 不用重新编辑 hot-rag.txt 文件
+> 
+> `config.toml` 已经默认不启用 旧版 hot_zh、hot_en ，不建议与 旧版 hot_zh、hot_en  一起使用
+> 
+> 不用增加 hot-rag.txt 文件
+> 
 > hot-en.txt 和 hot-zh.txt 文件仍然有效
 
 ## 新版客户端托盘图标右键菜单：
 
 > ![alt text](assets/readme/客户端托盘图标右键菜单.png)
 
-<details>
-<summary><h1">展开最近更新</h1></summary>
 
 ## 新增 配置项 禁用程序列表
 > disable_exe_list_on_focus：在这些程序为焦点时，不启用客户端功能:语音输入
+> 
 > disable_exe_list：在运行这些程序时(包括在背景运行)，不启用客户端功能:语音输入
+> 
 > 需要添加更多程序时的格式: ["forhonor.exe", "abc.exe", "efg.exe"]
 
 ## 新增 客户端托盘菜单 热切换 AI 服务商
@@ -66,22 +83,30 @@
 
 ## 新增 可通过客户端托盘菜单 热切换 是否启用 AI 优化语言表达
 > 启用后预计增加 5s 时间延长
+> 
 > 先在 config.toml 中配置 api_key （智谱AI API密钥）
 
 
 ## 新增 客户端托盘菜单 热切换 保存音频 保存日记 保存非关键词日记
 > 是否记录非关键词日记内容到 Markdown 文件
+> 
 > 在 保存日记 save_markdown 启用的情况下有效
 
 ## 通过 常用播放器内设置的 播放/暂停快捷键 控制 录音时暂停音频播放
 > QQ音乐、网易云音乐、PotPlayer、foobar2000 可通过 edit_config_gui.exe 配置 用于 播放/暂停 的快捷键
+> 
 > 如果还有其他特殊应用 请配置 config.toml [client.additional_special_apps]
+> 
 > "<进程名>" = { hotkey = "<对应程序设置的全局快捷键>", name = "<用于输出日志的对应程序名称>" }
 > 
 > 如果N个特殊应用在播放，支持全部暂停
+> 
 > 如果一个非特殊应用在播放，通过 媒体键 暂停
+> 
 > 如果N个非特殊应用在播放，不暂停
+> 
 > 如果一个特殊应用和N个非特殊应用在播放，只暂停特殊应用
+> 
 > 
 > 默认配置如下：
 > | 播放器           | 快捷键          | 备注                               |
@@ -96,40 +121,50 @@
 
 ## 新增 优先使用 LibreTranslate 在线翻译服务
 > 服务端启动时，会自动检查 config.toml 中 LibreTranslate api 地址是否可用
+> 
 > 如果可用，则优先使用 LibreTranslate 在线翻译服务；
+> 
 > 如果不可用，则会自动切换到 DeepLX 在线翻译服务
 
 ## 新增 可选项 开始和结束任务时播放提示音
 > 可在 `config.toml` 设置是否启用，以及音频文件路径和音量。需要ffplay.exe
+> 
 > ffplay.exe 来自 https://www.gyan.dev/ffmpeg/builds/
+> 
 > start.mp3 和 stop.mp3 音频文件来自 https://pixabay.com
 
 ## 新增 可选项 切换模型 `Sensevoice` 或 `Paraformer`
 
 > Sensevoice模型虽然多了粤英日韩多语种，但是，中文识别效果大不如Paraformer模型
+> 
 > 比如转录字幕不完整，识别结果不准确、丢失标点等
+> 
 > 如果你只说中文普通话，建议使用 'Paraformer' 模型
+> 
 > 不影响简繁转换和翻译
 
 ## 新增 可选项 通过注册表/按键判断是否语音输入中
 
 ## 新增 可选项 是否启用离在线翻译和状态提示
 > start_online_translate_server = True # 启用在线翻译服务
+> 
 > start_offline_translate_server = True # 启用离线翻译服务
 > 
 > use_offline_translate_function = True # 启用离线翻译相关快捷键
+> 
 > use_online_translate_function = True # 启用在线翻译相关快捷键
 > 
 > hint_while_recording_at_edit_position_powered_by_ahk = True  # 是否启用 基于AHK的 输入光标位置的输入状态提示功能
 
 
 ## 重写hint_while_recording.exe，实现更加精准的输入光标位置提示
-不再是监测按键的伪状态，而是由Python(win32gui.PostMessage)将语音输入状态传递给AHK(hwnd)
+> 不再是监测按键的伪状态，而是由Python(win32gui.PostMessage)将语音输入状态传递给AHK(hwnd)
 
 ## 双击`录音键`临时转换 `简/繁` 体中文输出，可在 `config.toml` 设置 `简/繁` 中文作为主要输出 (@JoanthanWu)
 
 ## 更美观的“语音输入中”提示，可在 `hint_while_recording.ini` 设置文本内容、颜色、排除列表等 (@JoanthanWu)
 > ![alt text](assets/readme/PixPin_2024-11-27_10-44-39.png)
+> 
 > ![alt text](assets/readme/PixPin_2024-11-27_10-44-46.png)
 
 
