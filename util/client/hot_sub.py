@@ -1,11 +1,15 @@
-from util.client import hot_sub_en, hot_sub_rule, hot_sub_year, hot_sub_zh, hot_sub_rag
+from util.client import hot_sub_en, hot_sub_rag, hot_sub_rule, hot_sub_year, hot_sub_zh
 from util.config import ClientConfig as Config
+from util.config import DebugConfig
 
 
 def hot_sub(text: str) -> str:
     # 热词替换
     if Config.hot_rag:
-        text = hot_sub_rag.热词替换(text)
+        if DebugConfig.logger_level not in ("ERROR", "CRITICAL"):
+            text = hot_sub_rag.热词替换(text, debug=True)
+        else:
+            text = hot_sub_rag.热词替换(text, debug=False)
     if Config.hot_zh:
         text = hot_sub_zh.热词替换(text)
     if Config.hot_en:
