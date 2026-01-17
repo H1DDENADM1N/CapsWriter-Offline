@@ -987,11 +987,12 @@ def find_best_match(
     return 1.0 - (min_dist / n), best_start, end_pos
 
 
-def 热词替换(句子):
+def 热词替换(句子, debug: bool = False):
     """
     从热词词典中查找匹配的热词，替换句子
 
     句子：       被查找和替换的句子
+    debug:       是否进行调试
     """
     from util.client.cosmic import Cosmic, console
 
@@ -999,11 +1000,11 @@ def 热词替换(句子):
     result = Cosmic.corrector.correct(句子)
     dur = time.time() - now
 
-    # if result.matchs:
-    #     for wrong, right, score in result.matchs:
-    #         console.print(
-    #             f"hot_sub_rag Result: [{score_to_color(score)}]{wrong} -> {right} [/]    Score: {score:.2f}    Duration: {dur:.2f}s"
-    #         )
+    if debug and result.matchs:
+        for wrong, right, score in result.matchs:
+            console.print(
+                f"hot_sub_rag Result: [{score_to_color(score)}]{wrong} -> {right} [/]    Score: {score:.2f}    Duration: {dur:.2f}s"
+            )
 
     return result.text
 
@@ -1027,14 +1028,6 @@ def score_to_color(score: float) -> str:
 
 
 if __name__ == "__main__":
-    # import sys
-
-    # sys.path.append("..")
-    # from util.client.cosmic import Cosmic
-
-    # Cosmic.corrector.load_hotwords_file(Path("hot-rag.txt"), append_mode=False)
-
-    # print(热词替换("我家哥哥在齐铺路"))
     # =============================================================================
     # 7. 数据准备与主流演示
     # =============================================================================
@@ -1062,7 +1055,7 @@ if __name__ == "__main__":
 
     # 尝试加载外部文件 (如果存在)
     txt_paths: list[Path] = [
-        Path("hot-rag.txt"),
+        # Path("hot-rag.txt"),
         Path("hot-zh.txt"),
         Path("hot-en.txt"),
     ]
@@ -1077,7 +1070,6 @@ if __name__ == "__main__":
     新增热词数量: int = corrector.update_hotwords(hotwords_data, append_mode=True)
     logger.trace(f"已追加 {新增热词数量} 个热词，总计 {len(corrector.hotwords)} 个热词")
 
-    # --- C. 执行综合纠错演示 ---
     def format_score_with_gradient_bar(score: float) -> str:
         """创建进度条"""
         bar_length = 15
@@ -1088,81 +1080,43 @@ if __name__ == "__main__":
         bar = f"[{color}]{'█' * filled}[/{color}][grey85]{'░' * (bar_length - filled)}[/grey85]"
         return bar
 
-    console.print(
-        Rule(
-            "[bold red]CapsWriter-Offline 综合纠错系统演示[/bold red]",
-            characters="=",
-            style="bold red",
-        )
-    )
-
-    for i, t in enumerate(cases, start=1):
-        result = corrector.correct(t)
-
-        result_table = Table(
-            expand=True,
-            box=box.ROUNDED,
-            header_style="bold blue",
-            title_style="bold yellow",
-            padding=(0, 0),
-        )
-        result_table.add_column("项目", width=8, no_wrap=True)
-        result_table.add_column(
-            "内容",
-            overflow="fold",
-            no_wrap=False,
-            ratio=True,
-        )
-        result_table.add_row("原文", t)
-        result_table.add_row("纠错后", result.text, style="green")
-
+    # --- C. 执行综合纠错演示 ---
+    def 综合纠错演示():
         console.print(
-            "\n", Rule(f"[bold red]Case {i}.[/]", style="bold red", align="left")
+            Rule(
+                "[bold red]CapsWriter-Offline 综合纠错系统演示[/bold red]",
+                characters="=",
+                style="bold red",
+            )
         )
-        console.print(result_table)
+        for i, t in enumerate(cases, start=1):
+            result = corrector.correct(t)
 
-        if result.matchs:
-            matches_table = Table(
-                title="[bold green]匹配热词[/bold green]",
-                show_header=True,
-                title_justify="left",
+            result_table = Table(
                 expand=True,
-                box=box.SIMPLE,
+                box=box.ROUNDED,
                 header_style="bold blue",
+                title_style="bold yellow",
                 padding=(0, 0),
             )
-            matches_table.add_column("项目", width=8, no_wrap=True)
-            matches_table.add_column(
+            result_table.add_column("项目", width=8, no_wrap=True)
+            result_table.add_column(
                 "内容",
                 overflow="fold",
                 no_wrap=False,
                 ratio=True,
             )
+            result_table.add_row("原文", t)
+            result_table.add_row("纠错后", result.text, style="green")
 
-            for wrong, right, score in result.matchs:
-                matches_table.add_row("原文片段", wrong)
-                matches_table.add_row("匹配热词", right, style=score_to_color(score))
-                matches_table.add_row(
-                    "相似度", f"{format_score_with_gradient_bar(score)} {score:.4f}"
-                )
-                matches_table.add_section()
-
-            console.print(matches_table)
-
-        if result.similars:
-            # 创建已匹配热词的集合
-            matched_words = (
-                {right for _, right, _ in result.matchs} if result.matchs else set()
+            console.print(
+                "\n", Rule(f"[bold red]Case {i}.[/]", style="bold red", align="left")
             )
+            console.print(result_table)
 
-            # 过滤掉已匹配的潜在热词
-            filtered_similars = [
-                (w, r, s) for w, r, s in result.similars if r not in matched_words
-            ]
-
-            if filtered_similars:
-                similars_table = Table(
-                    title="[bold yellow]潜在热词[/bold yellow]",
+            if result.matchs:
+                matches_table = Table(
+                    title="[bold green]匹配热词[/bold green]",
                     show_header=True,
                     title_justify="left",
                     expand=True,
@@ -1170,109 +1124,167 @@ if __name__ == "__main__":
                     header_style="bold blue",
                     padding=(0, 0),
                 )
-
-                similars_table.add_column("项目", width=8, no_wrap=True)
-                similars_table.add_column(
+                matches_table.add_column("项目", width=8, no_wrap=True)
+                matches_table.add_column(
                     "内容",
                     overflow="fold",
                     no_wrap=False,
                     ratio=True,
                 )
 
-                for wrong, right, score in filtered_similars:
-                    similars_table.add_row("原文片段", wrong)
-                    similars_table.add_row(
-                        "潜在热词", right, style=score_to_color(score)
+                for wrong, right, score in result.matchs:
+                    matches_table.add_row("原文片段", wrong)
+                    matches_table.add_row(
+                        "匹配热词", right, style=score_to_color(score)
                     )
-                    similars_table.add_row(
+                    matches_table.add_row(
                         "相似度", f"{format_score_with_gradient_bar(score)} {score:.4f}"
                     )
-                    similars_table.add_section()
+                    matches_table.add_section()
 
-                console.print(similars_table)
+                console.print(matches_table)
 
-        console.print(Rule(style="bold red"))
+            if result.similars:
+                # 创建已匹配热词的集合
+                matched_words = (
+                    {right for _, right, _ in result.matchs} if result.matchs else set()
+                )
 
-    console.print(
-        Rule(
-            characters="=",
-            style="bold red",
+                # 过滤掉已匹配的潜在热词
+                filtered_similars = [
+                    (w, r, s) for w, r, s in result.similars if r not in matched_words
+                ]
+
+                if filtered_similars:
+                    similars_table = Table(
+                        title="[bold yellow]潜在热词[/bold yellow]",
+                        show_header=True,
+                        title_justify="left",
+                        expand=True,
+                        box=box.SIMPLE,
+                        header_style="bold blue",
+                        padding=(0, 0),
+                    )
+
+                    similars_table.add_column("项目", width=8, no_wrap=True)
+                    similars_table.add_column(
+                        "内容",
+                        overflow="fold",
+                        no_wrap=False,
+                        ratio=True,
+                    )
+
+                    for wrong, right, score in filtered_similars:
+                        similars_table.add_row("原文片段", wrong)
+                        similars_table.add_row(
+                            "潜在热词", right, style=score_to_color(score)
+                        )
+                        similars_table.add_row(
+                            "相似度",
+                            f"{format_score_with_gradient_bar(score)} {score:.4f}",
+                        )
+                        similars_table.add_section()
+
+                    console.print(similars_table)
+
+            console.print(Rule(style="bold red"))
+
+        console.print(
+            Rule(
+                characters="=",
+                style="bold red",
+            )
         )
-    )
 
     # --- D. 音素匹配调试演示 ---
-    def test_pair(input_text, hotword, split_char=True):
-        """
-        测试输入文本与热词的匹配
+    def 音素匹配调试演示():
+        def test_pair(input_text, hotword, split_char=True):
+            """
+            测试输入文本与热词的匹配
 
-        Args:
-            input_text: 输入文本
-            hotword: 热词
-            split_char: 是否分割字符，默认为True
-        """
+            Args:
+                input_text: 输入文本
+                hotword: 热词
+                split_char: 是否分割字符，默认为True
+            """
+            console.print(
+                "\n",
+                Rule(
+                    f"[bold red]Testing: '{input_text}' vs '{hotword}'[/]",
+                    style="bold red",
+                    align="left",
+                ),
+            )
+            input_seq = get_phoneme_info(input_text, split_char=split_char)
+            target_seq = get_phoneme_info(hotword, split_char=split_char)
+            score, start, end = find_best_match(input_seq, target_seq)
+            pair_table = Table(
+                title=f"[{score_to_color(score)}]相似度：{score:.4f}[/]",
+                show_header=True,
+                title_justify="left",
+                expand=True,
+                box=box.SIMPLE,
+                header_style="bold blue",
+                padding=(0, 0),
+            )
+            pair_table.add_column("项目", width=15, no_wrap=True)
+            pair_table.add_column(
+                "内容",
+                overflow="fold",
+                no_wrap=False,
+                ratio=True,
+            )
+            pair_table.add_row("Input Seq:", f"{[p.value for p in input_seq]}")
+            pair_table.add_row("Target Seq:", f"{[p.value for p in target_seq]}")
+            pair_table.add_row(
+                "Score:",
+                f"{format_score_with_gradient_bar(score)} {score:.4f}",
+            )
+            if score > 0:
+                matched_segment = input_seq[start:end]
+                pair_table.add_row(
+                    "Matched Segment:",
+                    f"{[p.value for p in matched_segment]}",
+                )
+
+            console.print(pair_table)
+            console.print(Rule(style="bold red"))
+
         console.print(
-            "\n",
+            "\n\n",
             Rule(
-                f"[bold red]Testing: '{input_text}' vs '{hotword}'[/]",
+                "[bold red]Phoneme Debug 调试演示[/]",
+                characters="=",
                 style="bold red",
-                align="left",
             ),
         )
-        input_seq = get_phoneme_info(input_text, split_char=split_char)
-        target_seq = get_phoneme_info(hotword, split_char=split_char)
-        score, start, end = find_best_match(input_seq, target_seq)
-        pair_table = Table(
-            title=f"[{score_to_color(score)}]相似度：{score:.4f}[/]",
-            show_header=True,
-            title_justify="left",
-            expand=True,
-            box=box.SIMPLE,
-            header_style="bold blue",
-            padding=(0, 0),
-        )
-        pair_table.add_column("项目", width=15, no_wrap=True)
-        pair_table.add_column(
-            "内容",
-            overflow="fold",
-            no_wrap=False,
-            ratio=True,
-        )
-        pair_table.add_row("Input Seq:", f"{[p.value for p in input_seq]}")
-        pair_table.add_row("Target Seq:", f"{[p.value for p in target_seq]}")
-        pair_table.add_row(
-            "Score:",
-            f"{format_score_with_gradient_bar(score)} {score:.4f}",
-        )
-        if score > 0:
-            matched_segment = input_seq[start:end]
-            pair_table.add_row(
-                "Matched Segment:",
-                f"{[p.value for p in matched_segment]}",
+        pair_data: list[tuple[str, str]] = [
+            ("cloud", "claude"),
+            ("vscode", "VS Code"),
+            ("七福路", "七浦路"),
+            ("拓维信息", "破为信息"),
+        ]
+        for input_text, hotword in pair_data:
+            test_pair(input_text, hotword)
+
+        console.print(
+            Rule(
+                characters="=",
+                style="bold red",
             )
-
-        console.print(pair_table)
-        console.print(Rule(style="bold red"))
-
-    console.print(
-        "\n\n",
-        Rule(
-            "[bold red]Phoneme Debug 调试演示[/]",
-            characters="=",
-            style="bold red",
-        ),
-    )
-    pair_data: list[tuple[str, str]] = [
-        ("cloud", "claude"),
-        ("vscode", "VS Code"),
-        ("七福路", "七浦路"),
-        ("拓维信息", "破为信息"),
-    ]
-    for input_text, hotword in pair_data:
-        test_pair(input_text, hotword)
-
-    console.print(
-        Rule(
-            characters="=",
-            style="bold red",
         )
-    )
+
+    def 调用示例():
+        import sys
+
+        sys.path.append("..")
+        from util.client.cosmic import Cosmic
+
+        Cosmic.corrector.load_hotwords_file(Path("hot-zh.txt"), append_mode=False)
+        Cosmic.corrector.load_hotwords_file(Path("hot-en.txt"), append_mode=True)
+
+        print(热词替换("我家哥哥在齐铺路", debug=True))
+
+    # 综合纠错演示()
+    # 音素匹配调试演示()
+    调用示例()
