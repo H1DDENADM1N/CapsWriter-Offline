@@ -794,34 +794,42 @@ def prompt_creative_writing_handler() -> None:
 
 
 def bond_shortcut():
-    keyboard.add_hotkey(
-        Config.prompt_official_shortcut, prompt_official_handler, suppress=False
-    )
-    keyboard.add_hotkey(
-        Config.prompt_sweetheart_shortcut, prompt_sweetheart_handler, suppress=False
-    )
-    keyboard.add_hotkey(
-        Config.prompt_social_shortcut, prompt_social_handler, suppress=False
-    )
-    keyboard.add_hotkey(
-        Config.prompt_poetry_shortcut, prompt_poetry_handler, suppress=False
-    )
-    keyboard.add_hotkey(
-        Config.prompt_english_shortcut, prompt_english_handler, suppress=False
-    )
-    keyboard.add_hotkey(
-        Config.prompt_academic_shortcut, prompt_academic_handler, suppress=False
-    )
-    keyboard.add_hotkey(
-        Config.prompt_customer_service_shortcut,
-        prompt_customer_service_handler,
-        suppress=False,
-    )
-    keyboard.add_hotkey(
-        Config.prompt_creative_writing_shortcut,
-        prompt_creative_writing_handler,
-        suppress=False,
-    )
+    if Config.prompt_official_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_official_shortcut, prompt_official_handler, suppress=False
+        )
+    if Config.prompt_sweetheart_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_sweetheart_shortcut, prompt_sweetheart_handler, suppress=False
+        )
+    if Config.prompt_social_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_social_shortcut, prompt_social_handler, suppress=False
+        )
+    if Config.prompt_poetry_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_poetry_shortcut, prompt_poetry_handler, suppress=False
+        )
+    if Config.prompt_english_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_english_shortcut, prompt_english_handler, suppress=False
+        )
+    if Config.prompt_academic_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_academic_shortcut, prompt_academic_handler, suppress=False
+        )
+    if Config.prompt_customer_service_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_customer_service_shortcut,
+            prompt_customer_service_handler,
+            suppress=False,
+        )
+    if Config.prompt_creative_writing_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_creative_writing_shortcut,
+            prompt_creative_writing_handler,
+            suppress=False,
+        )
 
     if Config.hold_mode:
         keyboard.hook_key(
