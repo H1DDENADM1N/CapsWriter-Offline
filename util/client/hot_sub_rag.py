@@ -695,6 +695,24 @@ class PhonemeCorrector:
         )
         self._lock = threading.Lock()
 
+    def clear_hotwords(self) -> Tuple[int, int]:
+        """
+        清空所有热词
+
+        Returns:
+            int: 清空后剩余的热词数量（应该总是返回0）
+            int: 清空的热词数量
+        """
+        with self._lock:
+            count = len(self.hotwords)
+            self.hotwords.clear()
+            # 同时重建FastRAG索引为空
+            self.fast_rag = FastRAG(
+                threshold=min(self.threshold, self.similar_threshold) - 0.1
+            )
+
+        return len(self.hotwords), count
+
     def update_hotwords(self, text: str, append_mode: bool = False) -> int:
         """
         更新热词列表

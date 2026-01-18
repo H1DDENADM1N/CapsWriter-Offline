@@ -4,6 +4,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Literal
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -20,7 +21,6 @@ path_zh = Path() / "hot-zh.txt"
 path_en = Path() / "hot-en.txt"
 path_rule = Path() / "hot-rule.txt"
 path_kwds = Path() / "keywords.txt"
-path_rag = Path() / "hot-rag.txt"
 config_toml_path = Path() / "config.toml"
 
 
@@ -28,9 +28,12 @@ def update_hot_zh():
     if not path_zh.exists():
         with open(path_zh, "w", encoding="utf-8") as f:
             f.write("# 在此文件放置中文热词，每行一个，开头带井号表示注释，会被省略")
-    with open(path_zh, "r", encoding="utf-8") as f:
-        num_hot_zh = hot_sub_zh.更新热词词典(f.read())
-    console.print(f"已载入 [green4]{num_hot_zh:5}[/] 条中文热词")
+    if Config.hot_zh:
+        with open(path_zh, "r", encoding="utf-8") as f:
+            num_hot_zh = hot_sub_zh.更新热词词典(f.read())
+        console.print(f"已载入 [green4]{num_hot_zh:5}[/] 条中文热词")
+    if Config.hot_rag:
+        update_hot_rag()
 
 
 def update_hot_en():
@@ -39,9 +42,12 @@ def update_hot_en():
             f.write(
                 "# 在此文件放置英文热词 \n# Put English hot words here, one per line. Line starts with # will be ignored. "
             )
-    with open(path_en, "r", encoding="utf-8") as f:
-        num_hot_en = hot_sub_en.更新热词词典(f.read())
-    console.print(f"已载入 [green4]{num_hot_en:5}[/] 条英文热词")
+    if Config.hot_en:
+        with open(path_en, "r", encoding="utf-8") as f:
+            num_hot_en = hot_sub_en.更新热词词典(f.read())
+        console.print(f"已载入 [green4]{num_hot_en:5}[/] 条英文热词")
+    if Config.hot_rag:
+        update_hot_rag()
 
 
 def update_hot_rule():
@@ -79,18 +85,33 @@ def update_hot_kwds():
 
 
 def update_hot_rag():
-    if not path_rag.exists():
-        with open(path_rag, "w", encoding="utf-8") as f:
+    if not path_zh.exists():
+        with open(path_zh, "w", encoding="utf-8") as f:
+            f.write("# 在此文件放置中文热词，每行一个，开头带井号表示注释，会被省略")
+    if not path_en.exists():
+        with open(path_en, "w", encoding="utf-8") as f:
             f.write(
-                """
-# 热词文件
-# 每行一个热词，井号开头的行为注释，会被忽略
-# 使用音素 RAG 匹配，支持中英文混合
-"""
+                "# 在此文件放置英文热词 \n# Put English hot words here, one per line. Line starts with # will be ignored. "
             )
-    # Cosmic.corrector.load_hotwords_file(path_rag, append_mode=False)
-    Cosmic.corrector.load_hotwords_file(path_zh, append_mode=True)
-    Cosmic.corrector.load_hotwords_file(path_en, append_mode=True)
+    num_rag_after_clear, num_rag_cleaned = Cosmic.corrector.clear_hotwords()
+    if num_rag_cleaned != 0:
+        console.print(f"已清理 [green4]{num_rag_cleaned:5}[/] 条热词 (RAG)")
+    # console.print(f"当前有 [green4]{num_rag_after_clear:5}[/] 条热词 (RAG)")
+    num_zh_rag = Cosmic.corrector.load_hotwords_file(path_zh, append_mode=True)
+    console.print(f"已载入 [green4]{num_zh_rag:5}[/] 条中文热词 (RAG)")
+    num_en_rag = Cosmic.corrector.load_hotwords_file(path_en, append_mode=True)
+    console.print(f"已载入 [green4]{num_en_rag:5}[/] 条英文热词 (RAG)")
+    if num_rag_cleaned > num_zh_rag + num_en_rag:
+        console.print(
+            f"[green4]共减少 [/] [red]{num_rag_cleaned - num_zh_rag - num_en_rag:5}[/] 条热词 (RAG)"
+        )
+    elif num_rag_cleaned < num_zh_rag + num_en_rag:
+        console.print(
+            f"[green4]共增加 [/] [red]{num_zh_rag + num_en_rag - num_rag_cleaned:5}[/] 条热词 (RAG)"
+        )
+    else:
+        # console.print(f"[green4]热词总数 (RAG) 未发生改变 [/]")
+        pass
 
 
 def update_config():
@@ -255,11 +276,16 @@ def mask_key(key):
 
 
 def update_hot_all():
-    update_hot_zh()
-    update_hot_en()
-    update_hot_rule()
-    update_hot_kwds()
-    update_hot_rag()
+    if Config.hot_zh:
+        update_hot_zh()
+    if Config.hot_en:
+        update_hot_en()
+    if Config.hot_rule:
+        update_hot_rule()
+    if Config.hot_kwd:
+        update_hot_kwds()
+    if Config.hot_rag:
+        update_hot_rag()
     console.line()
 
 
@@ -280,7 +306,6 @@ class HotHandler(FileSystemEventHandler):
         path_en: update_hot_en,
         path_rule: update_hot_rule,
         path_kwds: update_hot_kwds,
-        path_rag: update_hot_rag,
         config_toml_path: update_config,
     }
 
