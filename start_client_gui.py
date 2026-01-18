@@ -586,10 +586,51 @@ class GUI(QMainWindow):
             case _:
                 logger.warning(f"不支持的 AI 提供商：{ai_provider}")
 
+    def show_prompt_style_notification(self, prompt_style: str):
+        """显示提示风格变更通知"""
+        notifications = {
+            "official": ("新提示风格已启用", "正式公文"),
+            "sweetheart": ("新提示风格已启用", "甜言蜜语"),
+            "social": ("新提示风格已启用", "社媒文案"),
+            "poetry": ("新提示风格已启用", "赋诗一首"),
+            "english": ("新提示风格已启用", "英语大师"),
+            "academic": ("新提示风格已启用", "学术论文"),
+            "customer_service": ("新提示风格已启用", "客户服务"),
+            "creative_writing": ("新提示风格已启用", "创意写作"),
+        }
+
+        if prompt_style in notifications:
+            title, message = notifications[prompt_style]
+            self.tray_icon.showMessage(
+                title,
+                message,
+                QSystemTrayIcon.Information,
+                2000,
+            )
+
     def update_prompt_style_menu(self, prompt_style: str):
         """更新提示风格菜单选中状态"""
-        # 先取消所有选中状态
-        for action in [
+        # 获取当前配置文件中的值
+        actual_current_value = self.get_config_value(
+            "client.prompt_style_selection", "official"
+        )
+
+        # 通过比较传入值和实际配置值来确定是否显示通知
+        # 仅在函数被调用且值确实已更改时显示通知
+        if hasattr(self, "_last_updated_prompt_style"):
+            # 如果之前已更新过，那么比较上次更新的值和现在的实际配置值
+            should_show_notification = (
+                self._last_updated_prompt_style != actual_current_value
+            )
+        else:
+            # 第一次调用，不显示通知
+            should_show_notification = False
+
+        # 更新内部记录的值
+        self._last_updated_prompt_style = actual_current_value
+
+        # 取消所有菜单项的选中状态
+        all_actions = [
             self.prompt_official_action,
             self.prompt_sweetheart_action,
             self.prompt_social_action,
@@ -598,53 +639,35 @@ class GUI(QMainWindow):
             self.prompt_academic_action,
             self.prompt_customer_service_action,
             self.prompt_creative_writing_action,
-        ]:
+        ]
+
+        for action in all_actions:
             action.setChecked(False)
 
-        # 根据配置文件设置选中状态
+        # 设置正确的菜单项为选中状态
         match prompt_style:
             case "official":
                 self.prompt_official_action.setChecked(True)
-                self.tray_icon.showMessage(
-                    "新提示风格已启用", "正式公文", QSystemTrayIcon.Information, 2000
-                )
             case "sweetheart":
                 self.prompt_sweetheart_action.setChecked(True)
-                self.tray_icon.showMessage(
-                    "新提示风格已启用", "甜言蜜语", QSystemTrayIcon.Information, 2000
-                )
             case "social":
                 self.prompt_social_action.setChecked(True)
-                self.tray_icon.showMessage(
-                    "新提示风格已启用", "社媒文案", QSystemTrayIcon.Information, 2000
-                )
             case "poetry":
                 self.prompt_poetry_action.setChecked(True)
-                self.tray_icon.showMessage(
-                    "新提示风格已启用", "赋诗一首", QSystemTrayIcon.Information, 2000
-                )
             case "english":
                 self.prompt_english_action.setChecked(True)
-                self.tray_icon.showMessage(
-                    "新提示风格已启用", "英语大师", QSystemTrayIcon.Information, 2000
-                )
             case "academic":
                 self.prompt_academic_action.setChecked(True)
-                self.tray_icon.showMessage(
-                    "新提示风格已启用", "学术论文", QSystemTrayIcon.Information, 2000
-                )
             case "customer_service":
                 self.prompt_customer_service_action.setChecked(True)
-                self.tray_icon.showMessage(
-                    "新提示风格已启用", "客户服务", QSystemTrayIcon.Information, 2000
-                )
             case "creative_writing":
                 self.prompt_creative_writing_action.setChecked(True)
-                self.tray_icon.showMessage(
-                    "新提示风格已启用", "创意写作", QSystemTrayIcon.Information, 2000
-                )
             case _:
                 logger.warning(f"不支持的 AI 提示风格：{prompt_style}")
+
+        # 只有在 AI 提示风格 确实发生变化时才显示通知
+        if should_show_notification:
+            self.show_prompt_style_notification(actual_current_value)
 
     def create_custom_title_bar(self):
         # 创建自定义标题栏
@@ -1224,12 +1247,22 @@ class GUI(QMainWindow):
         else:
             new_value = ""
 
-        # 更新内存配置并保存到文件
-        if self.set_config_value("client.prompt_style_selection", new_value):
-            if not self.save_config():
-                logger.error("保存配置文件失败")
-        else:
-            logger.error("更新内存配置失败")
+        # 获取当前的配置值
+        current_config_value = self.get_config_value(
+            "client.prompt_style_selection", "official"
+        )
+
+        # 只有在值真正改变时才更新配置和显示通知
+        if current_config_value != new_value:
+            # 更新内存配置并保存到文件
+            if self.set_config_value("client.prompt_style_selection", new_value):
+                if self.save_config():
+                    # 手动更新托盘菜单，这将显示通知（因为值确实改变了）
+                    self.update_prompt_style_menu(new_value)
+                else:
+                    logger.error("保存配置文件失败")
+            else:
+                logger.error("更新内存配置失败")
 
     def restart_client(self):
         subprocess.Popen(
