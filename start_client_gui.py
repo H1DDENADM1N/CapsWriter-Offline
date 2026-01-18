@@ -665,8 +665,8 @@ class GUI(QMainWindow):
             case _:
                 logger.warning(f"不支持的 AI 提示风格：{prompt_style}")
 
-        # 只有在 AI 提示风格 确实发生变化时才显示通知
-        if should_show_notification:
+        # 启用了 是否在切换提示风格时显示提示  而且  AI 提示风格 确实发生变化时才显示通知
+        if Config.show_prompt_style_changed_notification and should_show_notification:
             self.show_prompt_style_notification(actual_current_value)
 
     def create_custom_title_bar(self):

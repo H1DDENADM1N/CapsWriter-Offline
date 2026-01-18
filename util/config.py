@@ -144,6 +144,9 @@ class ClientConfig:
     ]
     ai_provider: Literal["zhipuai", "openai"] = config["client"]["ai_provider"]
     prompt_style_selection: str = config["client"]["prompt_style_selection"]
+    show_prompt_style_changed_notification: bool = config["client"][
+        "show_prompt_style_changed_notification"
+    ]
     zhipuai_api_key: str = config["client"]["zhipuai"]["api_key"]
     zhipuai_model: str = config["client"]["zhipuai"]["model"]
     openai_api_key: str = config["client"]["openai"]["api_key"]
