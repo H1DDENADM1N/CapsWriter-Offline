@@ -70,7 +70,7 @@ async def recv_result():
 
             # 控制台输出
             console.print(f"    转录时延：{delay:.2f}s")
-            console.print(f"    识别结果：[green]{asr_text}")
+            # console.print(f"    识别结果：[green]{asr_text}")
 
             # text 用于打字
             # asr_text 用于录音文件命名和写入 md
