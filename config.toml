@@ -327,6 +327,10 @@ prompt_style_selection = "english"
 show_prompt_style_changed_notification = true
 # 是否在切换提示风格时显示提示
 
+show_time_label = true
+# 是否在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面
+# 启用后不再进行靠边停靠，改善多显示屏用户体验
+
 [client.zhipuai]
 api_key = ""
 # 请填写您自己的 API Key

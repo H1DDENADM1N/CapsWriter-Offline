@@ -147,6 +147,7 @@ class ClientConfig:
     show_prompt_style_changed_notification: bool = config["client"][
         "show_prompt_style_changed_notification"
     ]
+    show_time_label: bool = config["client"]["show_time_label"]
     zhipuai_api_key: str = config["client"]["zhipuai"]["api_key"]
     zhipuai_model: str = config["client"]["zhipuai"]["model"]
     openai_api_key: str = config["client"]["openai"]["api_key"]
