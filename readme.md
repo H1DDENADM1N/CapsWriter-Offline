@@ -5,9 +5,9 @@
 # <img src="./assets/readme/windows-logo.png" width="25" height="25"> <span style="color: #4ABAFF;">[Windows](https://www.microsoft.com/zh-cn/windows)</span> 端离线语音输入简/繁体、中译英、字幕转录；在线多译多、云剪贴板等等 （选用SenseVoice模型时 支持中粤英日韩多语种）
 
 > [!IMPORTANT]
-> 新增图形化配置界面 `edit_config_gui.exe`，可方便修改配置，但仍支持手动修改 `config.toml` 文件
+> 图形化配置界面 `edit_config_gui.exe`，可方便修改大部分配置，更多自定义配置仍需手动修改 `config.toml` 文件
 
-## 😎 八个功能：
+## 😎 十一个功能：
 
 1. 按下键盘上的大写锁定键 `CapsLock` ，录音开始，当松开大写锁定键时，就会识别你的录音，并将识别结果立刻输入
 2. 按下键盘上的 `Left Shift` 再按 `CapsLock` 可以将识别结果离线翻译为英文，当松开大写锁定键时，将翻译结果立刻输入
@@ -17,6 +17,9 @@
 6. 快速双击 `CapsLock` ，可语音输入繁体。还可通过托盘图标右键菜单快速切换简/繁体配置
 7.  可通过 `edit_config_gui.exe` 图形化配置界面安全地修改客户端/服务端配置，也可手动修改 `config.toml` 文件
 8. 可通过客户端托盘菜单 热切换 是否启用 AI 优化语言表达 以及 AI 服务商、修改 API Key 和 AI 优化风格
+9.  可快捷键切换 AI优化语言表达 提示风格
+10. 可在鼠标离开客户端界面时 变为数字时钟
+11. 可录音时自动 `静音` 或 `暂停` 其他音频播放（暂停主要由模拟播放软件全局快捷键实现）
 
 - [✨ 特性](#-特性)
 - [⬇️ 下载地址](#-下载地址)
