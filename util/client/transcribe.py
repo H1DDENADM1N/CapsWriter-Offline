@@ -16,6 +16,7 @@ from util.client.check_websocket import check_websocket
 from util.client.cosmic import Cosmic, console
 from util.client.hot_sub import hot_sub
 from util.client.hot_update import observe_hot, update_hot_all
+from util.client.welcome import handle_welcome_message
 from util.config import ClientConfig as Config
 from util.safe_logger import init_logging
 
@@ -127,6 +128,11 @@ async def transcribe_recv(file: Path):
     observer = observe_hot()
 
     try:
+        # 先接收服务端的欢迎消息
+        if not await handle_welcome_message():
+            console.print("[bold red]无法建立连接或接收欢迎消息[/bold red]")
+            return
+
         # 接收结果
         async for message in Cosmic.websocket:
             message = json.loads(message)

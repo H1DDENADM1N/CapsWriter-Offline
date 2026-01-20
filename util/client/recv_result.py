@@ -13,6 +13,7 @@ from util.client.hot_sub import hot_sub
 from util.client.rename_audio import rename_audio
 from util.client.strip_punc import strip_punc
 from util.client.type_result import type_result
+from util.client.welcome import handle_welcome_message
 from util.client.write_md import write_md
 from util.config import ClientConfig as Config
 from util.safe_logger import init_logging
@@ -43,22 +44,9 @@ async def recv_result():
 
     try:
         # 先接收服务端的欢迎消息
-        welcome_message = await Cosmic.websocket.recv()
-        welcome_data = json.loads(welcome_message)
-
-        if welcome_data.get("type") == "connection_ack":
-            # 获取服务端分配的客户端ID
-            Cosmic.client_id = welcome_data["client_id"]
-            server_websocket_id = welcome_data["server_websocket_id"]
-            remote_address = welcome_data.get("remote_address", "未知")
-
-            console.print(f"   服务端 WebSocket ID: [dim]{server_websocket_id}[/dim]\n")
-            console.print(f"   客户端ID: [cyan]{Cosmic.client_id}[/cyan]")
-            console.print()
-
-            logger.info(
-                f"连接到服务端成功: 服务端分配的客户端ID={Cosmic.client_id}, 客户端地址={remote_address}, 客户端 WebSocker ID={Cosmic.websocket.id}, 服务端WebSocket ID={server_websocket_id}"
-            )
+        if not await handle_welcome_message():
+            console.print("[bold red]无法建立连接或接收欢迎消息[/bold red]")
+            return
 
         # 继续接收和处理音频识别结果
         while True:
