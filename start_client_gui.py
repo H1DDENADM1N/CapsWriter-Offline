@@ -108,6 +108,16 @@ class TimeOverlayLabel(QLabel):
         current_time = datetime.now().strftime("%I:%M:%S")  # 12小时制
         self.setText(current_time)
 
+    def stop_timer(self):
+        """停止定时器"""
+        if self.timer:
+            self.timer.stop()
+
+    def start_timer(self):
+        """启动定时器"""
+        if self.timer and not self.timer.isActive():
+            self.timer.start(50)
+
 
 class InputDialog_Api_Key:
     @staticmethod
@@ -390,6 +400,12 @@ class GUI(QMainWindow):
         # 初始化文件系统监控器
         self.init_file_watcher()
 
+    def create_time_label(self):
+        """创建时间标签"""
+        if not hasattr(self, "time_label") and Config.show_time_label:
+            self.time_label = TimeOverlayLabel(self.centralWidget())
+            self.adjust_time_label_position()
+
     def load_config(self):
         """加载配置文件到内存"""
         try:
@@ -507,8 +523,6 @@ class GUI(QMainWindow):
         central_widget.setLayout(self.layout)
         # Set the central widget
         self.setCentralWidget(central_widget)
-        if Config.show_time_label:
-            self.time_label = TimeOverlayLabel(central_widget)
 
     def init_file_watcher(self):
         """初始化文件系统监控器"""
@@ -1648,6 +1662,9 @@ class GUI(QMainWindow):
 
     def adjust_time_label_position(self):
         """调整时间标签的位置，使其显示在文本框的中心，宽度与文本框相同"""
+        if not Config.show_time_label or not hasattr(self, "time_label"):
+            return
+
         # 获取文本框的尺寸
         container_size = self.text_box_client.size()
         label_width = container_size.width()  # 宽度与文本框相同
@@ -1662,6 +1679,8 @@ class GUI(QMainWindow):
     def enterEvent(self, event):
         super().enterEvent(event)
         if Config.show_time_label:
+            self.create_time_label()  # 确保时间标签存在
+            self.time_label.stop_timer()  # 停止定时器
             self.text_box_client.setVisible(True)
             self.text_box_client.setStyleSheet(
                 "background-color: rgba(35, 38, 41, 255);"
@@ -1691,6 +1710,8 @@ class GUI(QMainWindow):
     def leaveEvent(self, event):
         super().leaveEvent(event)
         if Config.show_time_label:
+            self.create_time_label()  # 确保时间标签存在
+            self.time_label.start_timer()  # 启动定时器
             self.text_box_client.setVisible(False)
             self.text_box_client.setStyleSheet("background-color: rgba(35, 38, 41, 0);")
             self.time_label.setVisible(True)
