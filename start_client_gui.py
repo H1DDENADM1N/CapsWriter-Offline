@@ -13,7 +13,7 @@ import win32gui
 import win32print
 from loguru import logger
 from PySide6.QtCore import QFileSystemWatcher, QPoint, QStandardPaths, Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QWheelEvent
+from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QTextCursor, QWheelEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -1477,10 +1477,40 @@ class GUI(QMainWindow):
         except Exception as e:
             logger.error(f"启动转录进程失败: {e}")
 
+    def hideEvent(self, event):
+        """当窗口被隐藏时停止时间标签计时器"""
+        if Config.show_time_label and hasattr(self, "time_label"):
+            self.time_label.stop_timer()
+        super().hideEvent(event)
+
+    def showEvent(self, event):
+        """当窗口显示时不显示时间标签而是显示客户端界面，并滚动到最下行"""
+        self.show_client_interface()
+        super().showEvent(event)
+
     def closeEvent(self, event):
         # Minimize to system tray instead of closing the window when the user clicks the close button
         self.hide()  # Hide the window
         event.ignore()  # Ignore the close event
+
+    def show_client_interface(self):
+        """不显示时间标签，显示客户端界面，并滚动到最下行"""
+        if Config.show_time_label and hasattr(self, "time_label"):
+            self.time_label.stop_timer()
+            self.time_label.hide()  # 隐藏时间标签
+        self.resize(425, 425)
+        self.text_box_client.setStyleSheet("background-color: rgba(35, 38, 41, 255);")
+        self.setStyleSheet("background-color: rgba(49, 54, 59, 255);")
+        self.text_box_client.setVisible(True)  # 显示文本框
+        for i in range(self.title_bar.count()):  # 显示标题栏
+            widget = self.title_bar.itemAt(i).widget()
+            if widget is not None:
+                widget.setVisible(True)
+        for i in range(self.layout2.count()):  # 显示操作栏
+            widget = self.layout2.itemAt(i).widget()
+            if widget is not None:
+                widget.setVisible(True)
+        self.text_box_client.moveCursor(QTextCursor.End)  # 滚动到最下行
 
     def quit_app(self):
         init_logging()
@@ -1521,11 +1551,26 @@ class GUI(QMainWindow):
     def on_tray_icon_activated(self, reason):
         # Called when the system tray icon is activated
         if reason == QSystemTrayIcon.DoubleClick:
+            # 如果窗口是时钟状态且不再中心位置，从时钟状态切换为客户端界面
+            if self.is_clock() and not self.is_centered():
+                self.show_client_interface()
+                return
             # 如果窗口已经可见且在中心位置，则隐藏它
             if self.isVisible() and self.is_centered():
                 self.hide()
             else:
                 self.show_window_centered()  # Show the main window centered
+
+    def is_clock(self):
+        """检查窗口是否是时钟状态"""
+        if not Config.show_time_label:
+            return False
+        if not hasattr(self, "time_label"):
+            return False
+        if not self.isVisible():
+            return False
+        if self.time_label.isVisible():  # 时间标签显示状态
+            return True
 
     def is_centered(self):
         """检查窗口是否在屏幕中心"""
@@ -1555,6 +1600,7 @@ class GUI(QMainWindow):
         # 激活窗口
         self.showNormal()
         self.activateWindow()
+        self.show_client_interface()
 
         # 临时设置窗口为置顶以便正确居中
         was_on_top = bool(self.windowFlags() & Qt.WindowStaysOnTopHint)
@@ -1696,6 +1742,7 @@ class GUI(QMainWindow):
             widget = self.layout2.itemAt(i).widget()
             if widget is not None:
                 widget.setVisible(True)
+        self.text_box_client.moveCursor(QTextCursor.End)  # 滚动到最下行
         x, y, width, height, screenWidth, screenHeight = self.checkWindowInfo()
         if self.isBerthLeft:  # 已停靠在左边
             self.move(0, y)  # 从左边弹出，31是标题栏高度
