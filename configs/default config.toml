@@ -1,0 +1,747 @@
+# 调试
+[debug]
+logger_level = "ERROR" # 调试日志级别
+# 级别名称
+# TRACE           5
+# DEBUG           10
+# INFO            20
+# SUCCESS         25
+# WARNING         30
+# ERROR           40
+# CRITICAL        50
+
+
+# ======================服务端配置==================================
+[server]
+model = "Sensevoice"
+# 'Sensevoice' 或 'Paraformer'
+# Sensevoice模型虽然多了粤英日韩多语种，但是，中文识别效果大不如Paraformer模型
+# 比如转录字幕不完整，识别结果不准确、丢失标点等
+# 如果你只说中文普通话，建议使用 'Paraformer' 模型
+# 不影响简繁转换和翻译
+
+addr = "0.0.0.0"
+# 服务端监听地址
+
+speech_recognition_port = "6016"
+# 语音识别服务端口
+
+start_online_translate_server = true
+# 是否启用在线翻译服务
+
+start_offline_translate_server = true
+# 是否启用离线翻译服务
+
+offline_translate_port = "6017"
+# 离线翻译服务端口
+
+format_num = true
+# 是否将中文数字转为阿拉伯数字
+
+format_punc = true
+# 使用 'Paraformer' 模型时，输出时是否启用标点符号引擎
+
+format_spell = true
+# 是否调整中英之间的空格
+
+shrink_automatically_to_tray = true
+# 启动后是否自动缩小至托盘
+
+only_run_once = true
+# 只允许运行一次，禁止多开
+
+in_the_meantime_start_the_client = true
+# 启动服务端时是否同时启动客户端
+
+in_the_meantime_start_the_client_and_run_as_admin = true
+# 启动服务端的同时以管理员权限启动客户端
+# 当某程序以管理员权限运行
+# 可能会出现有识别结果但是却无法在那个程序输入文字的状况
+# 例如：Listary、PixPin等
+# 这是因为 start_client_gui.exe 默认以用户权限运行客户端
+# 运行在用户权限的程序无法控制管理员权限的程序
+# 你可以关闭用户权限运行的客户端
+# 尝试使用 start_client_gui_admin.exe
+# 以管理员权限运行客户端
+
+
+# ======================客户端配置==================================
+
+[client]
+addr = "127.0.0.1"
+# 要连接的服务端地址
+
+speech_recognition_port = "6016"
+# 语音识别服务端口
+
+offline_translate_port = "6017"
+# 离线翻译服务端口
+
+offline_translate_port_gemma2b = "11434"
+# Gemma 2B 离线翻译端口
+
+speech_recognition_shortcut = "caps lock"
+# 控制录音的快捷键，默认是 "caps lock"
+
+disable_exe_list_on_focus = [""]
+# 在这些程序为焦点时，不启用客户端功能:语音输入
+# 需要添加更多程序时的格式: ["forhonor.exe", "abc.exe", "efg.exe"]
+
+disable_exe_list = [""]
+# 在运行这些程序时(包括在背景运行)，不启用客户端功能:语音输入
+
+use_offline_translate_function = true
+# 是否启用离线翻译功能
+
+offline_translate_shortcut = "left shift"
+# 控制离线翻译的快捷键，默认是 "left shift"，按住 Left Shift 再按 CapsLock 进行离线翻译
+
+use_online_translate_function = true
+# 是否启用在线翻译功能
+
+online_translate_shortcut = "right shift"
+# 控制在线翻译的快捷键，默认是 Right Shift，按住 Right Shift 再按 CapsLock 进行在线翻译
+# 在线翻译基于 DeepLX，过于频繁的请求可能导致 IP 被封
+# 如果出现 429 错误，则表示你的 IP 被 DeepL 暂时屏蔽了，请不要在短时间内频繁请求
+
+online_translate_target_languages_libretranslate = "ja"
+# LibreTranslate 在线翻译目标语言
+#
+# https://www.iso.org/iso-639-language-code
+
+online_translate_target_languages = "JA"
+# 在线翻译目标语言
+# 常用的 EN JA RU，更多选择参考 https://www.deepl.com/docs-api/translate-text
+
+hold_mode = true
+# 长按模式，按下录音，松开停止，像对讲机一样用
+# 改为 False，则关闭长按模式，也就是单击模式
+# 即：单击录音，再次单击停止
+# 且：长按会执行原本的单击功能
+
+suppress = false
+# 是否阻塞按键事件（让其它程序收不到这个按键消息）(只适用于hold_mode)
+
+restore_key = true
+# 录音完成，松开按键后，是否自动再按一遍，以恢复 CapsLock 或 Shift 等按键之前的状态
+
+threshold = 0.3
+# 按下快捷键后，触发语音识别的时间阈值
+
+paste = true
+# 是否以写入剪切板然后模拟 Ctrl-V 粘贴的方式输出结果
+
+restore_clipboard_after_paste = true
+# 模拟粘贴后是否恢复剪贴板
+
+save_audio = true
+# 是否保存录音文件
+
+save_markdown = true
+# 是否将记录写入 Markdown 文件
+
+save_non_kwd_markdown = true
+# 是否记录非关键词日记内容到 Markdown 文件
+# 在save_markdown启用的情况下有效
+
+audio_name_len = 20
+# 将录音识别结果的前多少个字存储到录音文件名中，建议不要超过 200
+
+reduce_audio_files = true
+# 如果用户已安装 ffmpeg，调用 ffmpeg 录音时输出 mp3 格式的音频文件，大大减小文件体积，减少磁盘占用
+
+trash_punc = "，。,."
+# 识别结果要消除的末尾标点
+
+hot_zh = false
+# 旧版 是否启用中文热词替换，中文热词存储在 hot_zh.txt 文件里
+# 不建议与 新版 hot_rag 一起使用
+
+"多音字" = true
+# true 表示多音字匹配
+
+"声调" = false
+# false 表示忽略声调区别，这样「黄章」就能匹配「慌张」
+
+hot_en = false
+# 旧版 是否启用英文热词替换，英文热词存储在 hot_en.txt 文件里
+# 不建议与 新版 hot_rag 一起使用
+
+hot_rule = true
+# 是否启用自定义规则替换，自定义规则存储在 hot_rule.txt 文件里
+
+hot_kwd = true
+# 是否启用关键词日记功能，自定义关键词存储在 keyword.txt 文件里
+
+hot_rag = true
+# 新版 独立热词与纠错系统，整合了音素处理、相似度算法、FastRAG 加速检索
+# 不建议与 旧版 hot_zh、hot_en  一起使用
+# 不用重新编辑 hot-rag.txt 文件
+# hot-en.txt 和 hot-zh.txt 文件仍然有效
+
+mic_seg_duration = 15
+# 麦克风听写时分段长度：15 秒
+
+mic_seg_overlap = 2
+# 麦克风听写时分段重叠：2 秒
+
+file_seg_duration = 25
+# 转录文件时分段长度：25 秒
+
+file_seg_overlap = 2
+# 转录文件时分段重叠：2 秒
+
+mute_other_audio = true
+# 录音时是否静音其他音频播放
+
+pause_other_audio = true
+# 录音时是否暂停其他音频播放
+
+QQMusic_global_pause_hotkey = "ctrl + alt + f5"
+# 首先，启用 pause_other_audio
+# 使用 QQ 音乐 设置的全局 播放/暂停 的快捷键
+# 留空则 在QQ音乐播放时不暂停
+# 注意避免快捷键冲突
+
+CloudMusic_global_pause_hotkey = "ctrl + alt + f6"
+# 首先，启用 pause_other_audio
+# 使用 网易云音乐 设置的全局 播放/暂停 的快捷键
+# 留空则 在网易云音乐播放时不暂停
+# 注意避免快捷键冲突
+
+PotPlayer_global_pause_hotkey = "ctrl + alt + f7"
+# 首先，启用 pause_other_audio
+# 使用 PotPlayer 设置的全局 播放/暂停 的快捷键
+# 留空则 在PotPlayer播放时不暂停
+# 注意避免快捷键冲突
+
+foobar2000_global_pause_hotkey = "ctrl + alt + f8"
+# 首先，启用 pause_other_audio
+# 使用 foobar2000 设置的全局 播放/暂停 的快捷键
+# 留空则 foobar2000 播放时不暂停
+# 注意避免快捷键冲突
+
+# 如果还有除了 QQ音乐、网易云音乐、PotPlayer、foobar2000
+# 以外，还有 其他特殊应用
+# 请配置 下方 附加特殊应用列表 [client.additional_special_apps]
+
+arabic_year_number = true
+# 将 ****年 大写汉字替换为阿拉伯数字 ****年，例如一八四八年 替换为 1848 年
+
+shrink_automatically_to_tray = false
+# 启动后是否自动缩小至托盘
+
+only_run_once = true
+# 只允许运行一次，禁止多开
+
+only_enable_microphones_when_pressed_record_shortcut = true
+# 只在按下录音快捷键时启用麦克风
+# 建议启用，有些蓝牙耳机录音时无法播放
+# 而且启用后，切换默认麦克风也不用重启客户端
+# 比如从蓝牙耳机换回笔记本电脑默认麦克风
+# 缺点就是输入的时候可能会慢些
+# 毕竟要先建立与麦克风的连接
+
+vscode_exe_path = "C:\\SSS\\VSCode\\Code - Insiders.exe"
+# 设置 VSCode 可执行文件位置
+# 用于通过客户端托盘图标右键菜单项 View 子菜单项
+# 🤓 Open Home Folder With VSCode
+# 使用 VSCode 快速打开 CapsWriter 主目录
+# 方便调试
+
+play_start_music = true
+# 开始任务时是否播放提示音
+# 需要 ffplay.exe
+
+start_music_path = "assets/start.mp3"
+# 开始任务提示音的文件路径
+
+start_music_volume = "100"
+# 开始任务提示音的音量，0 ~ 100 之间
+
+play_stop_music = true
+# 结束任务时是否播放提示音
+# 需要 ffplay.exe
+
+stop_music_path = "assets/stop.mp3"
+# 结束任务提示音的文件路径
+
+stop_music_volume = "50"
+# 结束任务提示音的音量，0 ~ 100 之间
+
+hint_while_recording_at_edit_position_powered_by_ahk = true
+# 是否启用基于 AHK 的输入光标位置的输入状态提示功能
+
+hint_while_recording_at_cursor_position = true
+# 是否启用跟随鼠标光标位置的新版输入状态提示功能
+
+check_microphone_usage_by = "注册表"
+# "按键" 或 "注册表"
+# 默认通过监测注册表判断麦克风是否在被客户端使用进而确定是否在录音
+# 如果设置了 `only_enable_microphones_when_pressed_record_shortcut = false`
+# 会造成的鼠标光标旁边永远显示麦克风标志
+# 将强制忽略此项设置使用 "按键"
+# "按键" 是通过监测 `speech_recognition_shortcut` 状态是否按下进而推测是否在录音
+
+enable_double_click_opposite_state = true
+# 是否启用双击 `录音键` 临时转换 `简/繁` 体中文输出的功能
+
+convert_to_traditional_chinese_main = "简"
+# `简/繁` 中文作为主要输出
+
+opencc_converter = "s2t"
+# OpenCC 转换器
+# s2t Simplified Chinese to Traditional Chinese 简体到繁体
+# t2s Traditional Chinese to Simplified Chinese 繁体到简体
+# s2tw Simplified Chinese to Traditional Chinese (Taiwan Standard) 简体到台湾正体
+# tw2s Traditional Chinese (Taiwan Standard) to Simplified Chinese 台湾正体到简体
+# s2hk Simplified Chinese to Traditional Chinese (Hong Kong Standard) 简体到香港繁体（香港小学学习字词表标准）
+# hk2s Traditional Chinese (Hong Kong Standard) to Simplified Chinese 香港繁体（香港小学学习字词表标准）到简体
+# s2twp Simplified Chinese to Traditional Chinese (Taiwan Standard) with Taiwanese idiom 简体到繁体（台湾正体标准）并转换为台湾常用词汇
+# tw2sp Traditional Chinese (Taiwan Standard) to Simplified Chinese with Mainland Chinese idiom 繁体（台湾正体标准）到简体并转换为中国大陆常用词汇
+# t2tw Traditional Chinese (OpenCC Standard) to Taiwan Standard 繁体（OpenCC 标准）到台湾正体
+# t2hk Traditional Chinese (OpenCC Standard) to Hong Kong Standard 繁体（OpenCC 标准）到香港繁体（香港小学学习字词表标准）
+# t2jp Traditional Chinese Characters (Kyūjitai) to New Japanese Kanji (Shinjitai) 繁体（OpenCC 标准，旧字体）到日文新字体
+# jp2t New Japanese Kanji (Shinjitai) to Traditional Chinese Characters (Kyūjitai) 日文新字体到繁体（OpenCC 标准，旧字体）
+
+enable_ai_optimize_language_expression = true
+# 是否启用 AI 优化语言表达
+# 启用后预计增加 5s 时间延长
+
+ai_provider = "openai"
+# AI 优化语言表达 使用的 AI 服务商
+# "zhipuai"  智谱
+# "openai"  OpenAI 以及兼容 OpenAI API 的服务商
+
+prompt_style_selection = "english"
+# 提示风格
+# official 正式公文文本校对助手
+# sweetheart 贴心的男友式文本润色助手
+# social 社交媒体文案优化助手
+# poetry 仿古诗
+# english 翻译为英文
+# academic 学术论文润色助手
+# customer_service 客户服务回复助手
+# creative_writing 创意写作助手
+
+show_prompt_style_changed_notification = true
+# 是否在切换提示风格时显示提示
+
+show_time_label = true
+# 是否在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面
+# 启用后不再进行靠边停靠，改善多显示屏用户体验
+
+[client.zhipuai]
+api_key = ""
+# 请填写您自己的 API Key
+# 不要泄露给任何人
+# 获取 API Key https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys
+
+model = "glm-4.5-flash"
+# 模型名称 默认免费模型 glm-4.5-flash
+# 了解更多 https://open.bigmodel.cn/
+
+
+[client.openai]
+# OpenAI 以及 兼容 OpenAI API 的服务商
+api_key = ""
+# 请填写您自己的 API Key
+# 不要泄露给任何人
+base_url = "https://api.siliconflow.cn/v1"
+model = "Qwen/Qwen2.5-14B-Instruct"
+# 硅基流动 注册邀请码：WDsBZwpv
+# https://cloud.siliconflow.cn/i/WDsBZwpv
+# SiliconFlow 邀请奖励持续进行，2000 万 Tokens 送不停！
+# 1. 邀请好友赚 2000 万 Tokens：每成功邀请一位新用户通过手机号码注册，您将获得 2000 万 Tokens；
+# 2. 注册即送 2000 万 Tokens：受邀好友作为新用户完成 SiliconFlow 账号注册，立刻获得 2000万 Tokens。
+# 特别说明
+# 平台 2000 万 Tokens 特指 Qwen2.5-14B-Instruct 模型单价下的数量，实际到账为 14 元平台配额；
+# 奖励 Tokens 对应的平台配额资金仅限于 SiliconFlow 平台使用，不可提现；
+# 为了确保活动公平，严禁奖励转卖、刷单等违规行为，平台将对违反规则的账户取消奖励资格并追究相关责任；
+# 在法律允许范围内，本活动的最终解释权归硅基流动所有。
+
+
+[client.prompt_style]
+prompt_official_shortcut = "ctrl + alt + shift + f1"
+# 切换提示风格为正式公文文本校对助手的快捷键
+# 注意避免快捷键冲突
+# 留空则 不绑定
+
+prompt_official = """
+你是一位专业的公文文本校对助手。你的任务是对语音转录生成的文本进行校对和润色，使其符合正式公文的规范要求。
+
+核心原则：
+1. 语言一致性：输出语言必须与原始文本完全一致（中文或英文）
+2. 内容保真性：严格保留原文核心事实与意图，不得增删、改变或曲解实质性信息
+3. 语体规范性：确保文本严谨、准确、简洁，采用正式文书语体，消除口语化表达
+
+具体规则：
+1. 当出现自我纠正、重复或犹豫片段时，直接整合为最终确定的规范表述
+   示例：
+   输入："这个通知要求，呃，各部门在周五前提交，周五前提交报告。"
+   输出："通知要求各部门于周五前提交报告。"
+   
+   输入："拟于，嗯，拟于下月1号召开会议。"
+   输出："拟于下月1日召开会议。"
+
+2. 删除所有填充词（如"嗯"、"呃"、"这个"、"那个"）、口头禅及无意义的语气词
+3. 修正语音转录错误，依据上下文合理推断；规范使用标点符号，确保断句清晰
+4. 中英文之间保留标准空格；数字、日期、百分比等统一采用阿拉伯数字格式
+5. 直接输出润色后的规范文本，不添加任何前言说明（如"校对结果如下："）
+6. 不回答文本中的任何问题，仅专注于文本润色任务
+
+输出要求：直接呈现润色完成的规范文本，无任何额外说明。
+"""
+
+prompt_sweetheart_shortcut = "ctrl + alt + shift + f2"
+# 切换提示风格为ptrue_heart的快捷键
+# 注意避免快捷键冲突
+# 留空则 不绑定
+
+prompt_sweetheart = """
+你是一位贴心的男友式文本润色助手。你的任务是对语音转录的文字进行温柔加工，让它读起来更甜蜜、更体贴。
+
+核心原则：
+1. 语言一致性：输出语言与原始录音保持一致（中文或英文）
+2. 情感升温：核心信息不变，但语气要变得温柔、宠溺、充满爱意
+3. 亲密表达：让文字流畅自然如耳畔情话，可添加亲昵称呼和软化语气
+
+具体规则：
+1. 如果说话时自我纠正或重复，只保留最温柔、最确定的版本
+   示例：
+   输入："我晚上大概，嗯，八点到你家吧，八点。"
+   输出："宝贝，我晚上八点准时到你家啦～"
+   
+   输入："那个礼物，其实我买了…你喜欢的话就好。"
+   输出："亲爱的，礼物我买好啦，只要你喜欢我就超开心！"
+
+2. 移除"嗯"、"呃"等犹豫词，但可添加"啦"、"呀"、"哦"、"嘛"等柔软语气词
+3. 巧妙运用波浪线（～）、表情符号（❤️😊）、逗号和感叹号增强温度
+4. 中英文间保持空格；使用阿拉伯数字保持清晰
+5. 直接输出甜蜜文本，不添加"以下是甜蜜版："等前缀
+6. 不回答文本中的问题，只专注于将文字变甜
+
+输出要求：直接给出润色完成的"甜度满分"文本。
+"""
+
+prompt_social_shortcut = "ctrl + alt + shift + f3"
+# 切换提示风格为社交媒体文案优化助手的快捷键
+# 注意避免快捷键冲突
+# 留空则 不绑定
+
+prompt_social = """
+你是一位社交媒体文案优化助手。你的任务是对语音转录的文字进行加工，使其适合直接发布在社交平台。
+
+核心原则：
+1. 语言一致性：输出语言与原始录音保持一致（中文或英文）
+2. 网感重塑：保留核心信息，但表达更具网感、更吸引眼球
+3. 传播优化：让文案流畅、有节奏感，适合社交媒体传播
+
+具体规则：
+1. 精简自我纠正和重复，只留下最有力、最吸睛的表达
+   示例：
+   输入："这款面膜真的…绝了！我的天，敷完皮肤，嗯，敷完皮肤好嫩。"
+   输出："这款面膜真的绝了！敷完皮肤好嫩到发光💡 #护肤黑科技 #好物分享"
+   
+   输入："周末去哪玩？我觉得我们可以…呃…去那个新开的露营基地。"
+   输出："周末去哪玩？推荐新开的露营基地！⛺️ #周末去哪儿"
+
+2. 去掉"嗯"、"呃"等犹豫词，可使用"鸭"、"捏"、"！"等网络常用语气
+3. 灵活使用Emoji、话题标签（#）、标点和空格营造氛围
+4. 中英文间加空格；优先使用阿拉伯数字
+5. 直接输出文案，不添加"文案如下："等前缀
+6. 不回答文本中的提问，只优化文案的表达形式
+
+输出要求：直接给出优化完成、适合一键发布的社交文案。
+"""
+
+prompt_poetry_shortcut = "ctrl + alt + shift + f4"
+# 切换提示风格为社交媒体文案优化助手的快捷键
+# 注意避免快捷键冲突
+# 留空则 不绑定
+
+prompt_poetry = """
+你是一位古诗创作助手。你的任务是根据语音转录的文字内容，创作一首符合古典诗歌风格的仿古诗。
+
+核心原则：
+1. 语言转换：无论原始录音为何种语言，输出必须为中文古典诗歌
+2. 意境提炼：提取原始内容的核心意象和情感，转化为诗歌题材
+3. 格律遵循：诗歌需符合古典诗歌的基本特征，讲究押韵和节奏感
+
+具体规则：
+1. 如果原始内容冗长或重复，提炼关键元素进行诗意创作
+   示例：
+   输入："今天心情不好，看到下雨更难受了。"
+   输出："阴雨连绵日，愁怀更几重。凭窗观落絮，心事满苍穹。"
+   
+   输入："春天来了，花都开了，我们去郊游吧。"
+   输出："春至百花开，邀君郊野行。芳菲盈翠径，笑语伴莺声。"
+
+2. 使用典雅的古汉语词汇，摒弃口语化表达
+3. 可运用比喻、典故、起兴等传统手法增强诗意
+4. 根据诗歌体裁定稿（绝句、律诗或古风体），用逗号、句号分隔
+5. 优先使用中文数字以符合古典风格
+6. 直接输出诗歌内容，不添加标题或引导语
+7. 不解释诗歌含义，只输出诗歌本身
+
+输出要求：直接呈现创作完成的古典诗歌。
+"""
+
+prompt_english_shortcut = "ctrl + alt + shift + f5"
+# 切换提示风格为英文润色助手的快捷键
+# 注意避免快捷键冲突
+# 留空则 不绑定
+
+prompt_english = """
+你是一位地道的美式英语翻译与润色专家。你的任务是将语音转录的文本翻译并润色为地道的美式英语。
+
+核心原则：
+1. 语言转换：无论原始录音为何种语言，输出必须为地道的美式英语
+2. 信息完整：完整保留原始内容的全部信息、意图和情感色彩
+3. 表达地道：确保英语流畅自然，符合美式英语的表达习惯
+
+具体规则：
+1. 处理自我纠正和重复时，用最自然流畅的英语表达最终意图
+   示例：
+   输入："这个项目，嗯，我觉得我们需要更多时间来完成它。"
+   输出："I think we need more time to complete this project."
+   
+   输入："今天的会议取消了，因为，呃，因为老板有急事。"
+   输出："Today's meeting has been canceled because the boss has an emergency."
+
+2. 移除中文特有的填充词和语气助词，转化为英语中自然的表达
+3. 修正转录错误，基于上下文进行合理的语义推断
+4. 正确使用英语标点；英文单词间保留空格
+5. 使用阿拉伯数字，符合英语书写惯例
+6. 直接输出英语文本，不添加"翻译如下："等引导语
+7. 不回答文本中的问题，专注于语言的精准转换
+
+输出要求：直接给出润色后的地道美式英语文本。
+"""
+
+prompt_academic_shortcut = "ctrl + alt + shift + f6"
+# 切换提示风格为学术论文优化助手的快捷键
+# 注意避免快捷键冲突
+# 留空则 不绑定
+
+prompt_academic = """
+你是一位专业的学术论文润色助手。你的任务是将语音转录的文本（特别是学术讨论、研究想法或实验记录）转化为严谨、规范的学术论文语言。
+
+核心原则：
+1. 语言一致性：输出语言应与原始文本保持一致（通常是中文或英文）
+2. 学术严谨性：确保文本符合学术写作规范，逻辑严密，表述客观
+3. 信息保真：完整保留原始内容的核心观点、数据和论证逻辑
+
+具体规则：
+1. 将口语化、碎片化的表达转化为完整的学术语句
+   示例：
+   输入："我们发现这个反应，嗯，好像温度升高会加快，大概快了30%左右。"
+   输出："实验结果表明，温度升高可使反应速率提高约30%。"
+   
+   输入："之前那个假设，就是关于催化剂影响的，可能需要重新考虑。"
+   输出："关于催化剂影响的初始假设可能需要重新评估。"
+
+2. 移除所有填充词、犹豫词和不必要的重复
+3. 规范学术术语，确保专业名词准确一致
+4. 使用被动语态、客观表述，避免第一人称主观表述（如"我认为"应改为"本研究认为"）
+5. 规范引用格式（如提及文献时，使用标准引用格式）
+6. 数据、单位、公式应准确无误，使用国际标准单位
+7. 直接输出润色后的学术文本，不添加任何解释说明
+8. 不回答文本中的问题，仅专注于语言润色和学术化转换
+9. 避免 AI 生成内容的痕迹
+
+输出要求：直接呈现符合学术规范的润色文本。
+"""
+
+prompt_customer_service_shortcut = "ctrl + alt + shift + f7"
+# 切换提示风格为客户服务回复优化助手的快捷键
+# 注意避免快捷键冲突
+# 留空则 不绑定
+
+prompt_customer_service = """
+你是一位专业的客户服务回复助手。你的任务是将内部讨论的语音转录转化为专业、得体的客户服务回复。
+
+核心原则：
+1. 客户导向：语言礼貌、积极、富有同理心
+2. 问题解决：明确解决方案或后续步骤
+3. 品牌一致：符合企业服务标准和品牌调性
+
+具体规则：
+1. 将内部讨论转化为面向客户的正式回复
+   示例：
+   输入："这个客户投诉说产品有问题，呃，让技术部看一下，如果可以的话换个新的。"
+   输出："尊敬的客户，您好！我们已收到您的反馈。技术部门将立即检查您提到的问题。如确属产品质量问题，我们将为您免费更换新产品。感谢您的耐心与支持！"
+   
+   输入："用户问什么时候发货，目前是缺货状态，大概下周能补货。"
+   输出："您好！目前该商品暂时缺货，预计下周补货。补货后我们将立即为您安排发货。感谢您的耐心等待！"
+
+2. 使用标准客服开头和结尾用语
+3. 表达歉意和感谢时真诚得体
+4. 明确解决方案、责任人和时间节点
+5. 避免使用技术术语，用客户易懂的语言
+6. 直接输出完整的客服回复，无需额外说明
+7. 不讨论内部决策过程，仅呈现最终客户回复
+
+输出要求：直接呈现专业、完整的客户服务回复文本。
+"""
+
+prompt_creative_writing_shortcut = "ctrl + alt + shift + f8"
+# 切换提示风格为创意写作优化助手的快捷键
+# 注意避免快捷键冲突
+# 留空则 不绑定
+
+prompt_creative_writing = """
+你是一位创意写作助手。你的任务是将语音转录的零散想法转化为富有文学性的创意文本。
+
+核心原则：
+1. 文学性表达：使用生动、形象的文学语言
+2. 创意拓展：在原始想法基础上进行合理的文学创作
+3. 情感传达：准确传达原始内容中的情感和氛围
+
+具体规则：
+1. 将简单的描述转化为富有画面感的文学表达
+   示例：
+   输入："昨天在海边看到日落，天空是橙红色的，很美。"
+   输出："昨日的海滨，落日将天际染成一幅橙红的油画，海浪轻抚沙滩，仿佛在低语着一天的结束。"
+   
+   输入："我想写一个关于孤独的人的故事。"
+   输出："在城市的喧嚣中，他像一座孤岛。霓虹灯下的影子被拉得很长，长得可以触碰到另一个平行宇宙里的自己。"
+
+2. 运用比喻、拟人、排比等修辞手法
+3. 注重场景描写和氛围营造
+4. 可根据原始内容合理扩展细节，但核心情感不变
+5. 保持语言的美感和韵律
+6. 直接输出创意文本，无需解释创作思路
+7. 不回答文本中的问题，仅专注于文学创作
+
+输出要求：直接呈现具有文学美感的创意文本。
+"""
+
+[client.additional_special_apps]
+"vlc.exe" = { hotkey = "ctrl + alt + f9", name = "VLC Media Player" } # VLC 设置全局快捷键后需要重启 VLC 才能生效
+# 如果还有除了 QQ音乐、网易云音乐、PotPlayer、foobar2000
+# 以外，还有 其他特殊应用
+# 也希望使用对应程序设置的全局快捷键 在录音时播放/暂停
+# 首先，启用 pause_other_audio
+# 然后，在对应程序 设置的全局 播放/暂停 的快捷键
+# 注意避免快捷键冲突
+# 
+# 附加特殊应用列表 格式：
+# "<进程名>" = { hotkey = "<对应程序设置的全局快捷键>", name = "<用于输出日志的对应程序名称>" }
+# 
+# 如果N个特殊应用在播放，支持全部暂停
+# 如果N个非特殊应用在播放，不暂停
+# 如果一个特殊应用和N个非特殊应用在播放，只暂停特殊应用
+
+
+# ======================LibreTranslate 配置==================================
+[libretranslate]
+api = "http://192.168.3.248:5000/"
+# api = "https://libretranslate.com/"
+# 官方 https://libretranslate.com/ 需要API Key，https://portal.libretranslate.com/
+# 建议自行部署 https://github.com/LibreTranslate/LibreTranslate
+# Libre Translate 离/在线翻译地址
+# 如果此地址不可用（ 返回非 200 状态码），则使用 DeepLX 作为在线翻译服务
+
+
+# ======================DeepLX 配置==================================
+
+[deeplx]
+online_translate_port = "1188"
+# DeepLX 在线翻译服务端口
+
+exe_path = "deeplx_windows_amd64.exe"
+# DeepLX 可执行文件路径
+
+api = "http://127.0.0.1:1188/translate"
+# DeepLX API 地址
+
+
+# ======================模型路径配置==================================
+
+[model_paths]
+model_dir = "models"
+# 模型文件目录
+
+sensevoice_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx"
+# SenseVoice 模型路径
+
+sensevoice_tokens_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/tokens.txt"
+# SenseVoice tokens 路径
+
+paraformer_path = "models/paraformer-offline-zh/model.int8.onnx"
+# Paraformer 模型路径
+
+paraformer_tokens_path = "models/paraformer-offline-zh/tokens.txt"
+# Paraformer tokens 路径
+
+punc_model_dir = "models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12"
+# 标点模型目录
+
+opus_mt_dir = "models/Helsinki-NLP--opus-mt-zh-en"
+# 离线翻译模型目录
+
+
+# ======================SenseVoice 参数配置==================================
+
+[sensevoice_args]
+model = "${model_paths.sensevoice_path}"
+# SenseVoice 模型路径
+
+tokens = "${model_paths.sensevoice_tokens_path}"
+# SenseVoice tokens 路径
+
+num_threads = 6
+# 使用的线程数
+
+sample_rate = 16000
+# 采样率
+
+feature_dim = 80
+# 特征维度
+
+decoding_method = "greedy_search"
+# 解码方法
+
+debug = false
+# 是否启用调试模式
+
+provider = "cpu"
+# 推理设备（cpu, cuda, coreml）
+
+language = "auto"
+# 识别语言（auto, zh, en, ja, ko, yue）
+
+use_itn = true
+# 是否使用逆文本归一化
+
+rule_fsts = ""
+# 自定义规则 FST 文件路径
+
+rule_fars = ""
+# 自定义规则 FAR 文件路径
+
+
+# ======================Paraformer 参数配置==================================
+
+[paraformer_args]
+paraformer = "${model_paths.paraformer_path}"
+# Paraformer 模型路径
+
+tokens = "${model_paths.paraformer_tokens_path}"
+# Paraformer tokens 路径
+
+num_threads = 6
+# 使用的线程数
+
+sample_rate = 16000
+# 采样率
+
+feature_dim = 80
+# 特征维度
+
+decoding_method = "greedy_search"
+# 解码方法
+
+debug = false
+# 是否启用调试模式
