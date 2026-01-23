@@ -13,7 +13,7 @@ logger_level = "ERROR" # 调试日志级别
 
 # ======================服务端配置==================================
 [server]
-model = "FunASR"
+model = "Sensevoice"
 # 'FunASR' 、 'Sensevoice' 或 'Paraformer'
 # Sensevoice模型虽然多了粤英日韩多语种，但是，中文识别效果大不如Paraformer模型
 # 比如转录字幕不完整，识别结果不准确、丢失标点等
@@ -50,7 +50,7 @@ shrink_automatically_to_tray = true
 only_run_once = true
 # 只允许运行一次，禁止多开
 
-in_the_meantime_start_the_client = false
+in_the_meantime_start_the_client = true
 # 启动服务端时是否同时启动客户端
 
 in_the_meantime_start_the_client_and_run_as_admin = true
