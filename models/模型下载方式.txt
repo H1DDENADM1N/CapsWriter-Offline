@@ -1,3 +1,7 @@
+FunASR语音模型：
+git clone https://www.modelscope.cn/zengshuishui/FunASR-nano-onnx.git FunASR-nano-onnx
+
+
 Sensevoice语音模型：
 wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
 

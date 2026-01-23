@@ -62,7 +62,7 @@ url = "https://mirrors.ustc.edu.cn/pypi/simple"
 default = true
 
 [project.optional-dependencies]
-dev = []
+dev = ["ipynb==0.5.1", "ipykernel>=7.1.0", "pip>=25.3", "soundfile>=0.13.1"]
 
 [project.urls]
 Repository = "https://github.com/H1DDENADM1N/CapsWriter-Offline"

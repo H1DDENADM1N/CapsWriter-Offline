@@ -7,6 +7,8 @@
 > [!IMPORTANT]
 > 图形化配置界面 `edit_config_gui.exe`，可方便修改大部分配置，更多自定义配置仍需手动修改 `config.toml` 文件
 
+> [!IMPORTANT]
+> FunASR nano onnx 模型不支持文件转录，如需转录音频，请切换模型后重启服务端，再重试转录音频
 ## 😎 十二个功能：
 
 1. 按下键盘上的大写锁定键 `CapsLock` ，录音开始，当松开大写锁定键时，就会识别你的录音，并将识别结果立刻输入
@@ -292,6 +294,7 @@
 
     10.5 欢迎将位置错乱的exe程序名反馈给我
 12. 整合包不支持增量更新，请删除 `./configs/` 目录下你的自定义配置例如 `my config.toml`，重新将修改后的自定义配置 `config.toml` 复制到 `./configs/` 目录下，重命名为例如 `my config.toml`。
+13. 如果使用 `FunASR nano onnx` 模型，且你的电脑不是 **仅支持 AVX2 的 CPU** ，注意修改 `funasr_llm_path` 不要使用 INT8 兼容模型
 
 # 🤓 源码运行
 
@@ -411,8 +414,8 @@ logger_level = "ERROR" # 调试日志级别
 
 # ======================服务端配置==================================
 [server]
-model = "Sensevoice"
-# 'Sensevoice' 或 'Paraformer'
+model = "FunASR"
+# 'FunASR' 、 'Sensevoice' 或 'Paraformer'
 # Sensevoice模型虽然多了粤英日韩多语种，但是，中文识别效果大不如Paraformer模型
 # 比如转录字幕不完整，识别结果不准确、丢失标点等
 # 如果你只说中文普通话，建议使用 'Paraformer' 模型
@@ -722,6 +725,12 @@ prompt_style_selection = "english"
 # customer_service 客户服务回复助手
 # creative_writing 创意写作助手
 
+show_prompt_style_changed_notification = true
+# 是否在切换提示风格时显示提示
+
+show_time_label = true
+# 是否在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面
+# 启用后不再进行靠边停靠，改善多显示屏用户体验
 
 [client.zhipuai]
 api_key = ""
@@ -757,6 +766,7 @@ model = "Qwen/Qwen2.5-14B-Instruct"
 prompt_official_shortcut = "ctrl + alt + shift + f1"
 # 切换提示风格为正式公文文本校对助手的快捷键
 # 注意避免快捷键冲突
+# 留空则 不绑定
 
 prompt_official = """
 你是一位专业的公文文本校对助手。你的任务是对语音转录生成的文本进行校对和润色，使其符合正式公文的规范要求。
@@ -787,6 +797,7 @@ prompt_official = """
 prompt_sweetheart_shortcut = "ctrl + alt + shift + f2"
 # 切换提示风格为ptrue_heart的快捷键
 # 注意避免快捷键冲突
+# 留空则 不绑定
 
 prompt_sweetheart = """
 你是一位贴心的男友式文本润色助手。你的任务是对语音转录的文字进行温柔加工，让它读起来更甜蜜、更体贴。
@@ -817,6 +828,7 @@ prompt_sweetheart = """
 prompt_social_shortcut = "ctrl + alt + shift + f3"
 # 切换提示风格为社交媒体文案优化助手的快捷键
 # 注意避免快捷键冲突
+# 留空则 不绑定
 
 prompt_social = """
 你是一位社交媒体文案优化助手。你的任务是对语音转录的文字进行加工，使其适合直接发布在社交平台。
@@ -847,6 +859,7 @@ prompt_social = """
 prompt_poetry_shortcut = "ctrl + alt + shift + f4"
 # 切换提示风格为社交媒体文案优化助手的快捷键
 # 注意避免快捷键冲突
+# 留空则 不绑定
 
 prompt_poetry = """
 你是一位古诗创作助手。你的任务是根据语音转录的文字内容，创作一首符合古典诗歌风格的仿古诗。
@@ -878,6 +891,7 @@ prompt_poetry = """
 prompt_english_shortcut = "ctrl + alt + shift + f5"
 # 切换提示风格为英文润色助手的快捷键
 # 注意避免快捷键冲突
+# 留空则 不绑定
 
 prompt_english = """
 你是一位地道的美式英语翻译与润色专家。你的任务是将语音转录的文本翻译并润色为地道的美式英语。
@@ -909,6 +923,7 @@ prompt_english = """
 prompt_academic_shortcut = "ctrl + alt + shift + f6"
 # 切换提示风格为学术论文优化助手的快捷键
 # 注意避免快捷键冲突
+# 留空则 不绑定
 
 prompt_academic = """
 你是一位专业的学术论文润色助手。你的任务是将语音转录的文本（特别是学术讨论、研究想法或实验记录）转化为严谨、规范的学术论文语言。
@@ -942,6 +957,7 @@ prompt_academic = """
 prompt_customer_service_shortcut = "ctrl + alt + shift + f7"
 # 切换提示风格为客户服务回复优化助手的快捷键
 # 注意避免快捷键冲突
+# 留空则 不绑定
 
 prompt_customer_service = """
 你是一位专业的客户服务回复助手。你的任务是将内部讨论的语音转录转化为专业、得体的客户服务回复。
@@ -973,6 +989,7 @@ prompt_customer_service = """
 prompt_creative_writing_shortcut = "ctrl + alt + shift + f8"
 # 切换提示风格为创意写作优化助手的快捷键
 # 注意避免快捷键冲突
+# 留空则 不绑定
 
 prompt_creative_writing = """
 你是一位创意写作助手。你的任务是将语音转录的零散想法转化为富有文学性的创意文本。
@@ -1047,6 +1064,25 @@ api = "http://127.0.0.1:1188/translate"
 model_dir = "models"
 # 模型文件目录
 
+funasr_dir = "models/FunASR-nano-onnx"
+# FunASR 路径
+
+funasr_tokenizer_dir = "models/FunASR-nano-onnx/Qwen3-0.6B"
+# FunASR tokens 路径
+
+funasr_encoder_adaptor_path = "models/FunASR-nano-onnx/encoder_adaptor.onnx"
+# FunASR encoder_adaptor 模型路径
+
+funasr_embedding_path = "models/FunASR-nano-onnx/embedding.onnx"
+# FunASR embedding 模型路径
+
+funasr_llm_path = "models/FunASR-nano-onnx/llm_int8_compat/llm.int8.onnx"
+# FunASR llm 模型路径
+# 在部分 仅支持 AVX2 的 CPU 环境下，原始 llm_int8/llm.int8.onnx 可能出现推理数值异常，导致转写结果“崩坏”（重复词、乱码等）。
+# 为兼容此类机器，提供 llm_int8_compat 目录下的 INT8 兼容模型（包含多个候选版本，可按需替换 llm_int8/llm.int8.onnx 使用）：
+# llm_int8_compat/llm.int8.onnx（默认兼容版）
+# llm_int8_compat/llm.int8.u8s8.rr.onnx（备选兼容版）
+
 sensevoice_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx"
 # SenseVoice 模型路径
 
@@ -1065,6 +1101,56 @@ punc_model_dir = "models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024
 opus_mt_dir = "models/Helsinki-NLP--opus-mt-zh-en"
 # 离线翻译模型目录
 
+
+# ======================FunASR 参数配置==================================
+[funasr_args]
+encoder_adaptor = "${model_paths.funasr_encoder_adaptor_path}"
+# encoder_adaptor 模型路径
+
+llm = "${model_paths.funasr_llm_path}"
+# llm 模型路径
+
+embedding = "${model_paths.funasr_embedding_path}"
+# embedding 模型路径
+
+tokenizer = "${model_paths.funasr_tokenizer_dir}"
+# tokens 模型路径
+
+num_threads = 4
+# 线程数
+
+sample_rate = 16000
+# 采样率
+
+feature_dim = 80
+# 特征维度
+
+decoding_method = "greedy_search"
+# 解码方法
+
+debug = false
+# 是否启用调试模式
+
+provider = 'cpu'
+# 推理设备
+
+system_prompt = "You are a helpful assistant."
+# 系统提示
+
+user_prompt = "Transcription:"
+# 用户提示
+
+max_new_tokens = 512
+# 最大生成长度
+
+temperature = 0.7
+# 采样温度
+
+top_p = 0.8
+# 采样 nucleus 概率
+
+seed = 42
+# 随机数种子
 
 # ======================SenseVoice 参数配置==================================
 

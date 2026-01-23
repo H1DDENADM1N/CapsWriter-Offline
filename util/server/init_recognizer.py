@@ -12,7 +12,7 @@ import jieba
 import sherpa_onnx
 from loguru import logger
 
-from util.config import ModelPaths, ParaformerArgs, SenseVoiceArgs
+from util.config import FunASRArgs, ModelPaths, ParaformerArgs, SenseVoiceArgs
 from util.config import ServerConfig as Config
 from util.empty_working_set import empty_current_working_set
 from util.safe_logger import init_logging
@@ -20,8 +20,10 @@ from util.server.cosmic import console
 
 if Config.model == "Paraformer":
     from util.server.recognize_paraformer import recognize
-else:
+elif Config.model == "Sensevoice":
     from util.server.recognize_sensevoice import recognize
+else:
+    from util.server.recognize_funasr import recognize
 
 
 def disable_jieba_debug():
@@ -47,11 +49,19 @@ def init_recognizer(queue_in: Queue, queue_out: Queue, sockets_id):
                 if not key.startswith("_")
             }
         )
-    else:
+    elif Config.model == "Sensevoice":
         recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
             **{
                 key: value
                 for key, value in SenseVoiceArgs.__dict__.items()
+                if not key.startswith("_")
+            }
+        )
+    else:
+        recognizer = sherpa_onnx.OfflineRecognizer.from_funasr_nano(
+            **{
+                key: value
+                for key, value in FunASRArgs.__dict__.items()
                 if not key.startswith("_")
             }
         )
@@ -100,9 +110,12 @@ def init_recognizer(queue_in: Queue, queue_out: Queue, sockets_id):
             )
             continue
 
+        # 执行识别
         if Config.model == "Paraformer":
-            result = recognize(recognizer, punc_model, task)  # 执行识别
+            result = recognize(recognizer, punc_model, task)
+        elif Config.model == "Sensevoice":
+            result = recognize(recognizer, task)
         else:
-            result = recognize(recognizer, task)  # 执行识别
+            result = recognize(recognizer, task)
 
         queue_out.put(result)  # 返回结果

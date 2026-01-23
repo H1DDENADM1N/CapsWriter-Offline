@@ -206,12 +206,39 @@ class DeepLXConfig:
 # 模型路径配置
 class ModelPaths:
     model_dir: Path = Path(config["model_paths"]["model_dir"])
+    funasr_dir: Path = Path(config["model_paths"]["funasr_dir"])
+    funasr_tokenizer_dir: Path = Path(config["model_paths"]["funasr_tokenizer_dir"])
+    funasr_encoder_adaptor_path: Path = Path(
+        config["model_paths"]["funasr_encoder_adaptor_path"]
+    )
+    funasr_embedding_path: Path = Path(config["model_paths"]["funasr_embedding_path"])
+    funasr_llm_path: Path = Path(config["model_paths"]["funasr_llm_path"])
     sensevoice_path: Path = Path(config["model_paths"]["sensevoice_path"])
     sensevoice_tokens_path: Path = Path(config["model_paths"]["sensevoice_tokens_path"])
     paraformer_path: Path = Path(config["model_paths"]["paraformer_path"])
     paraformer_tokens_path: Path = Path(config["model_paths"]["paraformer_tokens_path"])
     punc_model_dir: Path = Path(config["model_paths"]["punc_model_dir"])
     opus_mt_dir: Path = Path(config["model_paths"]["opus_mt_dir"])
+
+
+# FunASR 参数配置
+class FunASRArgs:
+    encoder_adaptor: str = config["model_paths"]["funasr_encoder_adaptor_path"]
+    llm: str = config["model_paths"]["funasr_llm_path"]
+    embedding: str = config["model_paths"]["funasr_embedding_path"]
+    tokenizer: str = config["model_paths"]["funasr_tokenizer_dir"]
+    num_threads: int = config["funasr_args"]["num_threads"]
+    sample_rate: int = config["funasr_args"]["sample_rate"]
+    feature_dim: int = config["funasr_args"]["feature_dim"]
+    decoding_method: str = config["funasr_args"]["decoding_method"]
+    debug: bool = config["funasr_args"]["debug"]
+    provider: str = config["funasr_args"]["provider"]
+    system_prompt: str = config["funasr_args"]["system_prompt"]
+    user_prompt: str = config["funasr_args"]["user_prompt"]
+    max_new_tokens: int = config["funasr_args"]["max_new_tokens"]
+    temperature: float = config["funasr_args"]["temperature"]
+    top_p: float = config["funasr_args"]["top_p"]
+    seed: int = config["funasr_args"]["seed"]
 
 
 # SenseVoice 参数配置
@@ -260,6 +287,7 @@ def print_config():
         LibreTranslateConfig,
         DeepLXConfig,
         ModelPaths,
+        FunASRArgs,
         SenseVoiceArgs,
         ParaformerArgs,
     ]
