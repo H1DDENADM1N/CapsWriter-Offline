@@ -39,6 +39,7 @@ from tomlkit import dumps, parse
 from util.check_process import check_process
 from util.client.check_microphone_usage import is_microphone_in_use
 from util.config import ClientConfig as Config
+from util.explorer_token_downgrade import downgraded_via_explorer_token
 from util.safe_logger import init_logging
 
 
@@ -1871,11 +1872,16 @@ def start_client_gui():
         Config.hint_while_recording_at_edit_position_powered_by_ahk
         and not check_process("hint_while_recording.exe")
         and Path("hint_while_recording.exe").exists()
-        # and Config.hold_mode
     ):
-        subprocess.Popen(
-            ["hint_while_recording.exe"], creationflags=subprocess.CREATE_NO_WINDOW
-        )
+        try:
+            # 降权运行 AHK 提示
+            downgraded_via_explorer_token(
+                "hint_while_recording.exe", working_directory=str(Path.cwd())
+            )
+        except Exception:
+            subprocess.Popen(
+                ["hint_while_recording.exe"], creationflags=subprocess.CREATE_NO_WINDOW
+            )
     app = QApplication(sys.argv)
     if Config.hint_while_recording_at_cursor_position:
         tooltip = Hint_While_Recording_At_Cursor_Position()
