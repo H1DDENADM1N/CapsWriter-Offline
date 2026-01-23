@@ -17,7 +17,10 @@ from PySide6.QtWidgets import (
 )
 from qt_material import apply_stylesheet
 
+from util.client.restart import stop_client
+from util.explorer_token_downgrade import downgraded_via_explorer_token
 from util.safe_logger import init_logging
+from util.server.restart import stop_server
 
 
 class ConfigSelector(QDialog):
@@ -153,17 +156,30 @@ class ConfigSelector(QDialog):
 
             logger.info(f"成功应用配置: {selected_filename}.toml")
 
-            QMessageBox.information(
+            # 显示新的OK/Cancel弹窗
+            reply = QMessageBox.question(
                 self,
-                "成功",
-                f'🎉 配置已切换为: {selected_filename}.toml<br><br>请 <font color="#f44336">手动重启</font> 服务端和客户端以加载新的配置。',
+                "配置已切换",
+                f'🎉 配置已切换为: {selected_filename}.toml<br><br>是否立即重启服务以生效新配置？<br><br><font color="#f44336">注意：这将会关闭客户端和服务端。</font>',
+                QMessageBox.Ok | QMessageBox.Cancel,
+                QMessageBox.Ok,
             )
+
+            if reply == QMessageBox.Ok:
+                self.on_restart_to_enable_new_config()
 
             self.accept()
 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"操作过程中发生未知错误:\n{e}")
             logger.error(f"操作过程中发生未知错误:\n{e}")
+
+    def on_restart_to_enable_new_config(self):
+        stop_client()
+        stop_server()
+        downgraded_via_explorer_token(
+            "start_server_gui.exe", working_directory=str(self.current_dir)
+        )
 
 
 if __name__ == "__main__":
