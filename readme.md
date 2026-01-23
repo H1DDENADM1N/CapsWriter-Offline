@@ -414,7 +414,7 @@ logger_level = "ERROR" # 调试日志级别
 
 # ======================服务端配置==================================
 [server]
-model = "FunASR"
+model = "Sensevoice"
 # 'FunASR' 、 'Sensevoice' 或 'Paraformer'
 # Sensevoice模型虽然多了粤英日韩多语种，但是，中文识别效果大不如Paraformer模型
 # 比如转录字幕不完整，识别结果不准确、丢失标点等
@@ -427,10 +427,10 @@ addr = "0.0.0.0"
 speech_recognition_port = "6016"
 # 语音识别服务端口
 
-start_online_translate_server = false
+start_online_translate_server = true
 # 是否启用在线翻译服务
 
-start_offline_translate_server = false
+start_offline_translate_server = true
 # 是否启用离线翻译服务
 
 offline_translate_port = "6017"
@@ -491,13 +491,13 @@ disable_exe_list_on_focus = [""]
 disable_exe_list = [""]
 # 在运行这些程序时(包括在背景运行)，不启用客户端功能:语音输入
 
-use_offline_translate_function = false
+use_offline_translate_function = true
 # 是否启用离线翻译功能
 
 offline_translate_shortcut = "left shift"
 # 控制离线翻译的快捷键，默认是 "left shift"，按住 Left Shift 再按 CapsLock 进行离线翻译
 
-use_online_translate_function = false
+use_online_translate_function = true
 # 是否启用在线翻译功能
 
 online_translate_shortcut = "right shift"
@@ -705,7 +705,7 @@ opencc_converter = "s2t"
 # t2jp Traditional Chinese Characters (Kyūjitai) to New Japanese Kanji (Shinjitai) 繁体（OpenCC 标准，旧字体）到日文新字体
 # jp2t New Japanese Kanji (Shinjitai) to Traditional Chinese Characters (Kyūjitai) 日文新字体到繁体（OpenCC 标准，旧字体）
 
-enable_ai_optimize_language_expression = false
+enable_ai_optimize_language_expression = true
 # 是否启用 AI 优化语言表达
 # 启用后预计增加 5s 时间延长
 
