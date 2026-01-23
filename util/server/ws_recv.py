@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 from base64 import b64decode
 
 import websockets
@@ -105,15 +106,42 @@ async def message_handler(websocket, message, cache: Cache):
 
 
 async def ws_recv(websocket):
-    global status_mic
-
     init_logging()
+
+    client_id = f"client_{uuid.uuid4().hex[:8]}"
+
     # 登记 socket 到字典，以 socket id 字符串为索引
     sockets = Cosmic.sockets
     sockets_id = Cosmic.sockets_id
     sockets[str(websocket.id)] = websocket
     sockets_id.append(str(websocket.id))
-    console.print(f"接客了：{websocket}\n", style="yellow")
+
+    # 显示连接信息，同时显示两个ID
+    with console.resize(width=44):
+        console.rule("[green]连接成功")
+    console.print(f"服务端 WebSocket ID: [dim]{websocket.id}[/dim]\n", style="")
+    console.print(f"客户端地址: [dim]{websocket.remote_address}[/dim]", style="")
+    console.print(f"客户端ID: [cyan]{client_id}[/cyan]", style="")
+    console.print()
+
+    logger.info(f"新客户端连接: 客户端ID={client_id}, WebSocket ID={websocket.id}")
+
+    # 发送客户端ID给客户端
+    try:
+        welcome_message = {
+            "type": "connection_ack",
+            "client_id": client_id,
+            "server_websocket_id": str(websocket.id),
+            "remote_address": str(websocket.remote_address),
+            "timestamp": time.time(),
+        }
+        await websocket.send(json.dumps(welcome_message))
+        logger.info(
+            f"[dim]已发送客户端ID给客户端: 服务端分配的客户端ID={client_id}, 服务端WebSocket ID={websocket.id}[/dim]"
+        )
+
+    except Exception as e:
+        console.print(f"[red]发送欢迎消息失败: {e}[/red]")
 
     # 设定分段长度
     seg_duration = 15
@@ -137,7 +165,7 @@ async def ws_recv(websocket):
         )
         logger.info("ConnectionClosed...")
     except websockets.exceptions.ConnectionClosedError:
-        console.print("ConnectionClosed...")
+        console.print("ConnectionClosed...\n")
         logger.error("ConnectionClosedError..., socket closed unexpectedly")
     except websockets.ConnectionClosed:
         console.print(

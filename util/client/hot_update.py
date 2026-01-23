@@ -4,12 +4,13 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Literal
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from util.client import hot_kwds, hot_sub_en, hot_sub_rule, hot_sub_zh
-from util.client.cosmic import console
+from util.client.cosmic import Cosmic, console
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tomlkit import parse
@@ -27,9 +28,12 @@ def update_hot_zh():
     if not path_zh.exists():
         with open(path_zh, "w", encoding="utf-8") as f:
             f.write("# 在此文件放置中文热词，每行一个，开头带井号表示注释，会被省略")
-    with open(path_zh, "r", encoding="utf-8") as f:
-        num_hot_zh = hot_sub_zh.更新热词词典(f.read())
-    console.print(f"已载入 [green4]{num_hot_zh:5}[/] 条中文热词")
+    if Config.hot_zh:
+        with open(path_zh, "r", encoding="utf-8") as f:
+            num_hot_zh = hot_sub_zh.更新热词词典(f.read())
+        console.print(f"已载入 [green4]{num_hot_zh:5}[/] 条中文热词")
+    if Config.hot_rag:
+        update_hot_rag()
 
 
 def update_hot_en():
@@ -38,9 +42,12 @@ def update_hot_en():
             f.write(
                 "# 在此文件放置英文热词 \n# Put English hot words here, one per line. Line starts with # will be ignored. "
             )
-    with open(path_en, "r", encoding="utf-8") as f:
-        num_hot_en = hot_sub_en.更新热词词典(f.read())
-    console.print(f"已载入 [green4]{num_hot_en:5}[/] 条英文热词")
+    if Config.hot_en:
+        with open(path_en, "r", encoding="utf-8") as f:
+            num_hot_en = hot_sub_en.更新热词词典(f.read())
+        console.print(f"已载入 [green4]{num_hot_en:5}[/] 条英文热词")
+    if Config.hot_rag:
+        update_hot_rag()
 
 
 def update_hot_rule():
@@ -75,6 +82,36 @@ def update_hot_kwds():
     with open(path_kwds, "r", encoding="utf-8") as f:
         num_kwd = hot_kwds.do_updata_kwd(f.read())
     console.print(f"已载入 [green4]{num_kwd:5}[/] 条日记关键词")
+
+
+def update_hot_rag():
+    if not path_zh.exists():
+        with open(path_zh, "w", encoding="utf-8") as f:
+            f.write("# 在此文件放置中文热词，每行一个，开头带井号表示注释，会被省略")
+    if not path_en.exists():
+        with open(path_en, "w", encoding="utf-8") as f:
+            f.write(
+                "# 在此文件放置英文热词 \n# Put English hot words here, one per line. Line starts with # will be ignored. "
+            )
+    num_rag_after_clear, num_rag_cleaned = Cosmic.corrector.clear_hotwords()
+    if num_rag_cleaned != 0:
+        console.print(f"已清理 [green4]{num_rag_cleaned:5}[/] 条热词 (RAG)")
+    # console.print(f"当前有 [green4]{num_rag_after_clear:5}[/] 条热词 (RAG)")
+    num_zh_rag = Cosmic.corrector.load_hotwords_file(path_zh, append_mode=True)
+    console.print(f"已载入 [green4]{num_zh_rag:5}[/] 条中文热词 (RAG)")
+    num_en_rag = Cosmic.corrector.load_hotwords_file(path_en, append_mode=True)
+    console.print(f"已载入 [green4]{num_en_rag:5}[/] 条英文热词 (RAG)")
+    if num_rag_cleaned > num_zh_rag + num_en_rag:
+        console.print(
+            f"[green4]共减少 [/] [red]{num_rag_cleaned - num_zh_rag - num_en_rag:5}[/] 条热词 (RAG)"
+        )
+    elif num_rag_cleaned < num_zh_rag + num_en_rag:
+        console.print(
+            f"[green4]共增加 [/] [red]{num_zh_rag + num_en_rag - num_rag_cleaned:5}[/] 条热词 (RAG)"
+        )
+    else:
+        # console.print(f"[green4]热词总数 (RAG) 未发生改变 [/]")
+        pass
 
 
 def update_config():
@@ -239,10 +276,16 @@ def mask_key(key):
 
 
 def update_hot_all():
-    update_hot_zh()
-    update_hot_en()
-    update_hot_rule()
-    update_hot_kwds()
+    if Config.hot_zh:
+        update_hot_zh()
+    if Config.hot_en:
+        update_hot_en()
+    if Config.hot_rule:
+        update_hot_rule()
+    if Config.hot_kwd:
+        update_hot_kwds()
+    if Config.hot_rag:
+        update_hot_rag()
     console.line()
 
 

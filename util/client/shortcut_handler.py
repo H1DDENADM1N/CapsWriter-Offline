@@ -2,15 +2,17 @@ import asyncio
 import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from threading import Event
 
 import keyboard
 from flask import sessions
 from loguru import logger
 from pycaw.pycaw import AudioUtilities
+from tomlkit import dumps, parse
 
 from util.check_process import check_focus, check_process
-from util.client.cosmic import Cosmic
+from util.client.cosmic import Cosmic, console
 from util.client.pause_other_audio import (
     get_audio_playing_apps,
     handle_special_media_apps,
@@ -28,6 +30,8 @@ if shutil.which("ffplay") and Config.play_stop_music:
     from util.client.play_music import play_music
 if shutil.which("ffplay") and Config.play_start_music:
     from util.client.play_music import play_music
+
+config_toml_path = Path("config.toml")
 
 
 task = asyncio.Future()
@@ -52,6 +56,7 @@ restore_capslock_task = None
 sessions = []
 saved_special_apps = []
 ignore_recording_order = False
+
 
 def shortcut_correct(e: keyboard.KeyboardEvent):
     # 在我的 Windows 电脑上，left ctrl 和 right ctrl 的 keycode 都是一样的，
@@ -89,9 +94,9 @@ def handle_disable_exe_list():
 
 async def allow_recording_after_delay():
     # 异步延迟1秒（不阻塞事件循环）
-    await asyncio.sleep(1) # 这个延迟时间需要自定义定制吗？
+    await asyncio.sleep(1)  # 这个延迟时间需要自定义定制吗？
     global key_pressed
-    key_pressed =False
+    key_pressed = False
 
 
 def mute_all_sessions():
@@ -205,10 +210,7 @@ def launch_task():
     # 現在不採用異步的方法, 除非有辦法能解決短時間內抬起，不會恢復播放的問題
     # Git: 753321e008117e227d666efba188543c4200b48e
 
-    global \
-        hold_mode_first_time_cancel_task, \
-        unmute_task, \
-        restore_capslock_task
+    global hold_mode_first_time_cancel_task, unmute_task, restore_capslock_task
 
     # 开始任务时播放提示音
     if shutil.which("ffplay") and Config.play_start_music:
@@ -434,9 +436,9 @@ def click_mode(e: keyboard.KeyboardEvent):
         is_short_duration, \
         restore_audio_playing_needed, \
         restore_capslock_task, \
-        return_allowed,\
+        return_allowed, \
         ignore_recording_order
-    
+
     if e.event_type == keyboard.KEY_DOWN and not key_pressed:
         key_pressed = True  # 锁上
         return_allowed = False  # 重置状态
@@ -447,7 +449,9 @@ def click_mode(e: keyboard.KeyboardEvent):
             if handle_disable_exe_list_on_focus():
                 ignore_recording_order = True
                 # 进一步减低进来的频率
-                asyncio.run_coroutine_threadsafe(allow_recording_after_delay(), Cosmic.loop)
+                asyncio.run_coroutine_threadsafe(
+                    allow_recording_after_delay(), Cosmic.loop
+                )
                 # 模拟按键按下
                 keyboard.press(Config.speech_recognition_shortcut)
                 return
@@ -458,7 +462,7 @@ def click_mode(e: keyboard.KeyboardEvent):
                 keyboard.press(Config.speech_recognition_shortcut)
                 key_pressed = False  # 和上面的`allow_recording_after_delay()` 2选1
                 return
-            
+
         if restore_capslock_task is None:
             restore_capslock_task = asyncio.run_coroutine_threadsafe(
                 original_capslock_function(),  # 提交封装好的异步任务
@@ -591,19 +595,23 @@ def hold_mode(e: keyboard.KeyboardEvent):
         saved_result_for_offline_translate_needed, \
         saved_result_for_online_translate_needed, \
         ignore_recording_order
-    
+
     # 处理按键按下事件
     if e.event_type == "down":
         if not key_pressed:
             key_pressed = True  # 锁上
-            ignore_recording_order = False  # 重置状态; 此变量让 "e.event_type == "up" 之后的代码可以妥善处理
+            ignore_recording_order = (
+                False  # 重置状态; 此变量让 "e.event_type == "up" 之后的代码可以妥善处理
+            )
 
             # `屏蔽录音命令`的功能放在 "key_pressed 锁" 之后, 减少判断次数; 直接在更接近源头的地方进行判断, 平时没必要进入
             if Config.disable_exe_list_on_focus:
                 if handle_disable_exe_list_on_focus():
                     ignore_recording_order = True
                     # 进一步减低进来的频率
-                    asyncio.run_coroutine_threadsafe(allow_recording_after_delay(), Cosmic.loop)
+                    asyncio.run_coroutine_threadsafe(
+                        allow_recording_after_delay(), Cosmic.loop
+                    )
                     if Config.suppress:
                         # 模拟按键按下; "suppress = Ture" 才需要模拟
                         keyboard.press(Config.speech_recognition_shortcut)
@@ -673,7 +681,7 @@ def hold_mode(e: keyboard.KeyboardEvent):
 
                 if Config.suppress:
                     keyboard.send(Config.speech_recognition_shortcut)
-                    
+
             # 取消或完成任务
             if is_short_press and not double_clicked:
                 hold_mode_first_time_cancel_task = True
@@ -736,7 +744,93 @@ def click_handler(e: keyboard.KeyboardEvent) -> None:
     click_mode(e)
 
 
+def update_prompt_style_handler(style: str) -> None:
+    try:
+        with config_toml_path.open("r", encoding="utf-8") as f:
+            config_str = f.read()
+            config = parse(config_str)
+        config["client"]["prompt_style_selection"] = style
+        with config_toml_path.open("w", encoding="utf-8") as f:
+            f.write(dumps(config))
+    except Exception as e:
+        console.print(
+            f"{Config.prompt_official_shortcut} 快捷键修改提示风格 {style} 失败: {e}"
+        )
+        init_logging()
+        logger.error(f"保存配置文件失败: {e}")
+        return
+
+
+def prompt_official_handler() -> None:
+    update_prompt_style_handler("official")
+
+
+def prompt_sweetheart_handler() -> None:
+    update_prompt_style_handler("sweetheart")
+
+
+def prompt_social_handler() -> None:
+    update_prompt_style_handler("social")
+
+
+def prompt_poetry_handler() -> None:
+    update_prompt_style_handler("poetry")
+
+
+def prompt_english_handler() -> None:
+    update_prompt_style_handler("english")
+
+
+def prompt_academic_handler() -> None:
+    update_prompt_style_handler("academic")
+
+
+def prompt_customer_service_handler() -> None:
+    update_prompt_style_handler("customer_service")
+
+
+def prompt_creative_writing_handler() -> None:
+    update_prompt_style_handler("creative_writing")
+
+
 def bond_shortcut():
+    if Config.prompt_official_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_official_shortcut, prompt_official_handler, suppress=False
+        )
+    if Config.prompt_sweetheart_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_sweetheart_shortcut, prompt_sweetheart_handler, suppress=False
+        )
+    if Config.prompt_social_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_social_shortcut, prompt_social_handler, suppress=False
+        )
+    if Config.prompt_poetry_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_poetry_shortcut, prompt_poetry_handler, suppress=False
+        )
+    if Config.prompt_english_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_english_shortcut, prompt_english_handler, suppress=False
+        )
+    if Config.prompt_academic_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_academic_shortcut, prompt_academic_handler, suppress=False
+        )
+    if Config.prompt_customer_service_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_customer_service_shortcut,
+            prompt_customer_service_handler,
+            suppress=False,
+        )
+    if Config.prompt_creative_writing_shortcut != "":
+        keyboard.add_hotkey(
+            Config.prompt_creative_writing_shortcut,
+            prompt_creative_writing_handler,
+            suppress=False,
+        )
+
     if Config.hold_mode:
         keyboard.hook_key(
             Config.speech_recognition_shortcut, hold_handler, suppress=Config.suppress

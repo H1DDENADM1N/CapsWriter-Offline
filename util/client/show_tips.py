@@ -7,7 +7,8 @@ from util.config import ClientConfig as Config
 
 
 def show_mic_tips():
-    console.rule("[bold #d55252]CapsWriter Offline Client")
+    with console.resize(width=55):
+        console.rule("[bold #d55252]CapsWriter Offline Client")
     # console.print(f'\n项目地址：[cyan underline]https://github.com/HaujetZhao/CapsWriter-Offline', end='\n\n')
     markdown = f"""
 
@@ -42,7 +43,8 @@ def show_mic_tips():
 4. MacOS 无法监测到 `caps lock` 按键，可改为 `right shift` 按键
     """
     console.print(Markdown(markdown), highlight=True)
-    console.rule()
+    with console.resize(width=45):
+        console.rule()
     console.print(f"\n当前基文件夹：[cyan underline]{os.getcwd()}")
     console.print(
         f"\n服务端地址： [cyan underline]{Config.addr}:{Config.speech_recognition_port}"

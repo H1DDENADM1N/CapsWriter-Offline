@@ -5,6 +5,7 @@ import clipman
 import keyboard
 from loguru import logger
 
+from util.client.cosmic import console
 from util.config import ClientConfig as Config
 from util.safe_logger import init_logging
 
@@ -12,6 +13,7 @@ from util.safe_logger import init_logging
 async def type_result(text):
     # 模拟粘贴
     if Config.paste:
+        console.print(f"模拟粘贴：{text}")
         # 保存剪切板
         try:
             # 初始化剪贴板模块
@@ -45,4 +47,5 @@ async def type_result(text):
 
     # 模拟打印
     else:
+        console.print(f"模拟打印：{text}")
         keyboard.write(text)

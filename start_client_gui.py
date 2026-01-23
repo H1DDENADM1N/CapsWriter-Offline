@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 from queue import Queue
 
@@ -12,7 +13,7 @@ import win32gui
 import win32print
 from loguru import logger
 from PySide6.QtCore import QFileSystemWatcher, QPoint, QStandardPaths, Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QWheelEvent
+from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QTextCursor, QWheelEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -66,6 +67,56 @@ class Hint_While_Recording_At_Cursor_Position(QLabel):
             self.setVisible(True)
         else:
             self.setVisible(False)
+
+
+class TimeOverlayLabel(QLabel):
+    """
+    在界面上显示半透明的时间标签
+    """
+
+    def __init__(self, parent=None):
+        super().__init__("", parent)
+        self._setup_style()
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)  # 让鼠标事件穿透
+        self.setAttribute(Qt.WA_TranslucentBackground)
+
+        # 初始化时钟
+        self._init_timer()
+
+    def _setup_style(self):
+        """设置时间标签样式"""
+        self.setStyleSheet(
+            """
+            color: rgba(0, 178, 148, 255);
+            background-color: transparent;
+            font-family: 'LCD';
+            font-size: 90px;
+            font-weight: bold;
+            """
+        )
+
+    def _init_timer(self):
+        """初始化时钟功能"""
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_time)
+        self.timer.start(50)  # 每50ms更新一次
+        self.update_time()  # 立即更新一次时间
+
+    def update_time(self):
+        """更新时间显示"""
+        # current_time = datetime.now().strftime("%H:%M:%S") # 24小时制
+        current_time = datetime.now().strftime("%I:%M:%S")  # 12小时制
+        self.setText(current_time)
+
+    def stop_timer(self):
+        """停止定时器"""
+        if self.timer:
+            self.timer.stop()
+
+    def start_timer(self):
+        """启动定时器"""
+        if self.timer and not self.timer.isActive():
+            self.timer.start(50)
 
 
 class InputDialog_Api_Key:
@@ -342,9 +393,18 @@ class GUI(QMainWindow):
         self.edgeMargin = 5  # 侧边停靠残余像素值
         self.isBerthLeft = False
         self.isBerthRight = False
+        self.original_stays_on_top = bool(
+            self.windowFlags() & Qt.WindowStaysOnTopHint
+        )  # 记录原始置顶状态
 
         # 初始化文件系统监控器
         self.init_file_watcher()
+
+    def create_time_label(self):
+        """创建时间标签"""
+        if not hasattr(self, "time_label") and Config.show_time_label:
+            self.time_label = TimeOverlayLabel(self.centralWidget())
+            self.adjust_time_label_position()
 
     def load_config(self):
         """加载配置文件到内存"""
@@ -421,7 +481,7 @@ class GUI(QMainWindow):
         self.resize(425, 425)
         self.setWindowTitle("CapsWriter-Offline-Client")
         self.setWindowIcon(QIcon("assets/icon/client-icon.ico"))
-        self.setWindowOpacity(0.9)
+        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setWindowFlags(
             self.windowFlags()
             | Qt.FramelessWindowHint  # 隐藏标题栏
@@ -586,10 +646,51 @@ class GUI(QMainWindow):
             case _:
                 logger.warning(f"不支持的 AI 提供商：{ai_provider}")
 
+    def show_prompt_style_notification(self, prompt_style: str):
+        """显示提示风格变更通知"""
+        notifications = {
+            "official": ("新提示风格已启用", "正式公文"),
+            "sweetheart": ("新提示风格已启用", "甜言蜜语"),
+            "social": ("新提示风格已启用", "社媒文案"),
+            "poetry": ("新提示风格已启用", "赋诗一首"),
+            "english": ("新提示风格已启用", "英语大师"),
+            "academic": ("新提示风格已启用", "学术论文"),
+            "customer_service": ("新提示风格已启用", "客户服务"),
+            "creative_writing": ("新提示风格已启用", "创意写作"),
+        }
+
+        if prompt_style in notifications:
+            title, message = notifications[prompt_style]
+            self.tray_icon.showMessage(
+                title,
+                message,
+                QSystemTrayIcon.Information,
+                2000,
+            )
+
     def update_prompt_style_menu(self, prompt_style: str):
         """更新提示风格菜单选中状态"""
-        # 先取消所有选中状态
-        for action in [
+        # 获取当前配置文件中的值
+        actual_current_value = self.get_config_value(
+            "client.prompt_style_selection", "official"
+        )
+
+        # 通过比较传入值和实际配置值来确定是否显示通知
+        # 仅在函数被调用且值确实已更改时显示通知
+        if hasattr(self, "_last_updated_prompt_style"):
+            # 如果之前已更新过，那么比较上次更新的值和现在的实际配置值
+            should_show_notification = (
+                self._last_updated_prompt_style != actual_current_value
+            )
+        else:
+            # 第一次调用，不显示通知
+            should_show_notification = False
+
+        # 更新内部记录的值
+        self._last_updated_prompt_style = actual_current_value
+
+        # 取消所有菜单项的选中状态
+        all_actions = [
             self.prompt_official_action,
             self.prompt_sweetheart_action,
             self.prompt_social_action,
@@ -598,10 +699,12 @@ class GUI(QMainWindow):
             self.prompt_academic_action,
             self.prompt_customer_service_action,
             self.prompt_creative_writing_action,
-        ]:
+        ]
+
+        for action in all_actions:
             action.setChecked(False)
 
-        # 根据配置文件设置选中状态
+        # 设置正确的菜单项为选中状态
         match prompt_style:
             case "official":
                 self.prompt_official_action.setChecked(True)
@@ -621,6 +724,10 @@ class GUI(QMainWindow):
                 self.prompt_creative_writing_action.setChecked(True)
             case _:
                 logger.warning(f"不支持的 AI 提示风格：{prompt_style}")
+
+        # 启用了 是否在切换提示风格时显示提示  而且  AI 提示风格 确实发生变化时才显示通知
+        if Config.show_prompt_style_changed_notification and should_show_notification:
+            self.show_prompt_style_notification(actual_current_value)
 
     def create_custom_title_bar(self):
         # 创建自定义标题栏
@@ -1200,12 +1307,22 @@ class GUI(QMainWindow):
         else:
             new_value = ""
 
-        # 更新内存配置并保存到文件
-        if self.set_config_value("client.prompt_style_selection", new_value):
-            if not self.save_config():
-                logger.error("保存配置文件失败")
-        else:
-            logger.error("更新内存配置失败")
+        # 获取当前的配置值
+        current_config_value = self.get_config_value(
+            "client.prompt_style_selection", "official"
+        )
+
+        # 只有在值真正改变时才更新配置和显示通知
+        if current_config_value != new_value:
+            # 更新内存配置并保存到文件
+            if self.set_config_value("client.prompt_style_selection", new_value):
+                if self.save_config():
+                    # 手动更新托盘菜单，这将显示通知（因为值确实改变了）
+                    self.update_prompt_style_menu(new_value)
+                else:
+                    logger.error("保存配置文件失败")
+            else:
+                logger.error("更新内存配置失败")
 
     def restart_client(self):
         subprocess.Popen(
@@ -1254,8 +1371,10 @@ class GUI(QMainWindow):
         # 切换窗口置顶状态
         if self.windowFlags() & Qt.WindowStaysOnTopHint:
             self.setWindowFlags(self.windowFlags() ^ Qt.WindowStaysOnTopHint)
+            self.original_stays_on_top = False  # 更新原始状态
         else:
             self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+            self.original_stays_on_top = True  # 更新原始状态
             global gui
         window_is_on_top = bool(gui.windowFlags() & Qt.WindowStaysOnTopHint)
         if window_is_on_top:
@@ -1358,10 +1477,40 @@ class GUI(QMainWindow):
         except Exception as e:
             logger.error(f"启动转录进程失败: {e}")
 
+    def hideEvent(self, event):
+        """当窗口被隐藏时停止时间标签计时器"""
+        if Config.show_time_label and hasattr(self, "time_label"):
+            self.time_label.stop_timer()
+        super().hideEvent(event)
+
+    def showEvent(self, event):
+        """当窗口显示时不显示时间标签而是显示客户端界面，并滚动到最下行"""
+        self.show_client_interface()
+        super().showEvent(event)
+
     def closeEvent(self, event):
         # Minimize to system tray instead of closing the window when the user clicks the close button
         self.hide()  # Hide the window
         event.ignore()  # Ignore the close event
+
+    def show_client_interface(self):
+        """不显示时间标签，显示客户端界面，并滚动到最下行"""
+        if Config.show_time_label and hasattr(self, "time_label"):
+            self.time_label.stop_timer()
+            self.time_label.hide()  # 隐藏时间标签
+        self.resize(425, 425)
+        self.text_box_client.setStyleSheet("background-color: rgba(35, 38, 41, 255);")
+        self.setStyleSheet("background-color: rgba(49, 54, 59, 255);")
+        self.text_box_client.setVisible(True)  # 显示文本框
+        for i in range(self.title_bar.count()):  # 显示标题栏
+            widget = self.title_bar.itemAt(i).widget()
+            if widget is not None:
+                widget.setVisible(True)
+        for i in range(self.layout2.count()):  # 显示操作栏
+            widget = self.layout2.itemAt(i).widget()
+            if widget is not None:
+                widget.setVisible(True)
+        self.text_box_client.moveCursor(QTextCursor.End)  # 滚动到最下行
 
     def quit_app(self):
         init_logging()
@@ -1402,7 +1551,86 @@ class GUI(QMainWindow):
     def on_tray_icon_activated(self, reason):
         # Called when the system tray icon is activated
         if reason == QSystemTrayIcon.DoubleClick:
-            self.showNormal()  # Show the main window
+            # 如果窗口是时钟状态且不再中心位置，从时钟状态切换为客户端界面
+            if self.is_clock() and not self.is_centered():
+                self.show_client_interface()
+                return
+            # 如果窗口已经可见且在中心位置，则隐藏它
+            if self.isVisible() and self.is_centered():
+                self.hide()
+            else:
+                self.show_window_centered()  # Show the main window centered
+
+    def is_clock(self):
+        """检查窗口是否是时钟状态"""
+        if not Config.show_time_label:
+            return False
+        if not hasattr(self, "time_label"):
+            return False
+        if not self.isVisible():
+            return False
+        if self.time_label.isVisible():  # 时间标签显示状态
+            return True
+
+    def is_centered(self):
+        """检查窗口是否在屏幕中心"""
+        # 获取屏幕几何信息
+        screen = (
+            self.screen() if hasattr(self, "screen") else QApplication.primaryScreen()
+        )
+        screen_geometry = screen.availableGeometry()
+
+        # 获取窗口几何信息
+        window_geometry = self.frameGeometry()
+
+        # 计算预期的中心位置
+        center_point = screen_geometry.center()
+        expected_center_x = center_point.x() - window_geometry.width() // 2
+        expected_center_y = center_point.y() - window_geometry.height() // 2
+
+        # 检查当前窗口位置是否接近中心位置（允许几个像素的误差）
+        tolerance = 5  # 像素容差
+        return (
+            abs(window_geometry.x() - expected_center_x) <= tolerance
+            and abs(window_geometry.y() - expected_center_y) <= tolerance
+        )
+
+    def show_window_centered(self):
+        """显示窗口并居中"""
+        # 激活窗口
+        self.showNormal()
+        self.activateWindow()
+        self.show_client_interface()
+
+        # 临时设置窗口为置顶以便正确居中
+        was_on_top = bool(self.windowFlags() & Qt.WindowStaysOnTopHint)
+        if not was_on_top:
+            self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+            self.show()
+
+        # 获取主屏幕几何信息（而非当前屏幕）
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.availableGeometry()
+
+        # 获取窗口几何信息
+        window_geometry = self.frameGeometry()
+
+        # 计算居中位置
+        center_point = screen_geometry.center()
+        window_geometry.moveCenter(center_point)
+
+        # 移动窗口到中心位置
+        self.move(window_geometry.topLeft())
+
+        # 恢复原始的置顶状态
+        if not self.original_stays_on_top and was_on_top:
+            # 如果原始状态不是置顶，但现在是置顶的，则取消置顶
+            self.setWindowFlags(self.windowFlags() ^ Qt.WindowStaysOnTopHint)
+            self.show()
+        elif self.original_stays_on_top and not was_on_top:
+            # 如果原始状态是置顶，但现在不是置顶的，则设置为置顶
+            self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+            self.show()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
@@ -1473,8 +1701,39 @@ class GUI(QMainWindow):
             self.move(self.x() + delta.x(), self.y() + delta.y())
             self.old_pos = event.globalPosition().toPoint()
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if Config.show_time_label:
+            self.adjust_time_label_position()
+
+    def adjust_time_label_position(self):
+        """调整时间标签的位置，使其显示在文本框的中心，宽度与文本框相同"""
+        if not Config.show_time_label or not hasattr(self, "time_label"):
+            return
+
+        # 获取文本框的尺寸
+        container_size = self.text_box_client.size()
+        label_width = container_size.width()  # 宽度与文本框相同
+        label_height = container_size.height()  # 高度与文本框相同
+
+        # 设置时间标签位置（相对于父容器），覆盖整个文本框区域
+        x = 7  # 从左边开始
+        y = -100  # 从顶部开始
+
+        self.time_label.setGeometry(x, y, label_width, label_height)
+
     def enterEvent(self, event):
         super().enterEvent(event)
+        if Config.show_time_label:
+            self.create_time_label()  # 确保时间标签存在
+            self.time_label.stop_timer()  # 停止定时器
+            self.text_box_client.setVisible(True)
+            self.text_box_client.setStyleSheet(
+                "background-color: rgba(35, 38, 41, 255);"
+            )
+            self.time_label.setVisible(False)
+            self.setStyleSheet("background-color: rgba(49, 54, 59, 255);")
+            self.resize(425, 425)
         for i in range(self.title_bar.count()):  # 鼠标进入时显示标题栏
             widget = self.title_bar.itemAt(i).widget()
             if widget is not None:
@@ -1483,6 +1742,7 @@ class GUI(QMainWindow):
             widget = self.layout2.itemAt(i).widget()
             if widget is not None:
                 widget.setVisible(True)
+        self.text_box_client.moveCursor(QTextCursor.End)  # 滚动到最下行
         x, y, width, height, screenWidth, screenHeight = self.checkWindowInfo()
         if self.isBerthLeft:  # 已停靠在左边
             self.move(0, y)  # 从左边弹出，31是标题栏高度
@@ -1496,6 +1756,14 @@ class GUI(QMainWindow):
 
     def leaveEvent(self, event):
         super().leaveEvent(event)
+        if Config.show_time_label:
+            self.create_time_label()  # 确保时间标签存在
+            self.time_label.start_timer()  # 启动定时器
+            self.text_box_client.setVisible(False)
+            self.text_box_client.setStyleSheet("background-color: rgba(35, 38, 41, 0);")
+            self.time_label.setVisible(True)
+            self.setStyleSheet("background-color: rgba(49, 54, 59, 0);")
+            self.resize(425, 135)
         for i in range(self.title_bar.count()):  # 鼠标离开时隐藏标题栏
             widget = self.title_bar.itemAt(i).widget()
             if widget is not None:
@@ -1536,10 +1804,14 @@ class GUI(QMainWindow):
                 pass
 
     def berthToLeft(self, x, y, width, height, screenWidth, screenHeight):
+        if Config.show_time_label:
+            return  # 不停靠
         self.move(0 - width + self.edgeMargin, y)  # 停靠到左边，31是标题栏高度
         self.isBerthLeft = True
 
     def berthToRight(self, x, y, width, height, screenWidth, screenHeight):
+        if Config.show_time_label:
+            return  # 不停靠
         self.move(screenWidth - self.edgeMargin, y)  # 停靠到右边，31是标题栏高度
         self.isBerthRight = True
 

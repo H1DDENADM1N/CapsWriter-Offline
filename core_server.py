@@ -39,8 +39,9 @@ async def main():
     check_model()
 
     console.line(2)
-    console.rule("[bold #d55252]CapsWriter Offline Server")
-    console.line()
+    with console.resize(width=50):
+        console.rule("[bold #d55252]CapsWriter Offline Server")
+        console.line()
     console.print(
         "项目地址：[cyan underline]https://github.com/HaujetZhao/CapsWriter-Offline",
         end="\n\n",
@@ -78,9 +79,9 @@ async def main():
         else:
             console.print("启动在线翻译 DeepLX 服务...")
         run_online_translate_service()
-
-    console.rule("[green3]开始服务")
-    console.line()
+    with console.resize(width=44):
+        console.rule("[green3]开始服务")
+        console.line()
 
     # 清空物理内存工作集
     if system() == "Windows":

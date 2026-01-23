@@ -4,7 +4,9 @@ from multiprocessing import Queue
 from typing import Dict, List
 
 import websockets
-from rich.console import Console
+
+# from rich.console import Console
+from util.resizeable_console import Console
 
 original_stdout = sys.stdout
 try:

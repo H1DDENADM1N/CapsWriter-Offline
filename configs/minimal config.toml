@@ -13,8 +13,8 @@ logger_level = "ERROR" # 调试日志级别
 
 # ======================服务端配置==================================
 [server]
-model = "FunASR"
-# 'FunASR' 、 'Sensevoice' 或 'Paraformer'
+model = "Sensevoice"
+# 'Sensevoice' 或 'Paraformer'
 # Sensevoice模型虽然多了粤英日韩多语种，但是，中文识别效果大不如Paraformer模型
 # 比如转录字幕不完整，识别结果不准确、丢失标点等
 # 如果你只说中文普通话，建议使用 'Paraformer' 模型
@@ -44,7 +44,7 @@ format_punc = true
 format_spell = true
 # 是否调整中英之间的空格
 
-shrink_automatically_to_tray = true
+shrink_automatically_to_tray = false
 # 启动后是否自动缩小至托盘
 
 only_run_once = true
@@ -134,7 +134,7 @@ paste = true
 restore_clipboard_after_paste = true
 # 模拟粘贴后是否恢复剪贴板
 
-save_audio = true
+save_audio = false
 # 是否保存录音文件
 
 save_markdown = true
@@ -191,10 +191,10 @@ file_seg_duration = 25
 file_seg_overlap = 2
 # 转录文件时分段重叠：2 秒
 
-mute_other_audio = true
+mute_other_audio = false
 # 录音时是否静音其他音频播放
 
-pause_other_audio = true
+pause_other_audio = false
 # 录音时是否暂停其他音频播放
 
 QQMusic_global_pause_hotkey = "ctrl + alt + f5"
@@ -249,7 +249,7 @@ vscode_exe_path = "C:\\SSS\\VSCode\\Code - Insiders.exe"
 # 使用 VSCode 快速打开 CapsWriter 主目录
 # 方便调试
 
-play_start_music = true
+play_start_music = false
 # 开始任务时是否播放提示音
 # 需要 ffplay.exe
 
@@ -259,7 +259,7 @@ start_music_path = "assets/start.mp3"
 start_music_volume = "100"
 # 开始任务提示音的音量，0 ~ 100 之间
 
-play_stop_music = true
+play_stop_music = false
 # 结束任务时是否播放提示音
 # 需要 ffplay.exe
 
@@ -269,10 +269,10 @@ stop_music_path = "assets/stop.mp3"
 stop_music_volume = "50"
 # 结束任务提示音的音量，0 ~ 100 之间
 
-hint_while_recording_at_edit_position_powered_by_ahk = true
+hint_while_recording_at_edit_position_powered_by_ahk = false
 # 是否启用基于 AHK 的输入光标位置的输入状态提示功能
 
-hint_while_recording_at_cursor_position = true
+hint_while_recording_at_cursor_position = false
 # 是否启用跟随鼠标光标位置的新版输入状态提示功能
 
 check_microphone_usage_by = "注册表"
@@ -283,7 +283,7 @@ check_microphone_usage_by = "注册表"
 # 将强制忽略此项设置使用 "按键"
 # "按键" 是通过监测 `speech_recognition_shortcut` 状态是否按下进而推测是否在录音
 
-enable_double_click_opposite_state = true
+enable_double_click_opposite_state = false
 # 是否启用双击 `录音键` 临时转换 `简/繁` 体中文输出的功能
 
 convert_to_traditional_chinese_main = "简"
@@ -327,7 +327,7 @@ prompt_style_selection = "english"
 show_prompt_style_changed_notification = true
 # 是否在切换提示风格时显示提示
 
-show_time_label = true
+show_time_label = false
 # 是否在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面
 # 启用后不再进行靠边停靠，改善多显示屏用户体验
 
@@ -362,7 +362,7 @@ model = "Qwen/Qwen2.5-14B-Instruct"
 
 
 [client.prompt_style]
-prompt_official_shortcut = "ctrl + alt + shift + f1"
+prompt_official_shortcut = ""
 # 切换提示风格为正式公文文本校对助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -393,7 +393,7 @@ prompt_official = """
 输出要求：直接呈现润色完成的规范文本，无任何额外说明。
 """
 
-prompt_sweetheart_shortcut = "ctrl + alt + shift + f2"
+prompt_sweetheart_shortcut = ""
 # 切换提示风格为ptrue_heart的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -424,7 +424,7 @@ prompt_sweetheart = """
 输出要求：直接给出润色完成的"甜度满分"文本。
 """
 
-prompt_social_shortcut = "ctrl + alt + shift + f3"
+prompt_social_shortcut = ""
 # 切换提示风格为社交媒体文案优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -455,7 +455,7 @@ prompt_social = """
 输出要求：直接给出优化完成、适合一键发布的社交文案。
 """
 
-prompt_poetry_shortcut = "ctrl + alt + shift + f4"
+prompt_poetry_shortcut = ""
 # 切换提示风格为社交媒体文案优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -487,7 +487,7 @@ prompt_poetry = """
 输出要求：直接呈现创作完成的古典诗歌。
 """
 
-prompt_english_shortcut = "ctrl + alt + shift + f5"
+prompt_english_shortcut = ""
 # 切换提示风格为英文润色助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -519,7 +519,7 @@ prompt_english = """
 输出要求：直接给出润色后的地道美式英语文本。
 """
 
-prompt_academic_shortcut = "ctrl + alt + shift + f6"
+prompt_academic_shortcut = ""
 # 切换提示风格为学术论文优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -553,7 +553,7 @@ prompt_academic = """
 输出要求：直接呈现符合学术规范的润色文本。
 """
 
-prompt_customer_service_shortcut = "ctrl + alt + shift + f7"
+prompt_customer_service_shortcut = ""
 # 切换提示风格为客户服务回复优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -585,7 +585,7 @@ prompt_customer_service = """
 输出要求：直接呈现专业、完整的客户服务回复文本。
 """
 
-prompt_creative_writing_shortcut = "ctrl + alt + shift + f8"
+prompt_creative_writing_shortcut = ""
 # 切换提示风格为创意写作优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -663,25 +663,6 @@ api = "http://127.0.0.1:1188/translate"
 model_dir = "models"
 # 模型文件目录
 
-funasr_dir = "models/FunASR-nano-onnx"
-# FunASR 路径
-
-funasr_tokenizer_dir = "models/FunASR-nano-onnx/Qwen3-0.6B"
-# FunASR tokens 路径
-
-funasr_encoder_adaptor_path = "models/FunASR-nano-onnx/encoder_adaptor.onnx"
-# FunASR encoder_adaptor 模型路径
-
-funasr_embedding_path = "models/FunASR-nano-onnx/embedding.onnx"
-# FunASR embedding 模型路径
-
-funasr_llm_path = "models/FunASR-nano-onnx/llm_int8_compat/llm.int8.onnx"
-# FunASR llm 模型路径
-# 在部分 仅支持 AVX2 的 CPU 环境下，原始 llm_int8/llm.int8.onnx 可能出现推理数值异常，导致转写结果“崩坏”（重复词、乱码等）。
-# 为兼容此类机器，提供 llm_int8_compat 目录下的 INT8 兼容模型（包含多个候选版本，可按需替换 llm_int8/llm.int8.onnx 使用）：
-# llm_int8_compat/llm.int8.onnx（默认兼容版）
-# llm_int8_compat/llm.int8.u8s8.rr.onnx（备选兼容版）
-
 sensevoice_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx"
 # SenseVoice 模型路径
 
@@ -700,56 +681,6 @@ punc_model_dir = "models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024
 opus_mt_dir = "models/Helsinki-NLP--opus-mt-zh-en"
 # 离线翻译模型目录
 
-
-# ======================FunASR 参数配置==================================
-[funasr_args]
-encoder_adaptor = "${model_paths.funasr_encoder_adaptor_path}"
-# encoder_adaptor 模型路径
-
-llm = "${model_paths.funasr_llm_path}"
-# llm 模型路径
-
-embedding = "${model_paths.funasr_embedding_path}"
-# embedding 模型路径
-
-tokenizer = "${model_paths.funasr_tokenizer_dir}"
-# tokens 模型路径
-
-num_threads = 4
-# 线程数
-
-sample_rate = 16000
-# 采样率
-
-feature_dim = 80
-# 特征维度
-
-decoding_method = "greedy_search"
-# 解码方法
-
-debug = false
-# 是否启用调试模式
-
-provider = 'cpu'
-# 推理设备
-
-system_prompt = "You are a helpful assistant."
-# 系统提示
-
-user_prompt = "Transcription:"
-# 用户提示
-
-max_new_tokens = 512
-# 最大生成长度
-
-temperature = 0.7
-# 采样温度
-
-top_p = 0.8
-# 采样 nucleus 概率
-
-seed = 42
-# 随机数种子
 
 # ======================SenseVoice 参数配置==================================
 

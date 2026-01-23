@@ -13,6 +13,7 @@ from util.client.hot_sub import hot_sub
 from util.client.rename_audio import rename_audio
 from util.client.strip_punc import strip_punc
 from util.client.type_result import type_result
+from util.client.welcome import handle_welcome_message
 from util.client.write_md import write_md
 from util.config import ClientConfig as Config
 from util.safe_logger import init_logging
@@ -31,8 +32,23 @@ warnings.filterwarnings("ignore")
 async def recv_result():
     if not await check_websocket():
         return
-    console.print("[green]连接成功\n")
+
+    init_logging()
+
+    with console.resize(width=49):
+        console.rule("[green]连接成功")
+
+    console.print(
+        f"   客户端 WebSocket ID: [cyan]{Cosmic.websocket.id}[/cyan]\n", style="yellow"
+    )
+
     try:
+        # 先接收服务端的欢迎消息
+        if not await handle_welcome_message():
+            console.print("[bold red]无法建立连接或接收欢迎消息[/bold red]")
+            return
+
+        # 继续接收和处理音频识别结果
         while True:
             # 接收消息
             message = await Cosmic.websocket.recv()
@@ -40,13 +56,9 @@ async def recv_result():
             asr_text = message["text"]
             delay = message["time_complete"] - message["time_submit"]
 
-            # 如果非最终结果或文本为空，继续等待
-            if not message["is_final"] or not asr_text.strip():
-                continue
-
             # 控制台输出
             console.print(f"    转录时延：{delay:.2f}s")
-            console.print(f"    识别结果：[green]{asr_text}")
+            # console.print(f"    识别结果：[green]{asr_text}")
 
             # text 用于打字
             # asr_text 用于录音文件命名和写入 md
@@ -173,11 +185,13 @@ async def recv_result():
             online_translate_done = False
             Cosmic.opposite_state = False
     except websockets.ConnectionClosedError:
-        console.print("[red]连接断开\n")
+        with console.resize(width=49):
+            console.rule("[red]连接断开")
         init_logging()
         logger.error("连接断开，WebSocket连接关闭错误。")
     except websockets.ConnectionClosedOK:
-        console.print("[red]连接断开\n")
+        with console.resize(width=49):
+            console.rule("[red]连接断开")
         init_logging()
         logger.error("连接断开，WebSocket连接正常关闭。")
     except Exception as e:

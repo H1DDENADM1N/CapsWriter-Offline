@@ -1,12 +1,15 @@
 import io
 import sys
-from asyncio import AbstractEventLoop, Queue
+from asyncio import Queue
 from typing import List, Union
 
 import sounddevice as sd
 import websockets
-from rich.console import Console
 from rich.theme import Theme
+from util.client.hot_sub_rag import PhonemeCorrector
+
+# from rich.console import Console
+from util.resizeable_console import Console
 
 original_stdout = sys.stdout
 try:
@@ -29,6 +32,7 @@ class Cosmic:
     queue_in: Queue
     queue_out: Queue
     websocket: websockets.WebSocketClientProtocol = None
+    client_id = None
     audio_files = {}
     stream: Union[None, sd.InputStream] = None
     kwd_list: List[str] = []
@@ -36,3 +40,4 @@ class Cosmic:
     online_translate_needed = False
     offline_translate_needed = False
     opposite_state = False
+    corrector = PhonemeCorrector(threshold=0.7)

@@ -72,10 +72,20 @@ async def main_mic():
 
     # 接收结果
     console.print(
-        f"连接服务端...  （服务端载入模块时长约 50 秒，请耐心等待。若好几分钟了还无响应 -> 服务端软件 start_server_gui.exe 启动了吗？ 服务端地址当前设置 {Config.addr}:{Config.speech_recognition_port} 是正确的吗？）"
+        f"连接服务端...  （服务端载入模块时长约 50 秒，请耐心等待。若好几分钟了还无响应 -> 服务端软件 start_server_gui.exe 启动了吗？ 服务端地址当前设置 {Config.addr}:{Config.speech_recognition_port} 是正确的吗？）\n"
     )
     while True:
-        await recv_result()
+        try:
+            await recv_result()
+        except Exception as e:
+            if e.args[0] == "'ClientConnection' object has no attribute 'closed'":
+                console.print(
+                    "[bold red]连接已关闭，请检查服务端是否正常启动[/bold red]"
+                )
+            else:
+                console.print(f"[bold red]连接服务端时出错: {e}[/bold red]")
+            Cosmic.websocket = None
+            console.print("[bold red]正在尝试重连...[/bold red]\n")
 
 
 async def main_file(files: List[Path]):

@@ -5,9 +5,9 @@
 # <img src="./assets/readme/windows-logo.png" width="25" height="25"> <span style="color: #4ABAFF;">[Windows](https://www.microsoft.com/zh-cn/windows)</span> 端离线语音输入简/繁体、中译英、字幕转录；在线多译多、云剪贴板等等 （选用SenseVoice模型时 支持中粤英日韩多语种）
 
 > [!IMPORTANT]
-> 新增图形化配置界面 `edit_config_gui.exe`，可方便修改配置，但仍支持手动修改 `config.toml` 文件
+> 图形化配置界面 `edit_config_gui.exe`，可方便修改大部分配置，更多自定义配置仍需手动修改 `config.toml` 文件
 
-## 😎 八个功能：
+## 😎 十二个功能：
 
 1. 按下键盘上的大写锁定键 `CapsLock` ，录音开始，当松开大写锁定键时，就会识别你的录音，并将识别结果立刻输入
 2. 按下键盘上的 `Left Shift` 再按 `CapsLock` 可以将识别结果离线翻译为英文，当松开大写锁定键时，将翻译结果立刻输入
@@ -17,6 +17,10 @@
 6. 快速双击 `CapsLock` ，可语音输入繁体。还可通过托盘图标右键菜单快速切换简/繁体配置
 7.  可通过 `edit_config_gui.exe` 图形化配置界面安全地修改客户端/服务端配置，也可手动修改 `config.toml` 文件
 8. 可通过客户端托盘菜单 热切换 是否启用 AI 优化语言表达 以及 AI 服务商、修改 API Key 和 AI 优化风格
+9.  可快捷键切换 AI优化语言表达 提示风格
+10. 可在鼠标离开客户端界面时 变为数字时钟
+11. 可录音时自动 `静音` 或 `暂停` 其他音频播放（暂停主要由模拟播放软件全局快捷键实现）
+12. 可通过 `config_selector.exe` 选择配置文件
 
 - [✨ 特性](#-特性)
 - [⬇️ 下载地址](#-下载地址)
@@ -26,16 +30,68 @@
 - [🪳 提交 Bug ](https://github.com/H1DDENADM1N/CapsWriter-Offline/issues)
 
 # 👀 最新更新
-## 新版客户端托盘图标右键菜单：
-
-> ![alt text](assets/readme/客户端托盘图标右键菜单.png)
 
 <details>
 <summary><h1">展开最近更新</h1></summary>
 
+## 新增 配置选择器 `config_selector.exe`
+> 该工具用于选择 `./configs` 文件夹中的.toml配置文件
+> 
+> 并将其复制为当前使用的config.toml文件。界面包含确认和取消按钮
+>
+> 请在切换配置前，**手动关闭** 服务端和客户端！
+>
+> 原理：删除 `./config.toml` 文件，然后从 `./configs` 文件夹中复制所选配置文件 替换 `./config.toml` 文件
+
+## 新增 双击客户端托盘图标 切换 客户端窗口 居中显示 或 隐藏
+
+## 新增 可选项 显示数字时钟
+> 在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面
+> 启用后不再进行靠边停靠，改善多显示屏用户体验
+
+## 新增 配置项 快捷键切换 AI优化语言表达 提示风格
+> 切换后会有两秒右下角系统通知提示
+> 
+> 修改 `config.toml` 注意避免快捷键冲突
+> 
+> 默认配置如下：
+> 
+> `ctrl + alt + shift + f1` -> `正式公文`
+> 
+> `ctrl + alt + shift + f2` -> `甜言蜜语`
+> 
+> `ctrl + alt + shift + f3` -> `社媒文案`
+> 
+> `ctrl + alt + shift + f4` -> `赋诗一首`
+> 
+> `ctrl + alt + shift + f5` -> `英语大师`
+> 
+> `ctrl + alt + shift + f6` -> `学术论文`
+> 
+> `ctrl + alt + shift + f7` -> `客户服务`
+> 
+> `ctrl + alt + shift + f8` -> `创意写作`
+
+
+## 新增 配置项 hot_rag
+> 新版 独立热词与纠错系统，整合了音素处理、相似度算法、FastRAG 加速检索
+> 
+> `config.toml` 已经默认不启用 旧版 hot_zh、hot_en ，不建议与 旧版 hot_zh、hot_en  一起使用
+> 
+> 不用增加 hot-rag.txt 文件
+> 
+> hot-en.txt 和 hot-zh.txt 文件仍然有效
+
+## 新版客户端托盘图标右键菜单：
+
+> ![alt text](assets/readme/客户端托盘图标右键菜单.png)
+
+
 ## 新增 配置项 禁用程序列表
 > disable_exe_list_on_focus：在这些程序为焦点时，不启用客户端功能:语音输入
+> 
 > disable_exe_list：在运行这些程序时(包括在背景运行)，不启用客户端功能:语音输入
+> 
 > 需要添加更多程序时的格式: ["forhonor.exe", "abc.exe", "efg.exe"]
 
 ## 新增 客户端托盘菜单 热切换 AI 服务商
@@ -46,22 +102,30 @@
 
 ## 新增 可通过客户端托盘菜单 热切换 是否启用 AI 优化语言表达
 > 启用后预计增加 5s 时间延长
+> 
 > 先在 config.toml 中配置 api_key （智谱AI API密钥）
 
 
 ## 新增 客户端托盘菜单 热切换 保存音频 保存日记 保存非关键词日记
 > 是否记录非关键词日记内容到 Markdown 文件
+> 
 > 在 保存日记 save_markdown 启用的情况下有效
 
 ## 通过 常用播放器内设置的 播放/暂停快捷键 控制 录音时暂停音频播放
 > QQ音乐、网易云音乐、PotPlayer、foobar2000 可通过 edit_config_gui.exe 配置 用于 播放/暂停 的快捷键
+> 
 > 如果还有其他特殊应用 请配置 config.toml [client.additional_special_apps]
+> 
 > "<进程名>" = { hotkey = "<对应程序设置的全局快捷键>", name = "<用于输出日志的对应程序名称>" }
 > 
 > 如果N个特殊应用在播放，支持全部暂停
+> 
 > 如果一个非特殊应用在播放，通过 媒体键 暂停
+> 
 > 如果N个非特殊应用在播放，不暂停
+> 
 > 如果一个特殊应用和N个非特殊应用在播放，只暂停特殊应用
+> 
 > 
 > 默认配置如下：
 > | 播放器           | 快捷键          | 备注                               |
@@ -76,40 +140,50 @@
 
 ## 新增 优先使用 LibreTranslate 在线翻译服务
 > 服务端启动时，会自动检查 config.toml 中 LibreTranslate api 地址是否可用
+> 
 > 如果可用，则优先使用 LibreTranslate 在线翻译服务；
+> 
 > 如果不可用，则会自动切换到 DeepLX 在线翻译服务
 
 ## 新增 可选项 开始和结束任务时播放提示音
 > 可在 `config.toml` 设置是否启用，以及音频文件路径和音量。需要ffplay.exe
+> 
 > ffplay.exe 来自 https://www.gyan.dev/ffmpeg/builds/
+> 
 > start.mp3 和 stop.mp3 音频文件来自 https://pixabay.com
 
 ## 新增 可选项 切换模型 `Sensevoice` 或 `Paraformer`
 
 > Sensevoice模型虽然多了粤英日韩多语种，但是，中文识别效果大不如Paraformer模型
+> 
 > 比如转录字幕不完整，识别结果不准确、丢失标点等
+> 
 > 如果你只说中文普通话，建议使用 'Paraformer' 模型
+> 
 > 不影响简繁转换和翻译
 
 ## 新增 可选项 通过注册表/按键判断是否语音输入中
 
 ## 新增 可选项 是否启用离在线翻译和状态提示
 > start_online_translate_server = True # 启用在线翻译服务
+> 
 > start_offline_translate_server = True # 启用离线翻译服务
 > 
 > use_offline_translate_function = True # 启用离线翻译相关快捷键
+> 
 > use_online_translate_function = True # 启用在线翻译相关快捷键
 > 
 > hint_while_recording_at_edit_position_powered_by_ahk = True  # 是否启用 基于AHK的 输入光标位置的输入状态提示功能
 
 
 ## 重写hint_while_recording.exe，实现更加精准的输入光标位置提示
-不再是监测按键的伪状态，而是由Python(win32gui.PostMessage)将语音输入状态传递给AHK(hwnd)
+> 不再是监测按键的伪状态，而是由Python(win32gui.PostMessage)将语音输入状态传递给AHK(hwnd)
 
 ## 双击`录音键`临时转换 `简/繁` 体中文输出，可在 `config.toml` 设置 `简/繁` 中文作为主要输出 (@JoanthanWu)
 
 ## 更美观的“语音输入中”提示，可在 `hint_while_recording.ini` 设置文本内容、颜色、排除列表等 (@JoanthanWu)
 > ![alt text](assets/readme/PixPin_2024-11-27_10-44-39.png)
+> 
 > ![alt text](assets/readme/PixPin_2024-11-27_10-44-46.png)
 
 
@@ -168,6 +242,7 @@
 21. 默认启用双击`录音键`临时转换 `简/繁` 体中文输出的功能，通过 `config.toml` 中 `enable_double_click_opposite_state` 配置
 22. 默认使用简体中文作为主要输出，快速双击输出繁体中文。设置 `config.toml` 中 `convert_to_traditional_chinese_main = '繁'` 可以默认使用繁体中文，双击输出简体中文
 23. 修改 AI 服务商 后，点击 客户端托盘菜单 `🔑 修改 API Key` 会弹出对应的API Key 输入框
+24. 配置选择器的使用：将您修改后的自定义配置 `config.toml` 复制到 `./configs/` 目录下，重命名为例如 `my config.toml`。使用前先关闭服务端和客户端，再通过 `config_selector.exe` 选择对应的配置文件，点击 `保存`，最后手动重启服务端和客户端。
 
 # 🪳 无力解决的 Bug
 
@@ -216,6 +291,7 @@
     10.4 通过 `hint_while_recording.ini` 中 `doNotShowHintList` 配置禁用部分程序的输入光标位置的“✦语音输入中‧‧‧”文字状态提示
 
     10.5 欢迎将位置错乱的exe程序名反馈给我
+12. 整合包不支持增量更新，请删除 `./configs/` 目录下你的自定义配置例如 `my config.toml`，重新将修改后的自定义配置 `config.toml` 复制到 `./configs/` 目录下，重命名为例如 `my config.toml`。
 
 # 🤓 源码运行
 
@@ -475,8 +551,9 @@ reduce_audio_files = true
 trash_punc = "，。,."
 # 识别结果要消除的末尾标点
 
-hot_zh = true
-# 是否启用中文热词替换，中文热词存储在 hot_zh.txt 文件里
+hot_zh = false
+# 旧版 是否启用中文热词替换，中文热词存储在 hot_zh.txt 文件里
+# 不建议与 新版 hot_rag 一起使用
 
 "多音字" = true
 # true 表示多音字匹配
@@ -484,14 +561,21 @@ hot_zh = true
 "声调" = false
 # false 表示忽略声调区别，这样「黄章」就能匹配「慌张」
 
-hot_en = true
-# 是否启用英文热词替换，英文热词存储在 hot_en.txt 文件里
+hot_en = false
+# 旧版 是否启用英文热词替换，英文热词存储在 hot_en.txt 文件里
+# 不建议与 新版 hot_rag 一起使用
 
 hot_rule = true
 # 是否启用自定义规则替换，自定义规则存储在 hot_rule.txt 文件里
 
 hot_kwd = true
 # 是否启用关键词日记功能，自定义关键词存储在 keyword.txt 文件里
+
+hot_rag = true
+# 新版 独立热词与纠错系统，整合了音素处理、相似度算法、FastRAG 加速检索
+# 不建议与 旧版 hot_zh、hot_en  一起使用
+# 不用重新编辑 hot-rag.txt 文件
+# hot-en.txt 和 hot-zh.txt 文件仍然有效
 
 mic_seg_duration = 15
 # 麦克风听写时分段长度：15 秒
@@ -670,6 +754,10 @@ model = "Qwen/Qwen2.5-14B-Instruct"
 
 
 [client.prompt_style]
+prompt_official_shortcut = "ctrl + alt + shift + f1"
+# 切换提示风格为正式公文文本校对助手的快捷键
+# 注意避免快捷键冲突
+
 prompt_official = """
 你是一位专业的公文文本校对助手。你的任务是对语音转录生成的文本进行校对和润色，使其符合正式公文的规范要求。
 
@@ -695,6 +783,10 @@ prompt_official = """
 
 输出要求：直接呈现润色完成的规范文本，无任何额外说明。
 """
+
+prompt_sweetheart_shortcut = "ctrl + alt + shift + f2"
+# 切换提示风格为ptrue_heart的快捷键
+# 注意避免快捷键冲突
 
 prompt_sweetheart = """
 你是一位贴心的男友式文本润色助手。你的任务是对语音转录的文字进行温柔加工，让它读起来更甜蜜、更体贴。
@@ -722,6 +814,10 @@ prompt_sweetheart = """
 输出要求：直接给出润色完成的"甜度满分"文本。
 """
 
+prompt_social_shortcut = "ctrl + alt + shift + f3"
+# 切换提示风格为社交媒体文案优化助手的快捷键
+# 注意避免快捷键冲突
+
 prompt_social = """
 你是一位社交媒体文案优化助手。你的任务是对语音转录的文字进行加工，使其适合直接发布在社交平台。
 
@@ -747,6 +843,10 @@ prompt_social = """
 
 输出要求：直接给出优化完成、适合一键发布的社交文案。
 """
+
+prompt_poetry_shortcut = "ctrl + alt + shift + f4"
+# 切换提示风格为社交媒体文案优化助手的快捷键
+# 注意避免快捷键冲突
 
 prompt_poetry = """
 你是一位古诗创作助手。你的任务是根据语音转录的文字内容，创作一首符合古典诗歌风格的仿古诗。
@@ -775,6 +875,10 @@ prompt_poetry = """
 输出要求：直接呈现创作完成的古典诗歌。
 """
 
+prompt_english_shortcut = "ctrl + alt + shift + f5"
+# 切换提示风格为英文润色助手的快捷键
+# 注意避免快捷键冲突
+
 prompt_english = """
 你是一位地道的美式英语翻译与润色专家。你的任务是将语音转录的文本翻译并润色为地道的美式英语。
 
@@ -801,6 +905,10 @@ prompt_english = """
 
 输出要求：直接给出润色后的地道美式英语文本。
 """
+
+prompt_academic_shortcut = "ctrl + alt + shift + f6"
+# 切换提示风格为学术论文优化助手的快捷键
+# 注意避免快捷键冲突
 
 prompt_academic = """
 你是一位专业的学术论文润色助手。你的任务是将语音转录的文本（特别是学术讨论、研究想法或实验记录）转化为严谨、规范的学术论文语言。
@@ -831,6 +939,10 @@ prompt_academic = """
 输出要求：直接呈现符合学术规范的润色文本。
 """
 
+prompt_customer_service_shortcut = "ctrl + alt + shift + f7"
+# 切换提示风格为客户服务回复优化助手的快捷键
+# 注意避免快捷键冲突
+
 prompt_customer_service = """
 你是一位专业的客户服务回复助手。你的任务是将内部讨论的语音转录转化为专业、得体的客户服务回复。
 
@@ -857,6 +969,10 @@ prompt_customer_service = """
 
 输出要求：直接呈现专业、完整的客户服务回复文本。
 """
+
+prompt_creative_writing_shortcut = "ctrl + alt + shift + f8"
+# 切换提示风格为创意写作优化助手的快捷键
+# 注意避免快捷键冲突
 
 prompt_creative_writing = """
 你是一位创意写作助手。你的任务是将语音转录的零散想法转化为富有文学性的创意文本。

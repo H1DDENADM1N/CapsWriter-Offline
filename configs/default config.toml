@@ -13,8 +13,8 @@ logger_level = "ERROR" # 调试日志级别
 
 # ======================服务端配置==================================
 [server]
-model = "FunASR"
-# 'FunASR' 、 'Sensevoice' 或 'Paraformer'
+model = "Sensevoice"
+# 'Sensevoice' 或 'Paraformer'
 # Sensevoice模型虽然多了粤英日韩多语种，但是，中文识别效果大不如Paraformer模型
 # 比如转录字幕不完整，识别结果不准确、丢失标点等
 # 如果你只说中文普通话，建议使用 'Paraformer' 模型
@@ -26,10 +26,10 @@ addr = "0.0.0.0"
 speech_recognition_port = "6016"
 # 语音识别服务端口
 
-start_online_translate_server = false
+start_online_translate_server = true
 # 是否启用在线翻译服务
 
-start_offline_translate_server = false
+start_offline_translate_server = true
 # 是否启用离线翻译服务
 
 offline_translate_port = "6017"
@@ -50,7 +50,7 @@ shrink_automatically_to_tray = true
 only_run_once = true
 # 只允许运行一次，禁止多开
 
-in_the_meantime_start_the_client = false
+in_the_meantime_start_the_client = true
 # 启动服务端时是否同时启动客户端
 
 in_the_meantime_start_the_client_and_run_as_admin = true
@@ -90,13 +90,13 @@ disable_exe_list_on_focus = [""]
 disable_exe_list = [""]
 # 在运行这些程序时(包括在背景运行)，不启用客户端功能:语音输入
 
-use_offline_translate_function = false
+use_offline_translate_function = true
 # 是否启用离线翻译功能
 
 offline_translate_shortcut = "left shift"
 # 控制离线翻译的快捷键，默认是 "left shift"，按住 Left Shift 再按 CapsLock 进行离线翻译
 
-use_online_translate_function = false
+use_online_translate_function = true
 # 是否启用在线翻译功能
 
 online_translate_shortcut = "right shift"
@@ -304,7 +304,7 @@ opencc_converter = "s2t"
 # t2jp Traditional Chinese Characters (Kyūjitai) to New Japanese Kanji (Shinjitai) 繁体（OpenCC 标准，旧字体）到日文新字体
 # jp2t New Japanese Kanji (Shinjitai) to Traditional Chinese Characters (Kyūjitai) 日文新字体到繁体（OpenCC 标准，旧字体）
 
-enable_ai_optimize_language_expression = false
+enable_ai_optimize_language_expression = true
 # 是否启用 AI 优化语言表达
 # 启用后预计增加 5s 时间延长
 
@@ -663,25 +663,6 @@ api = "http://127.0.0.1:1188/translate"
 model_dir = "models"
 # 模型文件目录
 
-funasr_dir = "models/FunASR-nano-onnx"
-# FunASR 路径
-
-funasr_tokenizer_dir = "models/FunASR-nano-onnx/Qwen3-0.6B"
-# FunASR tokens 路径
-
-funasr_encoder_adaptor_path = "models/FunASR-nano-onnx/encoder_adaptor.onnx"
-# FunASR encoder_adaptor 模型路径
-
-funasr_embedding_path = "models/FunASR-nano-onnx/embedding.onnx"
-# FunASR embedding 模型路径
-
-funasr_llm_path = "models/FunASR-nano-onnx/llm_int8_compat/llm.int8.onnx"
-# FunASR llm 模型路径
-# 在部分 仅支持 AVX2 的 CPU 环境下，原始 llm_int8/llm.int8.onnx 可能出现推理数值异常，导致转写结果“崩坏”（重复词、乱码等）。
-# 为兼容此类机器，提供 llm_int8_compat 目录下的 INT8 兼容模型（包含多个候选版本，可按需替换 llm_int8/llm.int8.onnx 使用）：
-# llm_int8_compat/llm.int8.onnx（默认兼容版）
-# llm_int8_compat/llm.int8.u8s8.rr.onnx（备选兼容版）
-
 sensevoice_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx"
 # SenseVoice 模型路径
 
@@ -700,56 +681,6 @@ punc_model_dir = "models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024
 opus_mt_dir = "models/Helsinki-NLP--opus-mt-zh-en"
 # 离线翻译模型目录
 
-
-# ======================FunASR 参数配置==================================
-[funasr_args]
-encoder_adaptor = "${model_paths.funasr_encoder_adaptor_path}"
-# encoder_adaptor 模型路径
-
-llm = "${model_paths.funasr_llm_path}"
-# llm 模型路径
-
-embedding = "${model_paths.funasr_embedding_path}"
-# embedding 模型路径
-
-tokenizer = "${model_paths.funasr_tokenizer_dir}"
-# tokens 模型路径
-
-num_threads = 4
-# 线程数
-
-sample_rate = 16000
-# 采样率
-
-feature_dim = 80
-# 特征维度
-
-decoding_method = "greedy_search"
-# 解码方法
-
-debug = false
-# 是否启用调试模式
-
-provider = 'cpu'
-# 推理设备
-
-system_prompt = "You are a helpful assistant."
-# 系统提示
-
-user_prompt = "Transcription:"
-# 用户提示
-
-max_new_tokens = 512
-# 最大生成长度
-
-temperature = 0.7
-# 采样温度
-
-top_p = 0.8
-# 采样 nucleus 概率
-
-seed = 42
-# 随机数种子
 
 # ======================SenseVoice 参数配置==================================
 
