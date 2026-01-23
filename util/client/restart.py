@@ -46,11 +46,6 @@ def start_exe(exe_name: str):
         logger.error(f"Start errors: {stderr}")
 
 
-def restart_exe(exe_name: str):
-    stop_exe(exe_name)
-    start_exe(exe_name)
-
-
 def stop_client():
     exe_name_list = [
         "start_client_gui_admin.exe",
