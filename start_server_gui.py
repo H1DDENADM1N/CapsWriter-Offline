@@ -75,13 +75,16 @@ class GUI(QMainWindow):
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(QIcon("assets/icon/server-icon.ico"))
         show_action = QAction("🪟 Show", self)
+        restart_server_action = QAction("🔄 Restart Server", self)
         quit_action = QAction("❌ Quit", self)
 
         show_action.triggered.connect(self.showNormal)
+        restart_server_action.triggered.connect(self.restart_server)
         quit_action.triggered.connect(self.quit_app)
         self.tray_icon.activated.connect(self.on_tray_icon_activated)
         tray_menu = QMenu()
         tray_menu.addAction(show_action)
+        tray_menu.addAction(restart_server_action)
         tray_menu.addAction(quit_action)
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()
@@ -90,6 +93,17 @@ class GUI(QMainWindow):
         # Minimize to system tray instead of closing the window when the user clicks the close button
         self.hide()  # Hide the window
         event.ignore()  # Ignore the close event
+
+    def restart_server(self):
+        subprocess.Popen(
+            [".\\runtime\\python.exe", ".\\util\\server\\restart.py"],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            shell=True,
+            encoding="utf-8",
+        )
 
     def quit_app(self):
         init_logging()
