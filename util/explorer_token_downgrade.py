@@ -101,7 +101,7 @@ advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
 # ==========================================
 # 核心函数
 # ==========================================
-def downgraded_via_explorer_token(executable_path):
+def downgraded_via_explorer_token(executable_path, working_directory=None):
     """
     使用 Explorer 令牌创建脱离 Job 对象的独立进程
     """
@@ -167,6 +167,9 @@ def downgraded_via_explorer_token(executable_path):
     # 7. 创建新进程
     creation_flags = CREATE_BREAKAWAY_FROM_JOB | CREATE_UNICODE_ENVIRONMENT
 
+    # 如果提供了工作目录，则使用它；否则为 None
+    current_directory = working_directory if working_directory else None
+
     success = advapi32.CreateProcessWithTokenW(
         h_new_token,  # hToken
         0,  # LogonFlags
@@ -174,7 +177,7 @@ def downgraded_via_explorer_token(executable_path):
         command_line,  # lpCommandLine
         creation_flags,  # dwCreationFlags
         None,  # lpEnvironment
-        None,  # lpCurrentDirectory
+        current_directory,  # lpCurrentDirectory
         ctypes.byref(si),  # lpStartupInfo
         ctypes.byref(pi),  # lpProcessInformation
     )
