@@ -609,20 +609,24 @@ api = "http://127.0.0.1:1188/translate"
 model_dir = "models"
 # 模型文件目录
 
-funasr_dir = "models/sherpa-onnx-funasr-nano-2025-12-30"
+funasr_dir = "models/FunASR-nano-onnx"
 # FunASR 路径
 
-funasr_tokenizer_dir = "models/sherpa-onnx-funasr-nano-2025-12-30/Qwen3-0.6B"
+funasr_tokenizer_dir = "models/FunASR-nano-onnx/Qwen3-0.6B"
 # FunASR tokens 路径
 
-funasr_encoder_adaptor_path = "models/sherpa-onnx-funasr-nano-2025-12-30/encoder_adaptor.onnx"
+funasr_encoder_adaptor_path = "models/FunASR-nano-onnx/encoder_adaptor.onnx"
 # FunASR encoder_adaptor 模型路径
 
-funasr_embedding_path = "models/sherpa-onnx-funasr-nano-2025-12-30/embedding.onnx"
+funasr_embedding_path = "models/FunASR-nano-onnx/embedding.onnx"
 # FunASR embedding 模型路径
 
-funasr_llm_path = "models/sherpa-onnx-funasr-nano-2025-12-30/llm.fp32.onnx"
+funasr_llm_path = "models/FunASR-nano-onnx/llm_int8_compat/llm.int8.onnx"
 # FunASR llm 模型路径
+# 在部分 仅支持 AVX2 的 CPU 环境下，原始 llm_int8/llm.int8.onnx 可能出现推理数值异常，导致转写结果“崩坏”（重复词、乱码等）。
+# 为兼容此类机器，提供 llm_int8_compat 目录下的 INT8 兼容模型（包含多个候选版本，可按需替换 llm_int8/llm.int8.onnx 使用）：
+# llm_int8_compat/llm.int8.onnx（默认兼容版）
+# llm_int8_compat/llm.int8.u8s8.rr.onnx（备选兼容版）
 
 sensevoice_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx"
 # SenseVoice 模型路径

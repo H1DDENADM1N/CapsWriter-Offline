@@ -1,12 +1,5 @@
 FunASR语音模型：
-git clone https://huggingface.co/csukuangfj/sherpa-onnx-funasr-nano-2025-12-30
-
-或者
-
-wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-funasr-nano-2025-12-30.tar.bz2
-
-tar xvf sherpa-onnx-funasr-nano-2025-12-30.tar.bz2
-rm sherpa-onnx-funasr-nano-2025-12-30.tar.bz2
+git clone https://www.modelscope.cn/zengshuishui/FunASR-nano-onnx.git FunASR-nano-onnx
 
 
 Sensevoice语音模型：
