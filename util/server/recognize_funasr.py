@@ -82,6 +82,53 @@ def _process_simple_merge(result: Result, stream_result_text: str) -> None:
         logger.warning(f"简单文本拼接失败: {e}")
 
 
+def validate_audio_samples(samples, task):
+    """
+    验证音频样本的有效性，防止传入无效数据给识别器
+
+    Args:
+        samples: 音频样本数组
+        task: 任务对象
+
+    Returns:
+        tuple: (is_valid, processed_samples) 或 (False, None)
+    """
+    # 检查样本是否为空
+    if samples is None or len(samples) == 0:
+        # console.print(f"任务 {task.task_id[:8]} 音频样本为空，跳过识别")
+        # logger.warning(f"任务 {task.task_id[:8]} 音频样本为空，跳过识别")
+        return False, None
+
+    # # 检查样本类型
+    # if samples.dtype != np.float32:
+    #     console.print(f"任务 {task.task_id[:8]} 音频样本类型不是 float32，将进行转换")
+    #     logger.debug(f"任务 {task.task_id[:8]} 音频样本类型不是 float32，将进行转换")
+    #     samples = samples.astype(np.float32)
+
+    # # 检查特殊值
+    # if np.any(np.isnan(samples)) or np.any(np.isinf(samples)):
+    #     console.print(f"任务 {task.task_id[:8]} 音频样本包含特殊值，将进行清理")
+    #     logger.debug(f"任务 {task.task_id[:8]} 音频样本包含特殊值，将进行清理")
+    #     samples = np.nan_to_num(samples, nan=0.0, posinf=1e-6, neginf=-1e-6)
+
+    # # 检查音频长度
+    # min_samples = 160  # 至少10ms @ 16kHz
+    # if len(samples) < min_samples:
+    #     console.print(
+    #         f"任务 {task.task_id[:8]} 音频样本过短 (len={len(samples)})，将进行填充"
+    #     )
+    #     logger.debug(
+    #         f"任务 {task.task_id[:8]} 音频样本过短 (len={len(samples)})，将进行填充"
+    #     )
+    #     # 填充到最小长度
+    #     padding_needed = min_samples - len(samples)
+    #     samples = np.pad(
+    #         samples, (0, padding_needed), mode="constant", constant_values=0
+    #     )
+
+    return True, samples
+
+
 def recognize(recognizer, task: Task) -> Result:
     """
     识别单个音频片段并更新结果
@@ -120,22 +167,45 @@ def recognize(recognizer, task: Task) -> Result:
             f"offset={task.offset:.2f}s, is_final={task.is_final}"
         )
 
-        # 3. 执行识别
+        # 3. 音频样本验证 - 在传递给识别器之前
+        is_valid, processed_samples = validate_audio_samples(samples, task)
+        if not is_valid:
+            # 如果验证失败，返回空结果
+            logger.debug(f"任务 {task.task_id[:8]} 音频验证失败，返回空结果")
+            # 返回一个带有基本信息的结果对象
+            result.text = ""
+            result.text_accu = ""
+            result.tokens = []
+            result.timestamps = []
+            return result
+        else:
+            samples = processed_samples  # 获取可能经过处理的samples
+
+        # 4. 执行识别
         stream = recognizer.create_stream()
         stream.accept_waveform(task.samplerate, samples)
 
-        t1 = time.time()
-        recognizer.decode_stream(stream)
+        # 在 decode_stream 之前添加额外的防御措施
+        try:
+            recognizer.decode_stream(stream)
+        except Exception as decode_error:
+            logger.error(f"解码流时发生错误: {decode_error}")
+            # 返回空结果而不是让程序崩溃
+            result.text = ""
+            result.text_accu = ""
+            result.tokens = []
+            result.timestamps = []
+            return result
 
         # 更新时间戳
         result.time_start = task.time_start
         result.time_submit = task.time_submit
         result.time_complete = time.time()
 
-        # 4. 简单文本拼接
+        # 5. 简单文本拼接
         _process_simple_merge(result, stream.result.text)
 
-        # 5. 时间戳拼接（使用 SequenceMatcher 策略）
+        # 6. 时间戳拼接（使用 SequenceMatcher 策略）
         try:
             # 安全处理当前片段的 tokens
             new_tokens = process_tokens_safely(stream.result.tokens)
@@ -157,7 +227,7 @@ def recognize(recognizer, task: Task) -> Result:
         except (UnicodeDecodeError, UnicodeError) as e:
             console.print(f"\n[red]编码错误: {e}")
 
-        # 6. 生成 text_accu
+        # 7. 生成 text_accu
         result.text_accu = tokens_to_text(result.tokens)
 
         # 如果不是最终结果，直接返回
@@ -199,23 +269,14 @@ def recognize(recognizer, task: Task) -> Result:
 
     except Exception as e:
         logger.error(f"识别错误: {e}", exc_info=True)
-        raise
-
-
-def clear_results_by_socket_id(socket_id: str) -> None:
-    """
-    清理指定 socket_id 关联的所有任务结果缓存
-
-    当客户端连接断开时调用，防止内存泄漏。
-    """
-    global _results
-    tasks_to_remove = [
-        task_id for task_id, result in _results.items() if result.socket_id == socket_id
-    ]
-    for task_id in tasks_to_remove:
-        _results.pop(task_id, None)
-
-    if tasks_to_remove:
-        logger.debug(
-            f"已清理断开连接相关的缓存: socket_id={socket_id}, 任务数={len(tasks_to_remove)}"
-        )
+        # 返回一个空结果而不是让程序崩溃
+        if task.task_id in _results:
+            empty_result = _results.pop(task.task_id)
+        else:
+            empty_result = Result(task.task_id, task.socket_id, task.source)
+        empty_result.text = ""
+        empty_result.text_accu = ""
+        empty_result.tokens = []
+        empty_result.timestamps = []
+        empty_result.is_final = True
+        return empty_result

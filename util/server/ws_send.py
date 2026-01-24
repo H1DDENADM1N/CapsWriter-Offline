@@ -46,7 +46,7 @@ async def ws_send():
             # 发送消息
             await websocket.send(json.dumps(message))
 
-            if result.source == "mic":
+            if result.source == "mic" and result.text != "":
                 console.print(f"识别结果：\n    [green]{result.text}")
             elif result.source == "file":
                 console.print(f"    转录进度：{result.duration:.2f}s", end="\r")

@@ -52,8 +52,43 @@ async def recv_result():
         while True:
             # 接收消息
             message = await Cosmic.websocket.recv()
-            message = json.loads(message)
+
+            # 安全检查：如果消息为空，跳过后续处理
+            if not message:
+                console.print("[bold red]接收到空消息，跳过处理[/bold red]")
+                logger.debug("接收到空消息，跳过处理")
+                continue
+
+            # 解析消息
+            try:
+                message = json.loads(message)
+            except json.JSONDecodeError as e:
+                console.print(f"消息解析失败: {e}, 消息内容: {message}")
+                logger.error(f"消息解析失败: {e}, 消息内容: {message}")
+                continue
+
+            # 检查消息中是否包含必需的字段
+            if "text" not in message:
+                console.print(f"消息中缺少 'text' 字段，跳过处理: {message}")
+                logger.warning(f"消息中缺少 'text' 字段，跳过处理: {message}")
+                continue
+
+            # 检查文本内容是否为空
             asr_text = message["text"]
+            if not asr_text or asr_text.strip() == "":
+                # console.print("[bold red]接收到空识别结果，跳过处理[/bold red]")
+                # logger.debug("接收到空识别结果，跳过处理")
+                continue
+
+            # 检查必要的时间字段
+            if "time_complete" not in message or "time_submit" not in message:
+                console.print(
+                    f"消息中缺少时间字段，跳过处理: {message}",
+                    style="bold red",
+                )
+                logger.warning(f"消息中缺少时间字段，跳过处理: {message}")
+                continue
+
             delay = message["time_complete"] - message["time_submit"]
 
             # 控制台输出

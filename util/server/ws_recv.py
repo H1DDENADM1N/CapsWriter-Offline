@@ -182,4 +182,7 @@ async def ws_recv(websocket):
         status_mic.stop()
         status_mic.on = False
         sockets.pop(str(websocket.id))
-        sockets_id.remove(str(websocket.id))
+        if str(websocket.id) in sockets_id:
+            sockets_id.remove(str(websocket.id))
+        if str(websocket.id) in Cosmic.sockets_id:
+            Cosmic.sockets_id.remove(str(websocket.id))
