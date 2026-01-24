@@ -24,6 +24,7 @@ elif Config.model == "Sensevoice":
     from util.server.recognize_sensevoice import recognize
 else:
     from util.server.recognize_funasr import recognize
+    from util.fun_asr_gguf import create_asr_engine
 
 
 def disable_jieba_debug():
@@ -58,7 +59,7 @@ def init_recognizer(queue_in: Queue, queue_out: Queue, sockets_id):
             }
         )
     else:
-        recognizer = sherpa_onnx.OfflineRecognizer.from_funasr_nano(
+        recognizer = create_asr_engine(
             **{
                 key: value
                 for key, value in FunASRArgs.__dict__.items()
