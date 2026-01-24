@@ -10,3 +10,4 @@ __pycache__
 /models/paraformer-offline-zh
 /202*
 /logs
+/util/fun_asr_gguf/bin
