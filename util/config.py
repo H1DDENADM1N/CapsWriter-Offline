@@ -207,12 +207,13 @@ class DeepLXConfig:
 class ModelPaths:
     model_dir: Path = Path(config["model_paths"]["model_dir"])
     funasr_dir: Path = Path(config["model_paths"]["funasr_dir"])
-    funasr_tokenizer_dir: Path = Path(config["model_paths"]["funasr_tokenizer_dir"])
     funasr_encoder_adaptor_path: Path = Path(
         config["model_paths"]["funasr_encoder_adaptor_path"]
     )
-    funasr_embedding_path: Path = Path(config["model_paths"]["funasr_embedding_path"])
+    fun_asr_ctc_path: Path = Path(config["model_paths"]["fun_asr_ctc_path"])
     funasr_llm_path: Path = Path(config["model_paths"]["funasr_llm_path"])
+    funasr_tokens_path: Path = Path(config["model_paths"]["funasr_tokens_path"])
+    funasr_hotwords_path: Path = Path(config["model_paths"]["funasr_hotwords_path"])
     sensevoice_path: Path = Path(config["model_paths"]["sensevoice_path"])
     sensevoice_tokens_path: Path = Path(config["model_paths"]["sensevoice_tokens_path"])
     paraformer_path: Path = Path(config["model_paths"]["paraformer_path"])
@@ -223,22 +224,17 @@ class ModelPaths:
 
 # FunASR 参数配置
 class FunASRArgs:
-    encoder_adaptor: str = config["model_paths"]["funasr_encoder_adaptor_path"]
-    llm: str = config["model_paths"]["funasr_llm_path"]
-    embedding: str = config["model_paths"]["funasr_embedding_path"]
-    tokenizer: str = config["model_paths"]["funasr_tokenizer_dir"]
-    num_threads: int = config["funasr_args"]["num_threads"]
-    sample_rate: int = config["funasr_args"]["sample_rate"]
-    feature_dim: int = config["funasr_args"]["feature_dim"]
-    decoding_method: str = config["funasr_args"]["decoding_method"]
-    debug: bool = config["funasr_args"]["debug"]
-    provider: str = config["funasr_args"]["provider"]
-    system_prompt: str = config["funasr_args"]["system_prompt"]
-    user_prompt: str = config["funasr_args"]["user_prompt"]
-    max_new_tokens: int = config["funasr_args"]["max_new_tokens"]
-    temperature: float = config["funasr_args"]["temperature"]
-    top_p: float = config["funasr_args"]["top_p"]
-    seed: int = config["funasr_args"]["seed"]
+    encoder_onnx_path: str = config["model_paths"]["funasr_encoder_adaptor_path"]
+    ctc_onnx_path: str = config["model_paths"]["fun_asr_ctc_path"]
+    decoder_gguf_path: str = config["model_paths"]["funasr_llm_path"]
+    tokens_path: str = config["model_paths"]["funasr_tokens_path"]
+    hotwords_path: str = config["model_paths"]["funasr_hotwords_path"]
+    enable_ctc: bool = config["funasr_args"]["enable_ctc"]
+    n_predict: int = config["funasr_args"]["n_predict"]
+    n_threads: int = config["funasr_args"]["n_threads"]
+    similar_threshold: float = config["funasr_args"]["similar_threshold"]
+    max_hotwords: int = config["funasr_args"]["max_hotwords"]
+    verbose: bool = config["funasr_args"]["verbose"]
 
 
 # SenseVoice 参数配置

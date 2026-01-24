@@ -1,5 +1,5 @@
 FunASR语音模型：
-git clone https://www.modelscope.cn/zengshuishui/FunASR-nano-onnx.git FunASR-nano-onnx
+git clone https://www.modelscope.cn/HaujetZhao/Fun-ASR-Nano-2512-GGUF.git Fun-ASR-Nano-2512-GGUF
 
 
 Sensevoice语音模型：

@@ -147,17 +147,6 @@ def init_file(files: List[Path]):
     """
     用 CapsWriter Server 转录音视频文件，生成 srt 字幕
     """
-    from util.config import ModelPaths, ServerConfig
-
-    if ServerConfig.model == "FunASR" and "FunASR-nano-onnx" in str(
-        ModelPaths.funasr_dir
-    ):
-        console.print(
-            "FunASR nano onnx 模型不支持文件转录，如需转录音频，请切换模型后重启服务端，再重试转录音频"
-        )
-        input("\n按回车退出\n")
-        sys.exit()
-
     init_logging()
     logger.info(f"开始转录文件，参数：{files}")
     try:
