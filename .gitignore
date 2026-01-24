@@ -1,0 +1,12 @@
+/site-packages
+*.pyc
+uv.lock
+__pycache__
+/.vscode
+/models/Fun-ASR-Nano-GGUF
+/models/Helsinki-NLP--opus-mt-zh-en
+/models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17
+/models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12
+/models/paraformer-offline-zh
+/202*
+/logs
