@@ -1532,7 +1532,6 @@ class GUI(QMainWindow):
         # Quit the application
         QApplication.quit()
 
-        # TODO: Quit models The above method can not completely exit the model, rename pythonw.exe to pythonw_CapsWriter.exe and taskkill. It's working but not the best way.
         try:
             proc = subprocess.Popen(
                 "taskkill /IM start_client_gui_admin.exe /IM start_client_gui.exe /IM python_CapsWriter_Client.exe /IM hint_while_recording.exe /F",

@@ -119,11 +119,10 @@ class GUI(QMainWindow):
         # Quit the application
         QApplication.quit()
 
-        # TODO: Quit models The above method can not completely exit the model, rename pythonw.exe to pythonw_CapsWriter.exe and taskkill. It's working but not the best way.
         try:
             if Config.start_online_translate_server:
                 proc = subprocess.Popen(
-                    "taskkill /IM pythonw_CapsWriter_Server.exe /IM deeplx_windows_amd64.exe /F",
+                    "taskkill /IM python_CapsWriter_Server.exe /IM deeplx_windows_amd64.exe /F",
                     creationflags=subprocess.CREATE_NO_WINDOW,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -132,7 +131,7 @@ class GUI(QMainWindow):
                 )
             else:
                 proc = subprocess.Popen(
-                    "taskkill /IM pythonw_CapsWriter_Server.exe /F",
+                    "taskkill /IM python_CapsWriter_Server.exe /F",
                     creationflags=subprocess.CREATE_NO_WINDOW,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -158,7 +157,7 @@ class GUI(QMainWindow):
     def start_script(self):
         # Start core_server.py and redirect output to the server queue
         self.core_server_process = subprocess.Popen(
-            [".\\runtime\\pythonw_CapsWriter_Server.exe", "core_server.py"],
+            [".\\runtime\\python_CapsWriter_Server.exe", "core_server.py"],
             creationflags=subprocess.CREATE_NO_WINDOW,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -197,9 +196,9 @@ class GUI(QMainWindow):
 if __name__ == "__main__":
     check_model_gui()
 
-    if Config.only_run_once and check_process("pythonw_CapsWriter_Server.exe"):
+    if Config.only_run_once and check_process("python_CapsWriter_Server.exe"):
         raise Exception(
-            "已经有一个服务端在运行了！（用户配置了 只允许运行一次，禁止多开；而且检测到 pythonw_CapsWriter_Server.exe 进程已在运行。如果你确定需要启动多个服务端同时运行，请先修改 config.py  class ServerConfig:  Only_run_once = False 。）"
+            "已经有一个服务端在运行了！（用户配置了 只允许运行一次，禁止多开；而且检测到 python_CapsWriter_Server.exe 进程已在运行。如果你确定需要启动多个服务端同时运行，请先修改 config.py  class ServerConfig:  Only_run_once = False 。）"
         )
 
     if Config.in_the_meantime_start_the_client and not (

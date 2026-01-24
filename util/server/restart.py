@@ -50,7 +50,7 @@ def start_exe(exe_name: str):
 def stop_server():
     exe_name_list = [
         "start_server_gui.exe",
-        "pythonw_CapsWriter_Server.exe",
+        "python_CapsWriter_Server.exe",
         "deeplx_windows_amd64.exe",
     ]
 
