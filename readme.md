@@ -524,7 +524,7 @@ suppress = false
 restore_key = true
 # 录音完成，松开按键后，是否自动再按一遍，以恢复 CapsLock 或 Shift 等按键之前的状态
 
-threshold = 0.3
+threshold = 0.5
 # 按下快捷键后，触发语音识别的时间阈值
 
 paste = true
