@@ -53,6 +53,16 @@ async def recv_result():
             # 接收消息
             message = await Cosmic.websocket.recv()
             message = json.loads(message)
+
+            # 检查是否为最终结果，如果不是则跳过处理（只显示但不执行其他操作）
+            is_final = message.get("is_final", True)  # 默认为True以向后兼容
+            if not is_final:
+                # 对于非最终结果，可以选择显示调试信息但不执行实际操作
+                asr_text = message["text"]
+                logger.trace(f"    中间结果（跳过处理）：{asr_text}")
+                continue
+
+            # 只处理最终结果
             asr_text = message["text"]
             delay = message["time_complete"] - message["time_submit"]
 
