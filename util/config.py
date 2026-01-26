@@ -212,7 +212,7 @@ class ModelPaths:
     funasr_encoder_adaptor_path: Path = Path(
         config["model_paths"]["funasr_encoder_adaptor_path"]
     )
-    fun_asr_ctc_path: Path = Path(config["model_paths"]["fun_asr_ctc_path"])
+    funasr_ctc_path: Path = Path(config["model_paths"]["funasr_ctc_path"])
     funasr_llm_path: Path = Path(config["model_paths"]["funasr_llm_path"])
     funasr_tokens_path: Path = Path(config["model_paths"]["funasr_tokens_path"])
     funasr_hotwords_path: Path = Path(config["model_paths"]["funasr_hotwords_path"])
@@ -227,7 +227,7 @@ class ModelPaths:
 # FunASR 参数配置
 class FunASRArgs:
     encoder_onnx_path: str = config["model_paths"]["funasr_encoder_adaptor_path"]
-    ctc_onnx_path: str = config["model_paths"]["fun_asr_ctc_path"]
+    ctc_onnx_path: str = config["model_paths"]["funasr_ctc_path"]
     decoder_gguf_path: str = config["model_paths"]["funasr_llm_path"]
     tokens_path: str = config["model_paths"]["funasr_tokens_path"]
     hotwords_path: str = config["model_paths"]["funasr_hotwords_path"]

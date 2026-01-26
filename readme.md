@@ -1074,7 +1074,7 @@ funasr_dir = "models/Fun-ASR-Nano-GGUF"
 funasr_encoder_adaptor_path = "models/Fun-ASR-Nano-GGUF/model/Fun-ASR-Nano-Encoder-Adaptor.fp32.onnx"
 # FunASR encoder_adaptor 模型路径
 
-fun_asr_ctc_path = "models/Fun-ASR-Nano-GGUF/model/Fun-ASR-Nano-CTC.int8.onnx"
+funasr_ctc_path = "models/Fun-ASR-Nano-GGUF/model/Fun-ASR-Nano-CTC.int8.onnx"
 # CTC 快速预识别
 
 funasr_llm_path = "models/Fun-ASR-Nano-GGUF/model/Fun-ASR-Nano-Decoder.q8_0.gguf"
