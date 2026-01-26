@@ -101,7 +101,7 @@ class GUI(QMainWindow):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            shell=True,
+            # shell=True,
             encoding="utf-8",
         )
 
@@ -126,7 +126,7 @@ class GUI(QMainWindow):
                     creationflags=subprocess.CREATE_NO_WINDOW,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    shell=True,
+                    # shell=True,
                     text=True,
                 )
             else:
@@ -135,7 +135,7 @@ class GUI(QMainWindow):
                     creationflags=subprocess.CREATE_NO_WINDOW,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    shell=True,
+                    # shell=True,
                     text=True,
                 )
             stdout, stderr = proc.communicate()
@@ -162,7 +162,7 @@ class GUI(QMainWindow):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            shell=True,
+            # shell=True,
             encoding="utf-8",
             errors="replace",
         )
