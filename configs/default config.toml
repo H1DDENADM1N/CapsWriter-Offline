@@ -26,6 +26,10 @@ vulkan_enable = true
 vulkan_force_fp32 = false
 # 是否强制 Fun-ASR-Nano-GGUF 模型 FP32 计算（如果 GPU 是 Intel 集显且出现精度溢出，可设为 true）
 
+expand_funasr_hotwords = false
+# 是否启用 Fun-ASR-Nano-GGUF 模型热词扩展功能
+# 将 .\hot-zh.txt 和 .\hot-en.txt 文件追加到 FunASR 模型热词列表中
+# .\models\Fun-ASR-Nano-GGUF\hot.txt
 
 addr = "0.0.0.0"
 # 服务端监听地址

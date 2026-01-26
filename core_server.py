@@ -1,3 +1,4 @@
+from mpmath import exp
 import asyncio
 import os
 import sys
@@ -15,6 +16,7 @@ from util.server.cosmic import Cosmic, console
 from util.server.init_recognizer import init_recognizer
 from util.server.ws_recv import ws_recv
 from util.server.ws_send import ws_send
+from util.server.expand_funasr_hotwords import expand_funasr_hotwords
 
 if check_libretranslate_service():
     from util.server.run_online_translate_service_libretranslate import (
@@ -54,6 +56,9 @@ async def main():
     )
 
     console.print("载入模块中，载入时长约 50 秒，请耐心等待...")
+
+    if Config.model == "FunASR" and Config.expand_funasr_hotwords:
+        await expand_funasr_hotwords()  # Fun-ASR-Nano-GGUF 模型热词扩展功能
 
     # 跨进程列表，用于保存 socket 的 id，用于让识别进程查看连接是否中断
     Cosmic.sockets_id = Manager().list()
@@ -121,7 +126,8 @@ def apply_vulkan_config():
 
 def init():
     try:
-        apply_vulkan_config()
+        if Config.model == "FunASR":
+            apply_vulkan_config()
         asyncio.run(main())
     except KeyboardInterrupt:  # Ctrl-C 停止
         console.print("\n再见！")

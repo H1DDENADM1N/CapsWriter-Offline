@@ -23,6 +23,7 @@ class ServerConfig:
     model: str = config["server"]["model"]
     vulkan_enable: bool = config["server"]["vulkan_enable"]
     vulkan_force_fp32: bool = config["server"]["vulkan_force_fp32"]
+    expand_funasr_hotwords: bool = config["server"]["expand_funasr_hotwords"]
     addr: str = config["server"]["addr"]
     speech_recognition_port: str = config["server"]["speech_recognition_port"]
     start_online_translate_server: bool = config["server"][
