@@ -17,7 +17,7 @@ def stop_exe(exe_name: str):
             creationflags=subprocess.CREATE_NO_WINDOW,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            # shell=True,
+            shell=True,
             text=True,
         )
         stdout, stderr = proc.communicate()
@@ -36,7 +36,7 @@ def start_exe(exe_name: str):
         creationflags=subprocess.CREATE_NO_WINDOW,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        # shell=True,
+        shell=True,
         text=True,
     )
     stdout, stderr = proc.communicate()
