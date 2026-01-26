@@ -5,6 +5,7 @@ from multiprocessing import Manager, Process
 from platform import system
 
 import websockets
+from loguru import logger
 
 from util.check_libretranslate_service import check_libretranslate_service
 from util.config import ServerConfig as Config
@@ -101,8 +102,26 @@ async def main():
     await asyncio.gather(recv, send)
 
 
+def apply_vulkan_config():
+    """根据配置应用 Vulkan 相关的环境变量"""
+    if not Config.vulkan_enable:
+        # 强制禁用 Vulkan 推理
+        os.environ["VK_ICD_FILENAMES"] = "none"
+        logger.info("GPU 加速: 已禁用 (vulkan_enable=False)")
+    else:
+        # 启用 Vulkan 并根据配置调整精度
+        if Config.vulkan_force_fp32:
+            os.environ["GGML_VK_DISABLE_F16"] = "1"
+            logger.info("GPU 加速: 已启用 Vulkan (强制 FP32 模式)")
+        else:
+            # 清理环境变量，确保不残留之前的设置
+            os.environ.pop("GGML_VK_DISABLE_F16", None)
+            logger.info("GPU 加速: 已启用 Vulkan (自动精度模式)")
+
+
 def init():
     try:
+        apply_vulkan_config()
         asyncio.run(main())
     except KeyboardInterrupt:  # Ctrl-C 停止
         console.print("\n再见！")

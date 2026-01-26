@@ -125,10 +125,11 @@ class LLMDecoder:
 
             if consecutive_cnt > 20:
                 console.print(
-                    "\n[bold red]警告: 检测到异常重复输出 (可能由 iGPU 溢出引起)，已熔断。[/bold red]"
-                )
-                console.print(
-                    "[dim]尝试在 config.py 中禁用 Vulkan 或强制 FP32 精度的修复。[/dim]"
+                    "[bold red]警告: 检测到异常重复输出 (可能由 iGPU 溢出引起)，已熔断。[/bold red]\n",
+                    "[dim]解决方案:[/dim]\n",
+                    "[dim]- 尝试在 config.toml 中禁用 Vulkan (vulkan_enable = false)[/dim]\n",
+                    "[dim]- 强制使用 FP32 精度 (vulkan_force_fp32 = true)[/dim]\n",
+                    "[dim]- 调整模型参数或检查硬件资源[/dim]",
                 )
                 break
 

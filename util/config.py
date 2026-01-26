@@ -21,6 +21,8 @@ class DebugConfig:
 # 服务端配置
 class ServerConfig:
     model: str = config["server"]["model"]
+    vulkan_enable: bool = config["server"]["vulkan_enable"]
+    vulkan_force_fp32: bool = config["server"]["vulkan_force_fp32"]
     addr: str = config["server"]["addr"]
     speech_recognition_port: str = config["server"]["speech_recognition_port"]
     start_online_translate_server: bool = config["server"][

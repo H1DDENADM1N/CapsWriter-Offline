@@ -292,7 +292,6 @@
 
     10.5 欢迎将位置错乱的exe程序名反馈给我
 12. 整合包不支持增量更新，请删除 `./configs/` 目录下你的自定义配置例如 `my config.toml`，重新将修改后的自定义配置 `config.toml` 复制到 `./configs/` 目录下，重命名为例如 `my config.toml`。
-13. 如果使用 `FunASR nano onnx` 模型，且你的电脑不是 **仅支持 AVX2 的 CPU** ，注意修改 `funasr_llm_path` 不要使用 INT8 兼容模型
 
 # 🤓 源码运行
 
@@ -419,6 +418,13 @@ model = "FunASR"
 # 如果你只说中文普通话，建议使用 'Paraformer' 模型
 # 不影响简繁转换和翻译
 
+vulkan_enable = true
+# 是否启用 Fun-ASR-Nano-GGUF 模型 Vulkan 加速 GPU 推理
+
+vulkan_force_fp32 = false
+# 是否强制 Fun-ASR-Nano-GGUF 模型 FP32 计算（如果 GPU 是 Intel 集显且出现精度溢出，可设为 true）
+
+
 addr = "0.0.0.0"
 # 服务端监听地址
 
@@ -514,7 +520,7 @@ online_translate_target_languages = "JA"
 
 hold_mode = true
 # 长按模式，按下录音，松开停止，像对讲机一样用
-# 改为 False，则关闭长按模式，也就是单击模式
+# 改为 false，则关闭长按模式，也就是单击模式
 # 即：单击录音，再次单击停止
 # 且：长按会执行原本的单击功能
 
@@ -578,17 +584,17 @@ hot_rag = true
 # 不用重新编辑 hot-rag.txt 文件
 # hot-en.txt 和 hot-zh.txt 文件仍然有效
 
-mic_seg_duration = 15
-# 麦克风听写时分段长度：15 秒
+mic_seg_duration = 60
+# 麦克风听写时分段长度：60 秒
 
-mic_seg_overlap = 2
-# 麦克风听写时分段重叠：2 秒
+mic_seg_overlap = 4
+# 麦克风听写时分段重叠：4 秒
 
-file_seg_duration = 25
-# 转录文件时分段长度：25 秒
+file_seg_duration = 60
+# 转录文件时分段长度：60 秒
 
-file_seg_overlap = 2
-# 转录文件时分段重叠：2 秒
+file_seg_overlap = 4
+# 转录文件时分段重叠：4 秒
 
 mute_other_audio = true
 # 录音时是否静音其他音频播放
@@ -1197,31 +1203,6 @@ decoding_method = "greedy_search"
 
 debug = false
 # 是否启用调试模式
-
-```
-
-你可以直接编辑 `hint_while_recording.ini` 文件，修改“✦语音输入中‧‧‧”提示的配置
-
-```ini
-[BeautifulToolTip]
-enableBTT=1
-[ShowText]
-cnTxt=✦语音输入中‧‧‧
-cnTxtB=✦語音輸入中⇄
-enTxt=✦VoiceTrans‧‧‧
-enTxtB=✦VoiceTrans⇄
-[Txt]
-cnTxtClolorA=0xFFCC7A00
-cnTxtClolorB=0xFFFFDF80
-cnTxtFontSize=16
-enTxtClolorA=0xFF1A1AFF
-enTxtClolorB=0xFF6666FF
-enTxtFontSize=16
-[List]
-Comment1=在hintAtCursorPositionList中的程序将不会把“语音输入中”的提示显示在文本光标位置，而是显示在鼠标光标的位置
-hintAtCursorPositionList=:StartMenuExperienceHost.exe:wetype_update.exe:AnLink.exe:wps.exe:HBuilderX.exe:ShareX.exe:clipdiary-portable.exe:explorer.exe:firefox.exe:
-Comment2=在doNotShowHintList中的程序将不会显示“语音输入中”的提示
-doNotShowHintList=:PotPlayer.exe:PotPlayer64.exe:PotPlayerMini.exe:PotPlayerMini64.exe:
 
 ```
 
