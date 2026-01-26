@@ -5,6 +5,8 @@ from typing import List, Optional, Tuple
 import numpy as np
 from loguru import logger
 
+from util.server.cosmic import console
+
 from .. import nano_llama
 from ..display import DisplayReporter
 from ..nano_ctc import align_timestamps, decode_ctc
@@ -122,10 +124,10 @@ class LLMDecoder:
                 consecutive_cnt = 1
 
             if consecutive_cnt > 20:
-                print(
+                console.print(
                     "\n[bold red]警告: 检测到异常重复输出 (可能由 iGPU 溢出引起)，已熔断。[/bold red]"
                 )
-                print(
+                console.print(
                     "[dim]尝试在 config.py 中禁用 Vulkan 或强制 FP32 精度的修复。[/dim]"
                 )
                 break
