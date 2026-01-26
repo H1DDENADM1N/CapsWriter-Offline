@@ -3,11 +3,14 @@ import os
 import ctypes
 import numpy as np
 import gguf
+from pathlib import Path
+from os.path import relpath
+from . import logger
 
 # =========================================================================
 # Configuration
 # =========================================================================
-QUIET_LOGS = True
+QUIET_LOGS = False
 _log_callback_ref = None
 
 # =========================================================================
@@ -129,43 +132,31 @@ def init_llama_lib():
     global llama_vocab_n_tokens, llama_vocab_eos, llama_token_to_piece
     global _log_callback_ref
 
-    # 获取模块所在目录下的 bin 目录
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    lib_dir = os.path.join(base_dir, "bin")
+    ggml = ctypes.CDLL("./ggml.dll")
+    ggml_base = ctypes.CDLL("./ggml-base.dll")
+    llama = ctypes.CDLL("./llama.dll")
 
-    GGML_DLL_PATH = os.path.join(lib_dir, "ggml.dll")
-    LLAMA_DLL_PATH = os.path.join(lib_dir, "llama.dll")
-    GGML_BASE_DLL_PATH = os.path.join(lib_dir, "ggml-base.dll")
+    # 先设置日志回调（在加载 backend 之前）
+    LOG_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_char_p, ctypes.c_void_p)
+    llama_log_set = llama.llama_log_set
+    llama_log_set.argtypes = [LOG_CALLBACK, ctypes.c_void_p]
+    llama_log_set.restype = None
 
-    original_cwd = os.getcwd()
-    os.chdir(lib_dir)
-    try:
-        ggml = ctypes.CDLL(GGML_DLL_PATH)
-        ggml_base = ctypes.CDLL(GGML_BASE_DLL_PATH)
-        llama = ctypes.CDLL(LLAMA_DLL_PATH)
+    # 配置日志（默认捕获）
+    configure_logging(quiet=QUIET_LOGS)
 
-        # 先设置日志回调（在加载 backend 之前）
-        LOG_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_char_p, ctypes.c_void_p)
-        llama_log_set = llama.llama_log_set
-        llama_log_set.argtypes = [LOG_CALLBACK, ctypes.c_void_p]
-        llama_log_set.restype = None
+    # 然后再加载 backend
+    ggml_backend_load_all = ggml.ggml_backend_load_all
+    ggml_backend_load_all.argtypes = []
+    ggml_backend_load_all.restype = None
+    ggml_backend_load_all()
 
-        if QUIET_LOGS:
-            _log_callback_ref = LOG_CALLBACK(quiet_log_callback)
-            llama_log_set(_log_callback_ref, None)
-
-        # 然后再加载 backend
-        ggml_backend_load_all = ggml.ggml_backend_load_all
-        ggml_backend_load_all.argtypes = []
-        ggml_backend_load_all.restype = None
-        ggml_backend_load_all()
-    finally:
-        os.chdir(original_cwd)
-
-    # Backend
+    # Initialize backend
     llama_backend_init = llama.llama_backend_init
     llama_backend_init.argtypes = []
     llama_backend_init.restype = None
+    llama_backend_init()
+
 
     llama_backend_free = llama.llama_backend_free
     llama_backend_free.argtypes = []
@@ -251,12 +242,88 @@ def init_llama_lib():
     llama_memory_clear.argtypes = [ctypes.c_void_p, ctypes.c_bool]
     llama_memory_clear.restype = None
 
-_log_callback_ref = None
+def load_model(model_path: str):
+    """
+    加载 GGUF 模型（自动处理初始化和路径编码）
+    
+    Args:
+        model_path: GGUF 模型文件路径
+        
+    Returns:
+        model: llama_model 指针
+    """
+    lib_dir = Path(__file__).parent / 'bin'
+    model_path = Path(model_path).resolve()
+    model_rel = Path(relpath(model_path, lib_dir))
 
-def quiet_log_callback(level, message, user_data):
-    pass
+    # 跳转到 dll 所在目录，并将其加到 Path
+    original_cwd = Path.cwd()
+    os.chdir(lib_dir)
+    if hasattr(os, 'add_dll_directory'):
+        os.add_dll_directory(os.getcwd())
+    os.environ['PATH'] = os.getcwd() + os.pathsep + os.environ['PATH']
+    logger.info(f"Changed directory to: {Path.cwd()}")
 
-def configure_logging(quiet=True):
+    # 初始化 backend，载入模型
+    init_llama_lib()
+    model_params = llama_model_default_params()
+    model = llama_model_load_from_file(
+        model_rel.as_posix().encode('utf-8'),
+        model_params
+    )
+
+    if model:
+        os.chdir(original_cwd)
+        logger.info(f"Restored directory to: {Path.cwd()}")
+        return model
+    else:
+        logger.error(f'当前路径：{Path.cwd()}')
+        logger.error(f'模型绝对路径：{model_path.as_posix()}')
+        logger.error(f'模型可访问性：{model_path.exists()}')
+        logger.error(f"模型加载失败: {model_path}")
+        return None
+
+# =========================================================================
+# 日志回调
+# =========================================================================
+
+def python_log_callback(level, message, user_data):
+    """
+    llama.cpp 日志回调函数
+    level: 
+        2 = ERROR
+        3 = WARN
+        4 = INFO
+        5 = DEBUG
+    """
+    if not message:
+        return
+
+    try:
+        msg_str = message.decode('utf-8', errors='replace').strip()
+        if not msg_str:
+            return
+            
+        # llama.cpp 经常输出只是换行符或点的日志，过滤掉
+        if msg_str in ['.', '\n']:
+            return
+
+        if level == 2:
+            logger.error(f"[llama.cpp] {msg_str}")
+        elif level == 3:
+            logger.warning(f"[llama.cpp] {msg_str}")
+        elif level == 4:
+            logger.info(f"[llama.cpp] {msg_str}")
+        elif level >= 5:
+            logger.debug(f"[llama.cpp] {msg_str}")
+        else:
+            logger.info(f"[llama.cpp] {msg_str}")
+            
+    except Exception as e:
+        # 防止回调错误导致程序崩溃
+        print(f"日志回调出错: {e}")
+
+def configure_logging(quiet=False):
     """配置 llama.cpp 日志回调"""
     global _log_callback_ref, llama_log_set
     
@@ -265,14 +332,17 @@ def configure_logging(quiet=True):
         
     LOG_CALLBACK = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_char_p, ctypes.c_void_p)
     
-    if quiet:
-        _log_callback_ref = LOG_CALLBACK(quiet_log_callback)
-        llama_log_set(_log_callback_ref, None)
-    else:
-        # Restore default (pass None to reset? or just do nothing if we want default behavior)
-        # llama.cpp default is usually stderr. passing NULL might reset it if the API supports it.
-        # But for now, user just wants to silence it.
-        pass
+    # 始终设置回调为我们的 python 处理程序
+    # 如果 quiet 为 True，我们本可以传递一个空操作，但用户要求路由到服务器日志。
+    # 上下文中的 'quiet' 参数（来自之前的代码）意味着“抑制默认的 stderr”。
+    # 现在我们想要“重定向到 logger”。
+    
+    # 如果用户真的想要静音，他们可以在外部调整 logger 配置
+    # 或者我们可以通过一个“Silence”标志来处理。
+    # 目前，我们将所有内容路由到 logger。
+    
+    _log_callback_ref = LOG_CALLBACK(python_log_callback)
+    llama_log_set(_log_callback_ref, None)
 
 # =========================================================================
 # Utilities
