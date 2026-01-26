@@ -9,21 +9,19 @@
 - HotwordManager: 热词管理器（单例）
 """
 
-from .. import logger
+from loguru import logger
 
-
-from .hot_phoneme import PhonemeCorrector, CorrectionResult
-from .hot_rule import RuleCorrector
+from .hot_phoneme import CorrectionResult, PhonemeCorrector
 from .hot_rectification import RectificationRAG
+from .hot_rule import RuleCorrector
 from .manager import HotwordManager, get_hotword_manager
 
-
 __all__ = [
-    'PhonemeCorrector',
-    'CorrectionResult',
-    'RuleCorrector',
-    'RectificationRAG',
-    'HotwordManager',
-    'get_hotword_manager',
-    'logger',
+    "PhonemeCorrector",
+    "CorrectionResult",
+    "RuleCorrector",
+    "RectificationRAG",
+    "HotwordManager",
+    "get_hotword_manager",
+    "logger",
 ]

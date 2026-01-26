@@ -11,13 +11,12 @@
 3. 适合作为 FastRAG 粗筛后的精确计算
 """
 
-from typing import List, Tuple, Dict
-from . import logger
+from typing import Dict, List, Tuple
 
+from loguru import logger
 
 from .algo_calc import find_best_match
-from .algo_phoneme import get_phoneme_info, Phoneme
-
+from .algo_phoneme import Phoneme, get_phoneme_info
 
 
 class AccuRAG:
@@ -54,10 +53,13 @@ class AccuRAG:
         logger.debug(f"AccuRAG 已更新 {len(hotwords)} 个热词")
         return len(hotwords)
 
-    def search(self, input_phonemes: List[Phoneme],
-               candidate_hws: List[str] = None,
-               top_k: int = 10,
-               apply_threshold: bool = True) -> List[Tuple[str, float, int, int]]:
+    def search(
+        self,
+        input_phonemes: List[Phoneme],
+        candidate_hws: List[str] = None,
+        top_k: int = 10,
+        apply_threshold: bool = True,
+    ) -> List[Tuple[str, float, int, int]]:
         """
         精确检索相关热词
 
@@ -99,9 +101,9 @@ class AccuRAG:
         matches.sort(key=lambda x: x[1], reverse=True)
         return matches[:top_k]
 
-    def search_from_text(self, text: str,
-                        candidate_hws: List[str] = None,
-                        top_k: int = 10) -> List[Tuple[str, float, int, int]]:
+    def search_from_text(
+        self, text: str, candidate_hws: List[str] = None, top_k: int = 10
+    ) -> List[Tuple[str, float, int, int]]:
         """
         从文本直接检索（自动提取音素）
 
@@ -121,15 +123,16 @@ class AccuRAG:
 
 
 if __name__ == "__main__":
-    import sys
     import io
+    import sys
 
     # Setup UTF-8 output for Windows
-    if sys.platform == 'win32':
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    if sys.platform == "win32":
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
     import logging
+
     logging.basicConfig(level=logging.DEBUG)
 
     print("\n--- AccuRAG 测试 ---")
@@ -150,11 +153,11 @@ if __name__ == "__main__":
 
     print("\n=== 精确检索测试 ===")
     test_cases = [
-        "撒贝你主持节目",      # 撒贝宁 (前后鼻音相似)
-        "康灰是央视主持人",    # 康辉 (h/ui 不完全匹配)
-        "东方菜富股票",        # 东方财富 (c/ch 相似)
-        "科大迅飞语音",        # 科大讯飞 (x/x 完全匹配)
-        "在月清这个地方",       # 乐清 ( Yue/Qing -> 月清)
+        "撒贝你主持节目",  # 撒贝宁 (前后鼻音相似)
+        "康灰是央视主持人",  # 康辉 (h/ui 不完全匹配)
+        "东方菜富股票",  # 东方财富 (c/ch 相似)
+        "科大迅飞语音",  # 科大讯飞 (x/x 完全匹配)
+        "在月清这个地方",  # 乐清 ( Yue/Qing -> 月清)
     ]
 
     for text in test_cases:
