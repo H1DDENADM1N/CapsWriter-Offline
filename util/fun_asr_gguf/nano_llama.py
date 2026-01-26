@@ -317,7 +317,7 @@ def python_log_callback(level, message, user_data):
     """
     llama.cpp 日志回调函数
     level:
-        2 = ERROR
+        2 = ERROR (实际上包括了很多INFO信息)
         3 = WARN
         4 = INFO
         5 = DEBUG
@@ -327,15 +327,17 @@ def python_log_callback(level, message, user_data):
 
     try:
         msg_str = message.decode("utf-8", errors="replace").strip()
-        if not msg_str:
+        if not msg_str or msg_str in [".", "\n"]:
             return
 
-        # llama.cpp 经常输出只是换行符或点的日志，过滤掉
-        if msg_str in [".", "\n"]:
-            return
-
-        if level == 2:
+        # 检查消息内容，对真正的错误和警告做特殊处理
+        if "error" in msg_str.lower() or "failed" in msg_str.lower():
             logger.error(f"[llama.cpp] {msg_str}")
+        elif "warn" in msg_str.lower():
+            logger.warning(f"[llama.cpp] {msg_str}")
+        elif level == 2:
+            # 对于level=2但实际是信息的消息，降级为info
+            logger.info(f"[llama.cpp] {msg_str}")
         elif level == 3:
             logger.warning(f"[llama.cpp] {msg_str}")
         elif level == 4:
@@ -346,7 +348,6 @@ def python_log_callback(level, message, user_data):
             logger.info(f"[llama.cpp] {msg_str}")
 
     except Exception as e:
-        # 防止回调错误导致程序崩溃
         print(f"日志回调出错: {e}")
 
 
