@@ -1,89 +1,164 @@
 import sys
 
+from loguru import logger
+
 from util.config import ModelPaths
+from util.config import ServerConfig as Config
 from util.server.cosmic import console
 
-model_exists_expcetion = """
 
-"""
+def check_model() -> None:
+    """
+    根据配置的模型类型检查所需的模型文件是否存在
+    如果模型文件不存在，显示错误信息后退出程序。
+    """
+    model = Config.model
+    logger.debug(f"检查模型文件, 类型: {model}")
 
-
-def check_model():
-    for key, path in ModelPaths.__dict__.items():
-        if key.startswith("_"):
-            continue
-        if path.exists():
-            continue
+    # 根据模型类型确定需要检查的文件
+    if model == "FunASR":
+        required_files = {
+            "Fun-ASR-Nano-GGUF 模型文件": [
+                ModelPaths.funasr_encoder_adaptor_path,
+                ModelPaths.funasr_ctc_path,
+                ModelPaths.funasr_llm_path,
+                ModelPaths.funasr_tokens_path,
+                ModelPaths.funasr_hotwords_path,
+            ]
+        }
+    elif model == "Sensevoice":
+        required_files = {
+            "SenseVoice 模型文件": [
+                ModelPaths.sensevoice_path,
+                ModelPaths.sensevoice_tokens_path,
+            ]
+        }
+    elif model == "Paraformer":
+        required_files = {
+            "Paraformer 模型文件": [
+                ModelPaths.paraformer_path,
+                ModelPaths.paraformer_tokens_path,
+            ],
+            "标点模型文件": [
+                ModelPaths.punc_model_dir,
+            ],
+        }
+    else:
+        error_msg = f"不支持的模型类型: {Config.model}"
+        logger.error(error_msg)
         console.print(
             f"""
-    未能找到模型文件 
+    [bold red]不支持的模型类型：{Config.model}[/bold red]
 
-    未找到：{path}
+    请在 config.toml 中将 model 设置为：
+    - 'FunASR'
+    - 'Sensevoice'
+    - 'Paraformer'
 
-    本服务端需要 SenseVoice 模型、Paraformer语音模型、Helsinki-NLP--opus-mt-zh-en翻译模型
-    请下载模型并放置到： {ModelPaths.model_dir} 
-    
-    Sensevoice语音模型：
-    wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
-
-    tar xvf sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
-    rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
-
-
-
-    Paraformer语音模型：
-    git clone https://huggingface.co/yiyu-earth/sherpa-onnx-paraformer-zh-2024-04-25 paraformer-offline-zh
-
-    标点模型：
-    git clone git clone https://www.modelscope.cn/csukuangfj/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.git sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12
-
-
-    翻译模型：
-    https://huggingface.co/Helsinki-NLP/opus-mt-zh-en
-    https://object.pouta.csc.fi/Tatoeba-MT-models/zho-eng/opus-2020-07-17.zip
-
-    将翻译模型文件解压放到软件根目录的 models\Helsinki-NLP--opus-mt-zh-en\ 文件夹中
-""",
+        """,
             style="bright_red",
         )
         input("按回车退出")
-        sys.exit()
+        sys.exit(1)
+
+    # 检查所有必需的文件
+    missing_files = []
+    for category, files in required_files.items():
+        for file_path in files:
+            if not file_path.exists():
+                missing_files.append((category, file_path))
+                logger.warning(f"模型文件缺失: {file_path}")
+
+    # 如果有缺失的文件，显示错误信息并提供下载链接
+    if missing_files:
+        error_msg = "\n    [bold red]未能找到模型文件[/bold red]\n\n"
+        for category, file_path in missing_files:
+            error_msg += f"    [{category}]\n"
+            error_msg += f"    未找到：{file_path}\n\n"
+
+        error_msg += f"    当前配置的模型类型：[bold yellow]{model}[/bold yellow]\n\n"
+
+        error_msg += (
+            f"    下载后请根据发布页说明，解压到：[cyan]{ModelPaths.model_dir}[/cyan]\n"
+        )
+        error_msg += "    \n"
+
+        logger.error(f"模型文件检查失败，共 {len(missing_files)} 个文件缺失")
+        console.print(error_msg)
+        input("按回车退出")
+        sys.exit(1)
+
+    # 所有检查通过
+    logger.info(f"模型文件检查通过 ({model})")
+    console.print(f"[green4]模型文件检查通过 ({model})", end="\n\n")
 
 
 def check_model_gui():
-    for key, path in ModelPaths.__dict__.items():
-        if key.startswith("_"):
-            continue
-        if path.exists():
-            continue
-        raise Exception(
-            f"""
-    未能找到模型文件 
+    """
+    GUI版本的模型检查函数，根据配置的模型类型检查所需的模型文件是否存在
+    如果模型文件不存在，抛出异常。
+    """
+    model = Config.model
 
-    未找到：{path}
+    # 根据模型类型确定需要检查的文件
+    if model == "FunASR":
+        required_files = {
+            "Fun-ASR-Nano-GGUF 模型文件": [
+                ModelPaths.funasr_encoder_adaptor_path,
+                ModelPaths.funasr_ctc_path,
+                ModelPaths.funasr_llm_path,
+                ModelPaths.funasr_tokens_path,
+                ModelPaths.funasr_hotwords_path,
+            ]
+        }
+    elif model == "Sensevoice":
+        required_files = {
+            "SenseVoice 模型文件": [
+                ModelPaths.sensevoice_path,
+                ModelPaths.sensevoice_tokens_path,
+            ]
+        }
+    elif model == "Paraformer":
+        required_files = {
+            "Paraformer 模型文件": [
+                ModelPaths.paraformer_path,
+                ModelPaths.paraformer_tokens_path,
+            ],
+            "标点模型文件": [
+                ModelPaths.punc_model_dir,
+            ],
+        }
+    else:
+        error_msg = f"""
+    [bold red]不支持的模型类型：{Config.model}[/bold red]
 
-    本服务端需要 SenseVoice 模型、Paraformer语音模型、Helsinki-NLP--opus-mt-zh-en翻译模型
-    请下载模型并放置到： {ModelPaths.model_dir} 
-    
-    Sensevoice语音模型：
-    wget https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
+    请在 config.toml 中将 model 设置为：
+    - 'FunASR'
+    - 'Sensevoice'
+    - 'Paraformer'
+        """
+        raise Exception(error_msg)
 
-    tar xvf sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
-    rm sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
+    # 检查所有必需的文件
+    missing_files = []
+    for category, files in required_files.items():
+        for file_path in files:
+            if not file_path.exists():
+                missing_files.append((category, file_path))
 
+    # 如果有缺失的文件，抛出异常
+    if missing_files:
+        error_msg = "\n    [bold red]未能找到模型文件[/bold red]\n\n"
+        for category, file_path in missing_files:
+            error_msg += f"    [{category}]\n"
+            error_msg += f"    未找到：{file_path}\n\n"
 
-
-    Paraformer语音模型：
-    git clone https://huggingface.co/yiyu-earth/sherpa-onnx-paraformer-zh-2024-04-25 paraformer-offline-zh
-
-    标点模型：
-    git clone https://www.modelscope.cn/csukuangfj/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.git sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12
-
-
-    翻译模型：
-    https://huggingface.co/Helsinki-NLP/opus-mt-zh-en
-    https://object.pouta.csc.fi/Tatoeba-MT-models/zho-eng/opus-2020-07-17.zip
-
-    将翻译模型文件解压放到软件根目录的 models\Helsinki-NLP--opus-mt-zh-en\ 文件夹中
-"""
+        error_msg += f"    当前配置的模型类型：[bold yellow]{model}[/bold yellow]\n\n"
+        error_msg += (
+            f"    下载后请根据发布页说明，解压到：[cyan]{ModelPaths.model_dir}[/cyan]\n"
         )
+
+        raise Exception(error_msg)
+
+    # 所有检查通过
+    logger.info(f"GUI模式 - 模型文件检查通过 ({model})")
