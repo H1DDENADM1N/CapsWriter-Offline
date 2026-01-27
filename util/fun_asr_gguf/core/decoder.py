@@ -3,7 +3,8 @@ import time
 from typing import List, Optional, Tuple
 
 import numpy as np
-from loguru import logger
+from loguru import logger as default_logger
+from loguru._logger import Logger
 
 from util.server.cosmic import console
 
@@ -159,10 +160,11 @@ class LLMDecoder:
 class StreamDecoder:
     """协调完整流程的解码器"""
 
-    def __init__(self, models: ModelManager):
+    def __init__(self, models: ModelManager, logger: Optional[Logger] = None):
         self.models = models
         self.ctc_decoder = CTCDecoder(models)
         self.llm_decoder = LLMDecoder(models)
+        self.logger = logger if logger is not None else default_logger
 
     def decode_stream(
         self,
@@ -283,7 +285,7 @@ class StreamDecoder:
             if not new_hotwords:
                 break
 
-            logger.info(f"[Two-Pass] 发现新热词，触发第二遍解码: {new_hotwords}")
+            self.logger.info(f"[Two-Pass] 发现新热词，触发第二遍解码: {new_hotwords}")
             reporter.print(f"\n[Two-Pass] 发现新热词: {new_hotwords}，正在重试...")
             current_hotwords = list(current_hotwords_set | new_hotwords)
             hotwords = current_hotwords

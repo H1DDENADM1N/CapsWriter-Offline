@@ -1,4 +1,5 @@
 import argparse
+import multiprocessing as mul
 import os
 import subprocess
 import sys
@@ -6,12 +7,14 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from queue import Queue
+from typing import Optional
 
 import win32api
 import win32con
 import win32gui
 import win32print
-from loguru import logger
+from loguru import logger as default_logger
+from loguru._logger import Logger
 from PySide6.QtCore import QFileSystemWatcher, QPoint, QStandardPaths, Qt, QTimer, QUrl
 from PySide6.QtGui import (
     QAction,
@@ -47,8 +50,9 @@ from tomlkit import dumps, parse
 from util.check_process import check_process
 from util.client.check_microphone_usage import is_microphone_in_use
 from util.config import ClientConfig as Config
+from util.config import DebugConfig
 from util.explorer_token_downgrade import downgraded_via_explorer_token
-from util.safe_logger import init_logging
+from util.safe_logger import SafeLogger
 
 
 class Hint_While_Recording_At_Cursor_Position(QLabel):
@@ -391,7 +395,8 @@ class InputDialog_Api_Key:
 
 
 class GUI(QMainWindow):
-    def __init__(self):
+    def __init__(self, logger: Optional[Logger] = None):
+        self.logger = logger if logger is not None else default_logger
         super().__init__()
         self.config_toml_path = Path() / "config.toml"
         self.config_data = None  # 存储配置数据
@@ -421,10 +426,9 @@ class GUI(QMainWindow):
             with open(self.config_toml_path, "r", encoding="utf-8") as f:
                 config_str = f.read()
                 self.config_data = parse(config_str)
-            logger.debug("配置文件已加载到内存")
+            self.logger.debug("配置文件已加载到内存")
         except Exception as e:
-            init_logging()
-            logger.error(f"读取配置文件失败: {e}")
+            self.logger.error(f"读取配置文件失败: {e}")
             self.config_data = None
 
     def save_config(self):
@@ -432,10 +436,10 @@ class GUI(QMainWindow):
         try:
             with open(self.config_toml_path, "w", encoding="utf-8") as f:
                 f.write(dumps(self.config_data))
-            logger.debug("配置已保存到文件")
+            self.logger.debug("配置已保存到文件")
             return True
         except Exception as e:
-            logger.error(f"保存配置文件失败: {e}")
+            self.logger.error(f"保存配置文件失败: {e}")
             return False
 
     def get_config_value(self, path: str, default=None):
@@ -458,7 +462,7 @@ class GUI(QMainWindow):
                     return default
             return value
         except Exception as e:
-            logger.error(f"获取配置值失败 [{path}]: {e}")
+            self.logger.error(f"获取配置值失败 [{path}]: {e}")
             return default
 
     def set_config_value(self, path: str, value):
@@ -483,7 +487,7 @@ class GUI(QMainWindow):
             data[keys[-1]] = value
             return True
         except Exception as e:
-            logger.error(f"设置配置值失败 [{path}]: {e}")
+            self.logger.error(f"设置配置值失败 [{path}]: {e}")
             return False
 
     def init_ui(self):
@@ -632,10 +636,10 @@ class GUI(QMainWindow):
             )
             self.update_prompt_style_menu(old_value_prompt_style_selection)
 
-            logger.debug("托盘菜单已根据配置文件更新")
+            self.logger.debug("托盘菜单已根据配置文件更新")
 
         except Exception as e:
-            logger.error(f"更新托盘菜单失败: {e}")
+            self.logger.error(f"更新托盘菜单失败: {e}")
 
     def update_ai_provider_menu(self, ai_provider: str):
         """更新AI供应商菜单选中状态"""
@@ -653,7 +657,7 @@ class GUI(QMainWindow):
             case "openai":
                 self.ai_provider_openai_action.setChecked(True)
             case _:
-                logger.warning(f"不支持的 AI 提供商：{ai_provider}")
+                self.logger.warning(f"不支持的 AI 提供商：{ai_provider}")
 
     def show_prompt_style_notification(self, prompt_style: str):
         """显示提示风格变更通知"""
@@ -732,7 +736,7 @@ class GUI(QMainWindow):
             case "creative_writing":
                 self.prompt_creative_writing_action.setChecked(True)
             case _:
-                logger.warning(f"不支持的 AI 提示风格：{prompt_style}")
+                self.logger.warning(f"不支持的 AI 提示风格：{prompt_style}")
 
         # 启用了 是否在切换提示风格时显示提示  而且  AI 提示风格 确实发生变化时才显示通知
         if Config.show_prompt_style_changed_notification and should_show_notification:
@@ -1073,9 +1077,9 @@ class GUI(QMainWindow):
                 else:
                     self.save_audio_action.setText("✅ 保存音频")
             else:
-                logger.error("保存配置文件失败")
+                self.logger.error("保存配置文件失败")
         else:
-            logger.error("更新内存配置失败")
+            self.logger.error("更新内存配置失败")
 
     def toogle_save_markdown(self):
         # 从内存配置中获取当前值
@@ -1096,9 +1100,9 @@ class GUI(QMainWindow):
                     self.save_non_kwd_markdown_action.setEnabled(True)
                     self.update_save_non_kwd_markdown()
             else:
-                logger.error("保存配置文件失败")
+                self.logger.error("保存配置文件失败")
         else:
-            logger.error("更新内存配置失败")
+            self.logger.error("更新内存配置失败")
 
     def toogle_save_non_kwd_markdown(self):
         # 从内存配置中获取当前值
@@ -1114,9 +1118,9 @@ class GUI(QMainWindow):
                 else:
                     self.save_non_kwd_markdown_action.setText("✅ 保存非关键词日记")
             else:
-                logger.error("保存配置文件失败")
+                self.logger.error("保存配置文件失败")
         else:
-            logger.error("更新内存配置失败")
+            self.logger.error("更新内存配置失败")
 
     def update_save_non_kwd_markdown(self):
         try:
@@ -1126,8 +1130,7 @@ class GUI(QMainWindow):
             else:
                 self.save_non_kwd_markdown_action.setText("❌ 保存非关键词日记")
         except Exception as e:
-            init_logging()
-            logger.error(f"更新托盘菜单失败: {e}")
+            self.logger.error(f"更新托盘菜单失败: {e}")
 
     def switch_between_simplified_and_traditional(self):
         # 从内存配置中获取当前值
@@ -1158,9 +1161,9 @@ class GUI(QMainWindow):
                             "简体中文"
                         )
             else:
-                logger.error("保存配置文件失败")
+                self.logger.error("保存配置文件失败")
         else:
-            logger.error("更新内存配置失败")
+            self.logger.error("更新内存配置失败")
 
     def toogle_ai_provider_and_ai_optimize_language_expression(self):
         # 从内存配置中获取当前值
@@ -1192,9 +1195,9 @@ class GUI(QMainWindow):
                     self.prompt_style_menu.setEnabled(True)
                     self.prompt_style_menu.setTitle("🤖 AI 优化风格")
             else:
-                logger.error("保存配置文件失败")
+                self.logger.error("保存配置文件失败")
         else:
-            logger.error("更新内存配置失败")
+            self.logger.error("更新内存配置失败")
 
     def edit_api_key(self):
         """根据当前配置动态编辑相应的 API Key"""
@@ -1253,7 +1256,7 @@ class GUI(QMainWindow):
         )
 
         # 同时记录到日志
-        logger.warning(f"不支持的 AI 提供商：{provider}")
+        self.logger.warning(f"不支持的 AI 提供商：{provider}")
 
     def update_zhipuai_api_key(self, new_value):
         # print(f"[green4]更新 API Key: {new_value}[/]")
@@ -1262,9 +1265,9 @@ class GUI(QMainWindow):
             if self.save_config():
                 pass
             else:
-                logger.error("保存配置文件失败")
+                self.logger.error("保存配置文件失败")
         else:
-            logger.error("更新内存配置失败")
+            self.logger.error("更新内存配置失败")
 
     def update_openai_api_key(self, new_value):
         # print(f"[green4]更新 API Key: {new_value}[/]")
@@ -1273,9 +1276,9 @@ class GUI(QMainWindow):
             if self.save_config():
                 pass
             else:
-                logger.error("保存配置文件失败")
+                self.logger.error("保存配置文件失败")
         else:
-            logger.error("更新内存配置失败")
+            self.logger.error("更新内存配置失败")
 
     def switch_ai_provider(self):
         # 获取新值
@@ -1290,9 +1293,9 @@ class GUI(QMainWindow):
         # 更新内存配置并保存到文件
         if self.set_config_value("client.ai_provider", new_value):
             if not self.save_config():
-                logger.error("保存配置文件失败")
+                self.logger.error("保存配置文件失败")
         else:
-            logger.error("更新内存配置失败")
+            self.logger.error("更新内存配置失败")
 
     def switch_prompt_style_selection(self):
         # 获取新值
@@ -1329,9 +1332,9 @@ class GUI(QMainWindow):
                     # 手动更新托盘菜单，这将显示通知（因为值确实改变了）
                     self.update_prompt_style_menu(new_value)
                 else:
-                    logger.error("保存配置文件失败")
+                    self.logger.error("保存配置文件失败")
             else:
-                logger.error("更新内存配置失败")
+                self.logger.error("更新内存配置失败")
 
     def restart_client(self):
         subprocess.Popen(
@@ -1455,9 +1458,9 @@ class GUI(QMainWindow):
             if not files:
                 return
 
-            logger.info(f"选择了 {len(files)} 个文件进行转录:")
+            self.logger.info(f"选择了 {len(files)} 个文件进行转录:")
             for file in files:
-                logger.info(f"  - {file}")
+                self.logger.info(f"  - {file}")
 
             # 显示通知
             self.tray_icon.showMessage(
@@ -1471,7 +1474,7 @@ class GUI(QMainWindow):
             self.start_batch_transcription(files)
 
         except Exception as e:
-            logger.error(f"选择文件时出错: {e}")
+            self.logger.error(f"选择文件时出错: {e}")
             self.tray_icon.showMessage(
                 "错误", f"处理文件时出错: {str(e)}", QSystemTrayIcon.Critical, 3000
             )
@@ -1486,7 +1489,7 @@ class GUI(QMainWindow):
             command = [str(python_exe_path), str(script_path)] + files_quoted
             subprocess.Popen(command, cwd=str(CapsWriter_path))
         except Exception as e:
-            logger.error(f"启动转录进程失败: {e}")
+            self.logger.error(f"启动转录进程失败: {e}")
 
     def hideEvent(self, event):
         """当窗口被隐藏时停止时间标签计时器"""
@@ -1524,8 +1527,6 @@ class GUI(QMainWindow):
         self.text_box_client.moveCursor(QTextCursor.End)  # 滚动到最下行
 
     def quit_app(self):
-        init_logging()
-
         # Terminate core_client.py process
         if hasattr(self, "core_client_process") and self.core_client_process:
             self.core_client_process.terminate()
@@ -1552,11 +1553,11 @@ class GUI(QMainWindow):
                 text=True,
             )
             stdout, stderr = proc.communicate()
-            logger.debug(f"Taskkill output: {stdout}")
+            self.logger.debug(f"Taskkill output: {stdout}")
             if stderr:
-                logger.error(f"Taskkill errors: {stderr}")
+                self.logger.error(f"Taskkill errors: {stderr}")
         except Exception as e:
-            logger.error(f"Error occurred while quitting the application: {e}")
+            self.logger.error(f"Error occurred while quitting the application: {e}")
 
     def on_tray_icon_activated(self, reason):
         # Called when the system tray icon is activated
@@ -1697,8 +1698,7 @@ class GUI(QMainWindow):
             ):  # 窗口非活跃状态，从右边弹出的，恢复继续停靠在右边
                 self.berthToRight(x, y, width, height, screenWidth, screenHeight)
             else:
-                init_logging()
-                logger.debug("窗口无需恢复停靠")
+                self.logger.debug("窗口无需恢复停靠")
                 pass
 
     def mousePressEvent(self, event):
@@ -1871,15 +1871,18 @@ class GUI(QMainWindow):
             widget.setFont(current_font)
 
 
-def start_client_gui():
-    Print_Screen_Scale()
-    if Config.only_run_once and check_process("python_CapsWriter_Client.exe"):
+def start_client_gui(logger: Optional[Logger] = None):
+    _logger = logger if logger is not None else default_logger
+    Print_Screen_Scale(logger=_logger)
+    if Config.only_run_once and check_process(
+        "python_CapsWriter_Client.exe", logger=_logger
+    ):
         raise Exception(
             "已经有一个客户端在运行了！（用户配置了 只允许运行一次，禁止多开；而且检测到 python_CapsWriter_Client.exe 进程已在运行。如果你确定需要启动多个客户端同时运行，请先修改 config.py  class ClientConfig:  Only_run_once = False 。）"
         )
     if (
         Config.hint_while_recording_at_edit_position_powered_by_ahk
-        and not check_process("hint_while_recording.exe")
+        and not check_process("hint_while_recording.exe", logger=_logger)
         and Path("hint_while_recording.exe").exists()
     ):
         try:
@@ -1899,31 +1902,28 @@ def start_client_gui():
         app, theme="dark_teal.xml", css_file="util\\client\\gui_theme_custom.css"
     )
     global gui
-    gui = GUI()
+    gui = GUI(logger=_logger)
     if not Config.shrink_automatically_to_tray:
         gui.show()
     sys.exit(app.exec())
 
 
-def Print_Screen_Scale():
-    init_logging()
+def Print_Screen_Scale(logger: Optional[Logger] = None):
+    _logger = logger if logger is not None else default_logger
     # 获取屏幕的宽度和高度
     hDC = win32gui.GetDC(0)
     screen_width = win32print.GetDeviceCaps(hDC, win32con.DESKTOPHORZRES)
     screen_height = win32print.GetDeviceCaps(hDC, win32con.DESKTOPVERTRES)
-    print(f"屏幕尺寸: {screen_width}x{screen_height}")
-    logger.debug(f"屏幕尺寸: {screen_width}x{screen_height}")
+    _logger.debug(f"屏幕尺寸: {screen_width}x{screen_height}")
     # 获取逻辑的宽度和高度
     logical_width = win32api.GetSystemMetrics(win32con.SM_CXVIRTUALSCREEN)
     logical_height = win32api.GetSystemMetrics(win32con.SM_CYVIRTUALSCREEN)
-    print(f"逻辑尺寸: {logical_width}x{logical_height}")
-    logger.debug(f"逻辑尺寸: {logical_width}x{logical_height}")
+    _logger.debug(f"逻辑尺寸: {logical_width}x{logical_height}")
     # 计算缩放比例
     global scale_x, scale_y
     scale_x = screen_width / logical_width
     scale_y = screen_height / logical_height
-    print(f"屏幕缩放比例: {scale_x}, {scale_y}")
-    logger.debug(f"屏幕缩放比例: {scale_x}, {scale_y}")
+    _logger.debug(f"屏幕缩放比例: {scale_x}, {scale_y}")
 
 
 def read_file_list(file_list_path: Path):
@@ -1933,22 +1933,31 @@ def read_file_list(file_list_path: Path):
 
 
 if __name__ == "__main__":
+    ctx = mul.get_context("spawn")
+    SafeLogger(mp_context=ctx)
+    default_logger.add(
+        sink=sys.stderr,
+        level=DebugConfig.logger_level,
+        catch=True,
+    )
+    default_logger.info("启动 CapsWriter 客户端 GUI...")
     parser = argparse.ArgumentParser(description="处理文件")
     parser.add_argument("files", nargs="*", type=Path, help="要处理的文件")
     parser.add_argument("--file-list", type=Path, help="包含文件列表的文本文件")
     args = parser.parse_args()
 
     if args.file_list:  # 如果传递了 --file-list 参数
+        default_logger.debug(f"读取文件列表: {args.file_list}")
         try:
             files = read_file_list(args.file_list)
         except Exception as e:
-            init_logging()
-            logger.error(f"读取文件列表失败: {e}")
+            default_logger.error(f"读取文件列表失败: {e}")
             sys.exit(1)
     else:
         files = args.files  # 直接传递的文件列表
 
     if files:  # 如果有文件需要处理
+        default_logger.debug(f"处理文件: {files}")
         CapsWriter_path = Path(__file__).parent
         script_path = CapsWriter_path / "core_client.py"
         python_exe_path = CapsWriter_path / "runtime" / "python.exe"
@@ -1957,8 +1966,8 @@ if __name__ == "__main__":
         try:
             subprocess.Popen(command, cwd=str(CapsWriter_path))
         except Exception as e:
-            init_logging()
-            logger.error(f"启动进程失败: {e}")
+            default_logger.error(f"启动进程失败: {e}")
     else:
         # GUI
-        start_client_gui()
+        default_logger.debug("没有文件需要处理，启动 GUI")
+        start_client_gui(logger=default_logger)

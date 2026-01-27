@@ -385,9 +385,6 @@ if __name__ == "__main__":
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
-    # Setup logging
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-
     print("\n--- algo_phoneme 测试 ---")
 
     test_cases = [

@@ -5,7 +5,6 @@ import win32gui
 from loguru import logger
 
 from util.config import ClientConfig as Config
-from util.safe_logger import init_logging
 
 
 def encode_booleans(*args: bool) -> int:
@@ -96,5 +95,4 @@ if __name__ == "__main__":
     )
     print(result)
 
-    init_logging()
     logger.debug(f"Result: {result}")

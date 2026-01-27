@@ -13,11 +13,9 @@ from util.client.create_file import create_file
 from util.client.finish_file import finish_file
 from util.client.write_file import write_file
 from util.config import ClientConfig as Config
-from util.safe_logger import init_logging
 
 
 async def send_message(message):
-    init_logging()
     # 发送数据
     if Cosmic.websocket is None or Cosmic.websocket.state in [
         State.CLOSED,
@@ -142,5 +140,4 @@ async def send_audio():
     except Exception as e:
         console.print(e)
 
-        init_logging()
         logger.error(f"发送音频时出错: {e}")

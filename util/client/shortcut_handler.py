@@ -24,7 +24,6 @@ from util.client.send_signal_to_hint_while_recording import (
 from util.client.stream import stream_reopen
 from util.config import ClientConfig as Config
 from util.my_status import Status
-from util.safe_logger import init_logging
 
 if shutil.which("ffplay") and Config.play_stop_music:
     from util.client.play_music import play_music
@@ -257,7 +256,6 @@ def launch_task():
                     Cosmic.loop,
                 )
             except Exception as e:
-                init_logging()
                 logger.error(f"Failed to create new event loop: {e}")
         else:
             raise
@@ -756,7 +754,7 @@ def update_prompt_style_handler(style: str) -> None:
         console.print(
             f"{Config.prompt_official_shortcut} 快捷键修改提示风格 {style} 失败: {e}"
         )
-        init_logging()
+
         logger.error(f"保存配置文件失败: {e}")
         return
 

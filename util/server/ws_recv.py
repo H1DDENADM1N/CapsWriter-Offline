@@ -8,7 +8,6 @@ from loguru import logger
 
 from util.constants import AudioFormat
 from util.my_status import Status
-from util.safe_logger import init_logging
 from util.server.classes import Task
 from util.server.cosmic import Cosmic, console
 
@@ -75,7 +74,7 @@ async def message_handler(websocket, message, cache: AudioCache):
             status_mic.start()
         if source == "file" and is_start:
             console.print("正在接收音频文件...")
-            init_logging()
+
             logger.info(
                 f"正在接收音频文件..., 任务ID：{task_id}, Socket ID：{socket_id}"
             )
@@ -104,7 +103,7 @@ async def message_handler(websocket, message, cache: AudioCache):
             status_mic.stop()
         elif source == "file":
             print(f"音频文件接收完毕，时长 {cache.total_duration:.2f}s")
-            init_logging()
+
             logger.info(
                 f"音频文件接收完毕，任务ID: {task_id}, 时长: {cache.total_duration:.2f}s"
             )
@@ -131,8 +130,6 @@ async def message_handler(websocket, message, cache: AudioCache):
 
 
 async def ws_recv(websocket):
-    init_logging()
-
     client_id = f"client_{uuid.uuid4().hex[:8]}"
 
     # 登记 socket 到字典，以 socket id 字符串为索引

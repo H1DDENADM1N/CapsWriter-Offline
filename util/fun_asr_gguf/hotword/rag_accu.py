@@ -131,9 +131,7 @@ if __name__ == "__main__":
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
-    import logging
-
-    logging.basicConfig(level=logging.DEBUG)
+    from loguru import logger
 
     print("\n--- AccuRAG 测试 ---")
 

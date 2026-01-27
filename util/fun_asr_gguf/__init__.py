@@ -24,9 +24,6 @@ from .nano_dataclass import (
 )
 
 __all__ = [
-    # 日志配置
-    "logger",
-    "setup_logging",
     # 引擎
     "FunASREngine",
     "create_asr_engine",

@@ -2,17 +2,21 @@ import asyncio
 import hashlib
 import sqlite3
 from pathlib import Path
+from typing import Optional
 
 import pypinyin
-from loguru import logger
+from loguru import logger as default_logger
+from loguru._logger import Logger
 
 from util.config import ModelPaths
+from util.fun_asr_gguf.core import logger
 
 
 class Deduplicator:
     """文件去重器"""
 
-    def __init__(self):
+    def __init__(self, logger: Optional[Logger] = None):
+        self.logger = logger if logger is not None else default_logger
         self.conn = sqlite3.connect(":memory:")
         self.cursor = self.conn.cursor()
         self._init_database()
@@ -77,11 +81,11 @@ class Deduplicator:
         self.conn.commit()
 
         # 输出统计信息
-        # logger.info(f"文件总行数: {len(lines)}")
-        # logger.info(f"跳过行数（空行/#开头）: {skipped}")
-        # logger.info(f"实际处理行数: {processed}")
-        # logger.info(f"重复行数: {duplicates}")
-        # logger.info(f"去重后非重复行数: {len(unique_lines)}")
+        self.logger.trace(f"文件总行数: {len(lines)}")
+        self.logger.trace(f"跳过行数（空行/#开头）: {skipped}")
+        self.logger.trace(f"实际处理行数: {processed}")
+        self.logger.trace(f"重复行数: {duplicates}")
+        self.logger.trace(f"去重后非重复行数: {len(unique_lines)}")
 
         return unique_lines
 
@@ -142,7 +146,7 @@ class HotwordSorter:
         return sorted(lines, key=self.get_sort_key)
 
 
-async def expand_funasr_hotwords():
+async def expand_funasr_hotwords(passed_logger) -> None:
     """扩展 FunASR 热词文件"""
 
     hot_zh_path = Path("hot-zh.txt")
@@ -161,23 +165,23 @@ async def expand_funasr_hotwords():
     if hot_zh_path.exists():
         content = hot_zh_path.read_text(encoding="utf-8")
         all_lines.extend(content.splitlines())
-        logger.trace(f"已读取 {hot_zh_path}")
+        passed_logger.trace(f"已读取 {hot_zh_path}")
 
     # 读取 hot-en.txt
     if hot_en_path.exists():
         content = hot_en_path.read_text(encoding="utf-8")
         all_lines.extend(content.splitlines())
-        logger.trace(f"已读取 {hot_en_path}")
+        passed_logger.trace(f"已读取 {hot_en_path}")
 
-    logger.trace(f"所有文件合并后总行数: {len(all_lines)}")
+    passed_logger.trace(f"所有文件合并后总行数: {len(all_lines)}")
 
     # 2. 处理阶段：在内存中完成去重和过滤
-    deduplicator = Deduplicator()
+    deduplicator = Deduplicator(logger=passed_logger)
     # 使用新的 deduplicate_list 方法，直接处理内存中的列表
     # 该方法内部已包含对空行和注释行的过滤逻辑
     unique_lines = deduplicator.deduplicate_list(all_lines)
     deduplicator.close()
-    logger.success("去重完成!")
+    passed_logger.success("去重完成!")
 
     # 3. 处理阶段：在内存中完成排序
     sorter = HotwordSorter(case_sensitive=False)
@@ -188,17 +192,17 @@ async def expand_funasr_hotwords():
     # for i, line in enumerate(sorted_lines[:10], 1):
     #     logger.info(f"  {i}. {line}")
 
-    logger.info(f"最终有效行数: {len(sorted_lines)}")
+    passed_logger.info(f"最终有效行数: {len(sorted_lines)}")
 
     # 4. 写入阶段：一次性将结果写回文件
     try:
         final_content = "\n".join(sorted_lines) + "\n"
         funasr_hotwords_path.write_text(final_content, encoding="utf-8")
-        logger.success(f"热词文件已更新并写入: {funasr_hotwords_path}")
+        passed_logger.success(f"热词文件已更新并写入: {funasr_hotwords_path}")
     except Exception as e:
-        logger.error(f"写入文件失败: {e}")
+        passed_logger.error(f"写入文件失败: {e}")
         raise
 
 
 if __name__ == "__main__":
-    asyncio.run(expand_funasr_hotwords())
+    asyncio.run(expand_funasr_hotwords(logger))

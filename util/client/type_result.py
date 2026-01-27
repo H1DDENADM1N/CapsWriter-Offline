@@ -7,7 +7,6 @@ from loguru import logger
 
 from util.client.cosmic import console
 from util.config import ClientConfig as Config
-from util.safe_logger import init_logging
 
 
 async def type_result(text):
@@ -21,7 +20,7 @@ async def type_result(text):
             temp = clipman.get()
         except clipman.exceptions.ClipmanBaseException as e:
             temp = e
-            init_logging()
+
             logger.error(f"获取剪贴板内容时出错: {e}")
 
         # 复制结果

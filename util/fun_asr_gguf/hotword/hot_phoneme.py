@@ -10,7 +10,7 @@ import time
 from typing import Dict, List, NamedTuple, Tuple
 
 # 使用统一的 logger（从 __init__.py 导入）
-from loguru import logger
+from loguru import logger as default_logger
 
 from .algo_calc import fuzzy_substring_search_constrained
 from .algo_phoneme import Phoneme, get_phoneme_info
@@ -48,7 +48,9 @@ class PhonemeCorrector:
     并将相似度超过阈值的片段替换为热词。
     """
 
-    def __init__(self, threshold: float = 0.7, similar_threshold: float = None):
+    def __init__(
+        self, threshold: float = 0.7, similar_threshold: float = None, logger=None
+    ):
         """
         初始化拼音纠错器
         """
@@ -65,6 +67,7 @@ class PhonemeCorrector:
             threshold=min(self.threshold, self.similar_threshold) - 0.1
         )
         self._lock = threading.Lock()
+        self.logger = logger if logger is not None else default_logger
 
     def update_hotwords(self, hotword_text: str) -> int:
         """更新纠错热词库 (线程安全)"""
@@ -90,7 +93,7 @@ class PhonemeCorrector:
             )
             self.fast_rag.add_hotwords(new_hotwords)
 
-        logger.debug(
+        self.logger.debug(
             f"PhonemeCorrector 已更新 {len(new_hotwords)} 个热词，耗时 {time.time() - start_time:.3f}s"
         )
         return len(new_hotwords)
@@ -208,12 +211,12 @@ class PhonemeCorrector:
             return CorrectionResult(text=text, matchs=[], similars=[])
 
         # DEBUG: 检查 input_phonemes 的类型和内容
-        logger.debug(f"[DEBUG] input_phonemes type: {type(input_phonemes)}")
+        self.logger.debug(f"[DEBUG] input_phonemes type: {type(input_phonemes)}")
         if input_phonemes:
-            logger.debug(
+            self.logger.debug(
                 f"[DEBUG] input_phonemes[0] type: {type(input_phonemes[0])}, value: {input_phonemes[0]}"
             )
-            logger.debug(
+            self.logger.debug(
                 f"[DEBUG] input_phonemes[0].info type: {type(input_phonemes[0].info)}, value: {input_phonemes[0].info}"
             )
 
@@ -221,23 +224,23 @@ class PhonemeCorrector:
         with self._lock:
             # 粗筛
             fast_results = self.fast_rag.search(input_phonemes, top_k=100)
-            logger.debug(
+            self.logger.debug(
                 f"[DEBUG] fast_results type: {type(fast_results)}, count: {len(fast_results)}"
             )
 
             # 预处理输入 (转换为全能七元组：值, 语言, 字始, 字终, 是调, 始位, 终位)
             try:
                 input_processed = [p.info for p in input_phonemes]
-                logger.debug(
+                self.logger.debug(
                     f"[DEBUG] input_processed type: {type(input_processed)}, count: {len(input_processed)}"
                 )
                 if input_processed:
-                    logger.debug(
+                    self.logger.debug(
                         f"[DEBUG] input_processed[0] type: {type(input_processed[0])}, value: {input_processed[0]}"
                     )
             except Exception as e:
-                logger.error(f"[ERROR] Failed to build input_processed: {e}")
-                logger.error(
+                self.logger.error(f"[ERROR] Failed to build input_processed: {e}")
+                self.logger.error(
                     f"[ERROR] input_phonemes details: {[(type(p), p) for p in input_phonemes[:5]]}"
                 )
                 raise
@@ -255,10 +258,6 @@ class PhonemeCorrector:
 
 
 if __name__ == "__main__":
-    from .. import setup_logging
-
-    setup_logging(level=logging.DEBUG)
-
     print("\n--- PhonemeCorrector 测试 ---")
     corrector = PhonemeCorrector(threshold=0.7)
 

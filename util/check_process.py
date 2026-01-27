@@ -1,10 +1,10 @@
 import ctypes
 from ctypes import wintypes
+from typing import Optional
 
 import psutil
-from loguru import logger
-
-from util.safe_logger import init_logging
+from loguru import logger as default_logger
+from loguru._logger import Logger
 
 
 def get_target_names(name):
@@ -31,10 +31,11 @@ def is_process_match(proc_name, search_names):
     return False
 
 
-def check_process(name):
+def check_process(name, logger: Optional[Logger] = None):
     """
     使用psutil检查指定名称的进程是否存在
     """
+    _logger = logger if logger is not None else default_logger
     try:
         search_names = get_target_names(name)
 
@@ -49,20 +50,20 @@ def check_process(name):
                 continue
             except Exception as e:
                 # 记录其他异常但不中断循环
-                logger.debug(f"检查进程时出现异常: {e}")
+                _logger.debug(f"检查进程时出现异常: {e}")
                 continue
 
         return False
     except Exception as e:
-        init_logging()
-        logger.error(f"检查进程时出错: {e}")
+        _logger.error(f"检查进程时出错: {e}")
         return False
 
 
-def check_focus(name):
+def check_focus(name, logger: Optional[Logger] = None):
     """
     检查指定名称的进程是否为当前焦点程序（前台窗口）
     """
+    _logger = logger if logger is not None else default_logger
     try:
         search_names = get_target_names(name)
 
@@ -100,20 +101,18 @@ def check_focus(name):
                 return False
 
         except Exception as e:
-            logger.debug(f"获取前台窗口信息时出错: {e}")
+            _logger.debug(f"获取前台窗口信息时出错: {e}")
             return False
 
         return False
 
     except Exception as e:
-        logger.error(f"检查焦点进程时出错: {e}")
+        _logger.error(f"检查焦点进程时出错: {e}")
         return False
 
 
 if __name__ == "__main__":
     import time
-
-    init_logging()
 
     # 测试进程检查
     process_name = "do-not-exist.exe"

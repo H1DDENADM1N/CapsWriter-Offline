@@ -1,9 +1,11 @@
 import json
 import warnings
+from typing import Optional
 
 import opencc
 import websockets
-from loguru import logger
+from loguru import logger as default_logger
+from loguru._logger import Logger
 
 from util.check_libretranslate_service import check_libretranslate_service
 from util.client.ai_optimize_language_expression import ai_optimize_language_expression
@@ -16,7 +18,6 @@ from util.client.type_result import type_result
 from util.client.welcome import handle_welcome_message
 from util.client.write_md import write_md
 from util.config import ClientConfig as Config
-from util.safe_logger import init_logging
 
 if not Cosmic.transcribe_subtitles:
     from util.client.translate_offline import translate_offline
@@ -29,11 +30,10 @@ if not Cosmic.transcribe_subtitles:
 warnings.filterwarnings("ignore")
 
 
-async def recv_result():
+async def recv_result(logger: Optional[Logger] = None):
+    _logger = logger if logger is not None else default_logger
     if not await check_websocket():
         return
-
-    init_logging()
 
     with console.resize(width=49):
         console.rule("[green]连接成功")
@@ -56,7 +56,7 @@ async def recv_result():
             # 安全检查：如果消息为空，跳过后续处理
             if not message:
                 console.print("[bold red]接收到空消息，跳过处理[/bold red]")
-                logger.debug("接收到空消息，跳过处理")
+                _logger.debug("接收到空消息，跳过处理")
                 continue
 
             # 解析消息
@@ -64,29 +64,28 @@ async def recv_result():
                 message = json.loads(message)
             except json.JSONDecodeError as e:
                 console.print(f"消息解析失败: {e}, 消息内容: {message}")
-                logger.error(f"消息解析失败: {e}, 消息内容: {message}")
+                _logger.error(f"消息解析失败: {e}, 消息内容: {message}")
                 continue
 
             # 检查消息中是否包含必需的字段
             if "text" not in message:
                 console.print(f"消息中缺少 'text' 字段，跳过处理: {message}")
-                logger.warning(f"消息中缺少 'text' 字段，跳过处理: {message}")
+                _logger.warning(f"消息中缺少 'text' 字段，跳过处理: {message}")
                 continue
-
 
             # 检查是否为最终结果，如果不是则跳过处理（只显示但不执行其他操作）
             is_final = message.get("is_final", True)  # 默认为True以向后兼容
             if not is_final:
                 # 对于非最终结果，可以选择显示调试信息但不执行实际操作
                 asr_text = message["text"]
-                logger.trace(f"    中间结果（跳过处理）：{asr_text}")
+                _logger.trace(f"    中间结果（跳过处理）：{asr_text}")
                 continue
 
             # 只处理最终结果
             asr_text = message["text"]
             if not asr_text or asr_text.strip() == "":
                 # console.print("[bold red]接收到空识别结果，跳过处理[/bold red]")
-                # logger.debug("接收到空识别结果，跳过处理")
+                # _logger.debug("接收到空识别结果，跳过处理")
                 continue
 
             # 检查必要的时间字段
@@ -95,7 +94,7 @@ async def recv_result():
                     f"消息中缺少时间字段，跳过处理: {message}",
                     style="bold red",
                 )
-                logger.warning(f"消息中缺少时间字段，跳过处理: {message}")
+                _logger.warning(f"消息中缺少时间字段，跳过处理: {message}")
                 continue
 
             delay = message["time_complete"] - message["time_submit"]
@@ -231,16 +230,15 @@ async def recv_result():
     except websockets.ConnectionClosedError:
         with console.resize(width=49):
             console.rule("[red]连接断开")
-        init_logging()
-        logger.error("连接断开，WebSocket连接关闭错误。")
+
+        _logger.error("连接断开，WebSocket连接关闭错误。")
     except websockets.ConnectionClosedOK:
         with console.resize(width=49):
             console.rule("[red]连接断开")
-        init_logging()
-        logger.error("连接断开，WebSocket连接正常关闭。")
+
+        _logger.error("连接断开，WebSocket连接正常关闭。")
     except Exception as e:
-        init_logging()
-        logger.error(f"接收识别结果时出错: {e}")
+        _logger.error(f"接收识别结果时出错: {e}")
     finally:
         return
 

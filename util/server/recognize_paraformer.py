@@ -1,12 +1,15 @@
 import re
 import time
+from typing import Optional
 
 import numpy as np
+from loguru import logger as default_logger  # 备用 logger
+from loguru._logger import Logger
 
-from util.server.chinese_itn import chinese_to_num
 from util.config import ServerConfig as Config
-from util.server.format_tools import adjust_space
+from util.server.chinese_itn import chinese_to_num
 from util.server.classes import Result, Task
+from util.server.format_tools import adjust_space
 
 results = {}
 
@@ -23,7 +26,9 @@ def format_text(text, punc_model):
     return text
 
 
-def recognize(recognizer, punc_model, task: Task):
+def recognize(recognizer, punc_model, task: Task, logger: Optional[Logger] = None):
+    _logger = logger if logger is not None else default_logger
+    _logger.trace(f"开始识别任务: {task.task_id}")
     # inspect({key:value for key, value in task.__dict__.items() if not key.startswith('_') and key != 'data'})
     # todo 清空遗存的任务结果
 

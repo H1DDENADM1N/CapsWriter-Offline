@@ -1,8 +1,11 @@
+import multiprocessing as mul
 import shutil
 import sys
 from pathlib import Path
+from typing import Optional
 
-from loguru import logger
+from loguru import logger as default_logger
+from loguru._logger import Logger
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -18,14 +21,16 @@ from PySide6.QtWidgets import (
 from qt_material import apply_stylesheet
 
 from util.client.restart import stop_client
+from util.config import DebugConfig
 from util.explorer_token_downgrade import downgraded_via_explorer_token
-from util.safe_logger import init_logging
+from util.safe_logger import SafeLogger
 from util.server.restart import stop_server
 
 
 class ConfigSelector(QDialog):
-    def __init__(self):
+    def __init__(self, logger: Optional[Logger] = None):
         super().__init__()
+        self.logger = logger if logger is not None else default_logger
 
         self.current_dir = Path.cwd()
         self.configs_dir = self.current_dir / "configs"
@@ -33,8 +38,6 @@ class ConfigSelector(QDialog):
 
         self.init_ui()
         self.load_configs()
-
-        init_logging()
 
     def init_ui(self):
         self.setFixedSize(520, 220)
@@ -137,24 +140,24 @@ class ConfigSelector(QDialog):
 
         if not source_file.exists():
             QMessageBox.critical(self, "错误", f"源文件不存在: {source_file}")
-            logger.error(f"源文件不存在: {source_file}")
+            self.logger.error(f"源文件不存在: {source_file}")
             return
 
         try:
             if self.target_config.exists():
                 try:
                     self.target_config.unlink()
-                    logger.info("已删除旧的 config.toml")
+                    self.logger.info("已删除旧的 config.toml")
                 except Exception as e:
                     QMessageBox.critical(
                         self, "错误", f"无法删除当前的 config.toml:\n{e}"
                     )
-                    logger.error(f"无法删除当前的 config.toml:\n{e}")
+                    self.logger.error(f"无法删除当前的 config.toml:\n{e}")
                     return
 
             shutil.copy(source_file, self.target_config)
 
-            logger.info(f"成功应用配置: {selected_filename}.toml")
+            self.logger.info(f"成功应用配置: {selected_filename}.toml")
 
             # 显示新的OK/Cancel弹窗
             reply = QMessageBox.question(
@@ -172,23 +175,31 @@ class ConfigSelector(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"操作过程中发生未知错误:\n{e}")
-            logger.error(f"操作过程中发生未知错误:\n{e}")
+            self.logger.error(f"操作过程中发生未知错误:\n{e}")
 
     def on_restart_to_enable_new_config(self):
-        stop_client()
-        stop_server()
+        stop_client(logger=self.logger)
+        stop_server(logger=self.logger)
         downgraded_via_explorer_token(
             "start_server_gui.exe", working_directory=str(self.current_dir)
         )
 
 
 if __name__ == "__main__":
+    ctx = mul.get_context("spawn")
+    SafeLogger(mp_context=ctx)
+    default_logger.add(
+        sink=sys.stderr,
+        level=DebugConfig.logger_level,
+        catch=True,
+    )
+    default_logger.info("Starting config selector...")
     app = QApplication(sys.argv)
     apply_stylesheet(
         app, theme="dark_blue.xml", css_file="util\\client\\gui_theme_custom.css"
     )
 
-    dialog = ConfigSelector()
+    dialog = ConfigSelector(logger=default_logger)
     dialog.show()
 
     dialog.activateWindow()

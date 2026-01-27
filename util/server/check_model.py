@@ -1,21 +1,17 @@
 import sys
 
-from loguru import logger
-
 from util.config import ModelPaths
 from util.config import ServerConfig as Config
-from util.safe_logger import init_logging
 from util.server.cosmic import console
 
 
-def check_model() -> None:
+def check_model(passed_logger) -> None:
     """
     根据配置的模型类型检查所需的模型文件是否存在
     如果模型文件不存在，显示错误信息后退出程序。
     """
-    init_logging()
     model = Config.model
-    logger.debug(f"检查模型文件, 类型: {model}")
+    passed_logger.debug(f"检查模型文件, 类型: {model}")
 
     # 根据模型类型确定需要检查的文件
     if model == "FunASR":
@@ -47,7 +43,7 @@ def check_model() -> None:
         }
     else:
         error_msg = f"不支持的模型类型: {Config.model}"
-        logger.error(error_msg)
+        passed_logger.error(error_msg)
         console.print(
             f"""
     [bold red]不支持的模型类型：{Config.model}[/bold red]
@@ -69,7 +65,7 @@ def check_model() -> None:
         for file_path in files:
             if not file_path.exists():
                 missing_files.append((category, file_path))
-                logger.warning(f"模型文件缺失: {file_path}")
+                passed_logger.warning(f"模型文件缺失: {file_path}")
 
     # 如果有缺失的文件，显示错误信息并提供下载链接
     if missing_files:
@@ -85,17 +81,17 @@ def check_model() -> None:
         )
         error_msg += "    \n"
 
-        logger.error(f"模型文件检查失败，共 {len(missing_files)} 个文件缺失")
+        passed_logger.error(f"模型文件检查失败，共 {len(missing_files)} 个文件缺失")
         console.print(error_msg)
         input("按回车退出")
         sys.exit(1)
 
     # 所有检查通过
-    logger.info(f"模型文件检查通过 ({model})")
+    passed_logger.info(f"模型文件检查通过 ({model})")
     console.print(f"[green4]模型文件检查通过 ({model})", end="\n\n")
 
 
-def check_model_gui():
+def check_model_gui(passed_logger) -> None:
     """
     GUI版本的模型检查函数，根据配置的模型类型检查所需的模型文件是否存在
     如果模型文件不存在，抛出异常。
@@ -163,4 +159,4 @@ def check_model_gui():
         raise Exception(error_msg)
 
     # 所有检查通过
-    logger.info(f"GUI模式 - 模型文件检查通过 ({model})")
+    passed_logger.info(f"GUI模式 - 模型文件检查通过 ({model})")

@@ -3,7 +3,6 @@ import json
 from loguru import logger
 
 from util.client.cosmic import Cosmic, console
-from util.safe_logger import init_logging
 
 
 async def handle_welcome_message():
@@ -11,8 +10,6 @@ async def handle_welcome_message():
     处理服务端发送的欢迎消息，获取客户端ID和其他连接信息
     """
     try:
-        init_logging()
-
         # 先接收服务端的欢迎消息
         welcome_message = await Cosmic.websocket.recv()
         welcome_data = json.loads(welcome_message)

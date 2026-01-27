@@ -5,7 +5,6 @@ from openai import OpenAI
 from zai import ZhipuAiClient
 
 from util.config import ClientConfig as Config
-from util.safe_logger import init_logging
 
 
 def ai_optimize_language_expression(text):
@@ -85,7 +84,7 @@ def zhipuai_optimize_language_expression(text, prompt):
         return optimized_text, time.time() - start
     except Exception as e:
         print(f"智谱AI优化语言表达时发生错误： {e}")
-        init_logging()
+
         logger.error(f"智谱AI优化语言表达时发生错误： {e}")
         return text, time.time() - start
 
@@ -128,6 +127,6 @@ def openai_optimize_language_expression(text, prompt):
         return optimized_text, time.time() - start
     except Exception as e:
         print(f"OpenAI优化语言表达时发生错误： {e}")
-        init_logging()
+
         logger.error(f"OpenAI优化语言表达时发生错误： {e}")
         return text, time.time() - start

@@ -1,17 +1,17 @@
 import subprocess
+from typing import Optional
 
-from loguru import logger
+from loguru import logger as default_logger
+from loguru._logger import Logger
 
 from util.check_process import check_process
 from util.explorer_token_downgrade import downgraded_via_explorer_token, is_admin
-from util.safe_logger import init_logging
 
 
-def stop_exe(exe_name: str):
-    init_logging()
-
+def stop_exe(exe_name: str, logger: Optional[Logger] = None):
+    _logger = logger if logger is not None else default_logger
     try:
-        logger.info(f"Stopping {exe_name}")
+        _logger.info(f"Stopping {exe_name}")
         proc = subprocess.Popen(
             f"taskkill /IM {exe_name} /F",
             creationflags=subprocess.CREATE_NO_WINDOW,
@@ -21,15 +21,15 @@ def stop_exe(exe_name: str):
             text=True,
         )
         stdout, stderr = proc.communicate()
-        logger.debug(f"Taskkill output: {stdout}")
+        _logger.debug(f"Taskkill output: {stdout}")
         if stderr:
-            logger.error(f"Taskkill errors: {stderr}")
+            _logger.error(f"Taskkill errors: {stderr}")
     except Exception as e:
-        logger.error(f"Error stopping {exe_name}: {e}")
+        _logger.error(f"Error stopping {exe_name}: {e}")
 
 
-def start_exe(exe_name: str):
-    init_logging()
+def start_exe(exe_name: str, logger: Optional[Logger] = None):
+    _logger = logger if logger is not None else default_logger
     # print(f"Starting {exe_name}")
     proc = subprocess.Popen(
         f'start "" "{exe_name}"',
@@ -41,13 +41,14 @@ def start_exe(exe_name: str):
     )
     stdout, stderr = proc.communicate()
     # print(f"{stdout}, {stderr}")
-    logger.info(f"Starting {exe_name}")
-    logger.info(f"Start output: {stdout}")
+    _logger.info(f"Starting {exe_name}")
+    _logger.info(f"Start output: {stdout}")
     if stderr:
-        logger.error(f"Start errors: {stderr}")
+        _logger.error(f"Start errors: {stderr}")
 
 
-def stop_server():
+def stop_server(logger: Optional[Logger] = None):
+    _logger = logger if logger is not None else default_logger
     exe_name_list = [
         "start_server_gui.exe",
         "python_CapsWriter_Server.exe",
@@ -55,17 +56,31 @@ def stop_server():
     ]
 
     for exe_name in exe_name_list:
-        stop_exe(exe_name)
+        stop_exe(exe_name, logger=_logger)
 
 
-def restart_server():
-    stop_server()
+def restart_server(logger: Optional[Logger] = None):
+    _logger = logger if logger is not None else default_logger
+    stop_server(logger=_logger)
     if is_admin():
         downgraded_via_explorer_token("start_server_gui.exe")
     else:
-        start_exe("start_server_gui.exe")
+        start_exe("start_server_gui.exe", logger=_logger)
 
 
 if __name__ == "__main__":
-    if check_process("start_server_gui.exe"):
-        restart_server()
+    import multiprocessing as mul
+    import sys
+
+    from util.config import DebugConfig
+    from util.safe_logger import SafeLogger
+
+    ctx = mul.get_context("spawn")
+    SafeLogger(mp_context=ctx)
+    default_logger.add(
+        sink=sys.stderr,
+        level=DebugConfig.logger_level,
+        catch=True,
+    )
+    if check_process("start_server_gui.exe", logger=default_logger):
+        restart_server(logger=default_logger)

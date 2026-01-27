@@ -1,48 +1,25 @@
-import re
+import multiprocessing
 import sys
 import threading
 from pathlib import Path
 
 from loguru import logger
 
-from util.config import DebugConfig as Config
+from util.config import DebugConfig
 
 
-def delete_specific_logs_concise(log_dir: Path):
-    """删除符合 *.dddd-dd-dd_dd-dd-dd_dddddd.log 格式的日志文件"""
-    pattern = re.compile(r"^.*\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_\d{6}\.log$")
-
-    # 获取所有匹配的文件
-    matching_files = [
-        file_path
-        for file_path in log_dir.iterdir()
-        if file_path.is_file() and pattern.match(file_path.name)
-    ]
-
-    # 删除文件
-    for file_path in matching_files:
-        try:
-            file_path.unlink()
-            logger.debug(f"已删除: {file_path.name}")
-        except Exception as e:
-            logger.error(f"删除文件 {file_path.name} 时出错: {e}")
-
-    logger.debug(f"\n总共删除了 {len(matching_files)} 个文件")
-    return [f.name for f in matching_files]
-
-
-class ThreadSafeLogger:
+class SafeLogger:
     _instance = None
     _lock = threading.Lock()
 
-    def __new__(cls):
+    def __new__(cls, *args, **kwargs):
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
                 cls._instance._initialized = False
             return cls._instance
 
-    def __init__(self):
+    def __init__(self, mp_context=None):
         if self._initialized:
             return
 
@@ -50,15 +27,24 @@ class ThreadSafeLogger:
             if self._initialized:
                 return
 
+            if mp_context is None:
+                try:
+                    self.mp_context = multiprocessing.get_context("fork")
+                except ValueError:
+                    self.mp_context = multiprocessing.get_context()
+            else:
+                self.mp_context = mp_context
+
             self.log_dir = Path("logs")
             self.setup_logging()
-            delete_specific_logs_concise(self.log_dir)
             self._initialized = True
 
+    # --- 修复 AttributeError ---
+    def __getattr__(self, name):
+        return getattr(logger, name)
+
     def get_script_name(self) -> str:
-        """从当前执行的 Python 文件名获取脚本名称（不带扩展名）"""
         try:
-            # 获取主模块的文件路径
             main_module = sys.modules.get("__main__")
             if (
                 main_module
@@ -66,89 +52,84 @@ class ThreadSafeLogger:
                 and main_module.__file__
             ):
                 script_path = Path(main_module.__file__)
-                return script_path.stem  # 返回不带扩展名的文件名
+                return script_path.stem
         except (AttributeError, KeyError):
             pass
 
-        # 如果无法获取主模块文件名，尝试其他方法
         try:
-            # 尝试从命令行参数获取
             if sys.argv and sys.argv[0]:
                 script_path = Path(sys.argv[0])
                 return script_path.stem
         except (IndexError, AttributeError):
             pass
 
-        # 最后的手段：使用默认名称
         return "python_script"
 
     def get_log_file_path(self) -> Path:
-        """生成日志文件路径，基于脚本名称"""
         script_name = self.get_script_name()
-
-        # 清理脚本名称，移除可能的不合法文件名字符
         safe_script_name = "".join(
             c for c in script_name if c.isalnum() or c in ("_", "-")
         ).rstrip()
         if not safe_script_name:
             safe_script_name = "python_script"
-
         return self.log_dir / f"{safe_script_name}.log"
 
     def setup_logging(self):
-        """设置进程安全的日志"""
-        # 移除现有处理器
         logger.remove()
-
-        # 确保日志目录存在
         self.log_dir.mkdir(exist_ok=True)
 
-        # 获取日志文件路径
         log_file = self.get_log_file_path()
-        log_level = Config.logger_level
+        log_level = DebugConfig.logger_level
 
-        # 文件日志配置
+        # 确保这里只有文件 sink，这样 logger 对象才能被 pickle 传给子进程
         logger.add(
             sink=str(log_file),
             rotation="10 MB",
             retention="7 days",
             enqueue=True,
+            context=self.mp_context,
             level=log_level,
             backtrace=True,
             diagnose=True,
             catch=True,
         )
 
-        # 控制台日志配置
-        if hasattr(sys.stderr, "reconfigure"):
-            sys.stderr.reconfigure(encoding="utf-8")
 
-        logger.add(
-            sink=sys.stderr,
-            level=log_level,
-            catch=True,
-        )
-
-        # 记录日志系统初始化信息
-        # logger.info(f"日志系统已初始化，级别: {log_level}")
-        # logger.info(f"日志文件: {log_file.absolute()}")
+def worker(passed_logger):
+    # 子进程接收到的 logger 只有文件 handler，它会通过 Queue 发回主进程
+    passed_logger.info("Worker process started")
+    for i in range(5):
+        passed_logger.info(f"Worker message {i}")
+    passed_logger.info("Worker process finished")
 
 
-# 创建便捷的初始化函数
-def init_logging() -> None:
-    """初始化日志系统"""
-    ThreadSafeLogger()
-
-
-# 使用方式示例
 if __name__ == "__main__":
-    # 初始化日志
-    init_logging()
+    # Windows 下使用 spawn
+    ctx = multiprocessing.get_context("spawn")
 
-    # 正常使用 logger
-    logger.info("应用程序启动")
+    # 1. 初始化 Logger (此时只有文件日志，对象是 Picklable 的)
+    SafeLogger(mp_context=ctx)
 
-    # 测试不同级别的日志
-    logger.debug("调试信息")
-    logger.warning("警告信息")
-    logger.error("错误信息")
+    # 获取 logger 对象用于传递
+    main_logger = logger
+
+    # 2. 创建子进程，此时 pickle 参数不会报错
+    p = ctx.Process(target=worker, args=(main_logger,))
+    p.start()
+
+    # 在子进程启动后，为主进程单独添加控制台输出
+    # 这样既不影响子进程接收 logger，又能让主进程在屏幕看到日志
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
+    logger.add(
+        sink=sys.stderr,
+        level=DebugConfig.logger_level,
+        catch=True,
+    )
+
+    main_logger.info("Main process started")
+    main_logger.info("Child process started")
+
+    p.join()
+    main_logger.info("Child process finished")

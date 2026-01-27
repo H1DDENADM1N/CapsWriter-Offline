@@ -3,18 +3,26 @@ FunASR-GGUF Prompt 构建工具
 """
 
 from typing import List, Optional, Tuple
-import numpy as np
-from . import nano_llama
 
-from loguru import logger
+import numpy as np
+from loguru import logger as default_logger
+from loguru._logger import Logger
+
+from . import nano_llama
 
 
 class PromptBuilder:
     """负责构建 LLM 的 Prompt Embeddings"""
 
-    def __init__(self, vocab: any, embedding_table: np.ndarray):
+    def __init__(
+        self,
+        vocab: any,
+        embedding_table: np.ndarray,
+        logger: Optional[Logger] = None,
+    ):
         self.vocab = vocab
         self.embedding_table = embedding_table
+        self.logger = logger or default_logger
 
     def build_prompt(
         self,
@@ -33,21 +41,21 @@ class PromptBuilder:
 
         if hotwords or context:
             if context:
-                prefix_prompt += f"请结合上下文信息，更加准确地完成语音转写任务。\n\n\n"
+                prefix_prompt += "请结合上下文信息，更加准确地完成语音转写任务。\n\n\n"
                 prefix_prompt += f"**上下文信息：**{context}\n\n\n"
-                logger.info(f"上下文信息：{context}")
+                self.logger.info(f"上下文信息：{context}")
 
             if hotwords:
                 hotwords_str = ", ".join(hotwords)
                 prefix_prompt += f"热词列表：[{hotwords_str}]\n"
-                logger.info(f"热词列表：{hotwords_str}")
+                self.logger.info(f"热词列表：{hotwords_str}")
 
         if not language:
             prefix_prompt += "语音转写："
         else:
             prefix_prompt += f"语音转写成{language}："
 
-        logger.debug(f"Generated Prompt:\n{'-' * 40}\n{prefix_prompt}\n{'-' * 40}")
+        self.logger.debug(f"Generated Prompt:\n{'-' * 40}\n{prefix_prompt}\n{'-' * 40}")
 
         suffix_prompt = "<|im_end|>\n<|im_start|>assistant\n"
 

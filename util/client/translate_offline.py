@@ -5,7 +5,6 @@ import websockets
 from loguru import logger
 
 from util.config import ClientConfig as Config
-from util.safe_logger import init_logging
 
 
 async def translate_text(
@@ -36,7 +35,7 @@ async def translate_offline(text):
         return trans_text
     except Exception as e:
         print(f"An error occurred: {e}")
-        init_logging()
+
         logger.error(f"离线翻译时出错: {e}")
         return None
 

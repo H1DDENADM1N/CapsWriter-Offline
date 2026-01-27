@@ -2,14 +2,15 @@ import asyncio
 import sys
 import threading
 import time
+from typing import Optional
 
 import numpy as np
 import sounddevice as sd
-from loguru import logger
+from loguru import logger as default_logger
+from loguru._logger import Logger
 
 from util.client.cosmic import Cosmic, console
 from util.config import ClientConfig as Config
-from util.safe_logger import init_logging
 
 
 def record_callback(
@@ -33,10 +34,12 @@ def stream_close(signum, frame):
     Cosmic.stream.close()
 
 
-def stream_reopen():
+def stream_reopen(logger: Optional[Logger] = None):
+    _logger = logger if logger is not None else default_logger
     if not threading.main_thread().is_alive():
         return
     console.print("重启音频流")
+    _logger.trace("重启音频流")
 
     # 关闭旧流
     Cosmic.stream.close()
@@ -49,12 +52,13 @@ def stream_reopen():
 
     # 打开新流
     time.sleep(0.1)
-    Cosmic.stream = stream_open()
+    Cosmic.stream = stream_open(logger=_logger)
 
 
-def stream_open():
+def stream_open(logger: Optional[Logger] = None):
+    _logger = logger if logger is not None else default_logger
     # 显示录音所用的音频设备
-    init_logging()
+
     channels = 1
     try:
         device = sd.query_devices(kind="input")
@@ -63,15 +67,15 @@ def stream_open():
         console.print(
             f"使用默认音频设备：[italic]{device_name}，声道数：{channels}", end="\n\n"
         )
-        logger.debug(f"使用默认音频设备：{device_name}，声道数：{channels}")
+        _logger.debug(f"使用默认音频设备：{device_name}，声道数：{channels}")
     except UnicodeDecodeError:
         console.print(
             "由于编码问题，暂时无法获得麦克风设备名字", end="\n\n", style="bright_red"
         )
-        logger.error("由于编码问题，暂时无法获得麦克风设备名字")
+        _logger.error("由于编码问题，暂时无法获得麦克风设备名字")
     except sd.PortAudioError:
         console.print("没有找到麦克风设备", end="\n\n", style="bright_red")
-        logger.error("没有找到麦克风设备")
+        _logger.error("没有找到麦克风设备")
         input("按回车键退出")
         sys.exit()
 
@@ -93,7 +97,7 @@ def stream_open():
             dtype="float32",
             channels=channels,
             callback=record_callback,
-            finished_callback=stream_reopen,
+            finished_callback=stream_reopen(logger=_logger),
         )
         stream.start()
 

@@ -16,8 +16,6 @@ import json
 import requests
 from loguru import logger
 
-from util.safe_logger import init_logging
-
 
 class CloudClipboard:
     def __init__(self):
@@ -32,7 +30,7 @@ class CloudClipboard:
         :param expire_style: 过期单位（day, week, month, year）
         :return: 分享链接
         """
-        init_logging()
+
         data = {
             "text": (None, text),
             "expire_value": (None, str(expire_value)),

@@ -24,10 +24,8 @@ from rich.console import Console
 from rich.rule import Rule
 from rich.table import Table
 
-from util.safe_logger import init_logging
-
 # 配置日志
-init_logging()
+
 
 # 配置控制台
 console = Console()

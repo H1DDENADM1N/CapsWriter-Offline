@@ -5,7 +5,6 @@ from pathlib import Path
 from loguru import logger
 
 from util.client.cosmic import console
-from util.safe_logger import init_logging
 
 
 def play_music(file_path: Path, volume_level: str = "50"):
@@ -28,11 +27,11 @@ def play_music(file_path: Path, volume_level: str = "50"):
         ).start()
     except FileNotFoundError:
         console.print("ffplay.exe未找到，请确保它在PATH中或提供完整路径。")
-        init_logging()
+
         logger.error("ffplay.exe未找到，请确保它在PATH中或提供完整路径。")
     except Exception as e:
         console.print(f"发生错误: {e}")
-        init_logging()
+
         logger.error(f"播放音乐时出错: {e}")
 
 

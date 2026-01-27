@@ -1,8 +1,6 @@
 # coding: utf-8
 """
 热词管理模块
-
-提供 HotwordManager 类用于管理热词的加载、替换和文件监视。
 """
 
 from __future__ import annotations
@@ -13,7 +11,8 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Optional
 
-from loguru import logger
+from loguru import logger as default_logger
+from loguru._logger import Logger
 from rich.console import Console
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -22,8 +21,8 @@ from .hot_phoneme import PhonemeCorrector
 
 console = Console(highlight=False)
 
-# 全局单例
 _manager: Optional[HotwordManager] = None
+_manager_lock = threading.Lock()
 
 
 class HotwordManager:
@@ -34,6 +33,7 @@ class HotwordManager:
         hotword_file: Optional[Path] = None,
         threshold: float = 0.7,
         similar_threshold: Optional[float] = None,
+        logger: Optional[Logger] = None,
     ):
         """
         初始化
@@ -41,19 +41,23 @@ class HotwordManager:
             hotword_file: 热词文件路径
             threshold: 纠错阈值
             similar_threshold: 相似度阈值
+            logger: loguru logger 实例 (用于多进程安全日志)
         """
+        self.logger = logger if logger is not None else default_logger
         self.file = hotword_file or Path("hot.txt")
         self.threshold = threshold
         self.similar_threshold = similar_threshold
 
-        # 初始化热词纠错器
+        # 初始化热词纠错器，传入 logger
         self.phoneme_corrector = PhonemeCorrector(
-            threshold=threshold, similar_threshold=similar_threshold
+            threshold=threshold,
+            similar_threshold=similar_threshold,
+            logger=self.logger,
         )
         self._observer: Optional[Observer] = None
 
     def _get_display_width(self, text: str) -> int:
-        """计算字符串的显示宽度（考虑中文字符占2个单位）"""
+        """计算字符串的显示宽度"""
         width = 0
         for char in text:
             if unicodedata.east_asian_width(char) in ("W", "F", "A"):
@@ -68,25 +72,24 @@ class HotwordManager:
         padding1 = " " * max(0, 6 - w)
         w2 = self._get_display_width(filename)
         padding2 = " " * max(0, 8 - w2)
-        return f"[bold cyan]      {label}{padding1}：[/][cyan]{filename}{padding2}[/] 已更新[green]{count:3d}[/]条"
+        return f"[bold cyan]      {label}{padding1}：[/][cyan]{filename}{padding2}[/] 已更新[green]{count:3d}[/]"
 
     def load(self) -> None:
         """加载热词文件"""
-        logger.info("正在加载热词资源...")
+        self.logger.info("正在加载热词资源...")
         self._load_hot()
-        logger.info("热词资源加载完成")
+        self.logger.info("热词资源加载完成")
 
     def _read_file(self) -> str:
         """读取热词文件"""
         try:
             if not self.file.exists():
-                # 缺失则创建空文件
                 self.file.parent.mkdir(parents=True, exist_ok=True)
                 self.file.write_text("# 热词文件单行一个\n", encoding="utf-8")
                 return ""
             return self.file.read_text(encoding="utf-8")
         except Exception as e:
-            logger.error(f"读取文件失败 {self.file}: {e}")
+            self.logger.error(f"读取文件失败 {self.file}: {e}")
             return ""
 
     def _load_hot(self) -> None:
@@ -106,12 +109,11 @@ class HotwordManager:
         self._observer = Observer()
         handler = _HotwordFileHandler(self)
 
-        # 监视热词文件所在目录
         watch_dir = self.file.parent.absolute()
         self._observer.schedule(handler, path=str(watch_dir), recursive=False)
 
         self._observer.start()
-        logger.debug(f"已启动热词文件监视: {watch_dir}")
+        self.logger.debug(f"已启动热词文件监视: {watch_dir}")
         return self._observer
 
     def stop_file_watcher(self) -> None:
@@ -120,7 +122,7 @@ class HotwordManager:
             self._observer.stop()
             self._observer.join()
             self._observer = None
-            logger.debug("热词文件监视已停止")
+            self.logger.debug("热词文件监视已停止")
 
 
 class _HotwordFileHandler(FileSystemEventHandler):
@@ -143,11 +145,10 @@ class _HotwordFileHandler(FileSystemEventHandler):
         event_path = Path(event.src_path)
         filename = event_path.name
 
-        # 检查是否是我们关心的热词文件
         if filename != self.manager.file.name:
             return
 
-        logger.debug(f"[watchdog] 热词文件变化: {filename}")
+        self.manager.logger.debug(f"[watchdog] 热词文件变化: {filename}")
         current_time = time.time()
 
         with self._lock:
@@ -173,34 +174,32 @@ class _HotwordFileHandler(FileSystemEventHandler):
 
                 self._last_event = None
 
-            # 执行加载
             try:
                 self.manager._load_hot()
-                logger.info(f"热词文件已自动重新加载: {filename}")
+                self.manager.logger.info(f"热词文件已自动重新加载: {filename}")
             except Exception as e:
                 console.print(f"热词自动更新失败：{e}", style="bright_red")
-                logger.error(f"更新热词失败: {e}", exc_info=True)
+                self.manager.logger.error(f"更新热词失败: {e}", exc_info=True)
             break
-
-
-# ======================================================================
-# --- 全局单例访问函数 ---
 
 
 def get_hotword_manager(
     hotword_file: Optional[Path] = None,
     threshold: float = 0.7,
     similar_threshold: Optional[float] = None,
+    logger: Optional[Logger] = None,
 ) -> HotwordManager:
     """
     获取热词管理器单例实例。
-    第一次调用时可以传入配置参数，后续调用将返回已存在的实例。
     """
     global _manager
     if _manager is None:
-        _manager = HotwordManager(
-            hotword_file=hotword_file,
-            threshold=threshold,
-            similar_threshold=similar_threshold,
-        )
+        with _manager_lock:
+            if _manager is None:
+                _manager = HotwordManager(
+                    hotword_file=hotword_file,
+                    threshold=threshold,
+                    similar_threshold=similar_threshold,
+                    logger=logger,
+                )
     return _manager

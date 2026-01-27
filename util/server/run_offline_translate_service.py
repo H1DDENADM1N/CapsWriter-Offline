@@ -12,12 +12,10 @@ import json
 from multiprocessing import Process
 
 import websockets
-from loguru import logger
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 from util.config import ClientConfig, ModelPaths
 from util.config import ServerConfig as Config
-from util.safe_logger import init_logging
 
 # 离线翻译
 modelName = ModelPaths.opus_mt_dir
@@ -41,7 +39,7 @@ async def translate_text(text):
 
 # 定义WebSocket处理函数
 async def offline_translate_server(websocket):
-    init_logging()
+    global logger
     client_address = websocket.remote_address
     logger.info(f"客户端连接来自: {client_address}")
 
@@ -58,18 +56,20 @@ async def offline_translate_server(websocket):
         await websocket.send(json.dumps({"translated_text": translated_text}))
 
 
-def run_offline_translate_service():
-    init_logging()
+def run_offline_translate_service(passed_logger):
+    global logger
+    logger = passed_logger
 
     async def main():
         # 使用async with来管理服务器生命周期
         async with websockets.serve(
             offline_translate_server, ClientConfig.addr, Config.offline_translate_port
         ) as server:
-            # logger.info(
-            #     f"离线翻译服务启动在 {ClientConfig.addr}:{Config.offline_translate_port}"
-            # )
+            logger.trace(
+                f"离线翻译服务启动在 {ClientConfig.addr}:{Config.offline_translate_port}"
+            )
             await server.serve_forever()
+            logger.success("离线翻译服务启动成功")
 
     try:
         asyncio.run(main())

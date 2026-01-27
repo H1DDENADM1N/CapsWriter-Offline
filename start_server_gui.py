@@ -1,9 +1,12 @@
+import multiprocessing as mul
 import subprocess
 import sys
 import threading
 from queue import Queue
+from typing import Optional
 
-from loguru import logger
+from loguru import logger as default_logger
+from loguru._logger import Logger
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
@@ -19,14 +22,16 @@ from PySide6.QtWidgets import (
 from qt_material import apply_stylesheet
 
 from util.check_process import check_process
+from util.config import DebugConfig
 from util.config import ServerConfig as Config
-from util.safe_logger import init_logging
+from util.safe_logger import SafeLogger
 from util.server.check_model import check_model_gui
 
 
 class GUI(QMainWindow):
-    def __init__(self):
+    def __init__(self, logger: Optional[Logger] = None):
         super().__init__()
+        self.logger = logger if logger is not None else default_logger
         self.init_ui()
         self.output_queue_server = Queue()
         self.start_script()
@@ -106,8 +111,6 @@ class GUI(QMainWindow):
         )
 
     def quit_app(self):
-        init_logging()
-
         # Terminate core_server.py process
         if hasattr(self, "core_server_process") and self.core_server_process:
             self.core_server_process.terminate()
@@ -194,16 +197,26 @@ class GUI(QMainWindow):
 
 
 if __name__ == "__main__":
-    check_model_gui()
+    ctx = mul.get_context("spawn")
+    SafeLogger(mp_context=ctx)
+    default_logger.add(
+        sink=sys.stderr,
+        level=DebugConfig.logger_level,
+        catch=True,
+    )
+    default_logger.info("Starting CapsWriter-Offline-Server GUI...")
+    check_model_gui(passed_logger=default_logger)
 
-    if Config.only_run_once and check_process("python_CapsWriter_Server.exe"):
+    if Config.only_run_once and check_process(
+        "python_CapsWriter_Server.exe", logger=default_logger
+    ):
         raise Exception(
             "已经有一个服务端在运行了！（用户配置了 只允许运行一次，禁止多开；而且检测到 python_CapsWriter_Server.exe 进程已在运行。如果你确定需要启动多个服务端同时运行，请先修改 config.py  class ServerConfig:  Only_run_once = False 。）"
         )
 
     if Config.in_the_meantime_start_the_client and not (
-        check_process("start_client_gui.exe")
-        or check_process("start_client_gui_admin.exe")
+        check_process("start_client_gui.exe", logger=default_logger)
+        or check_process("start_client_gui_admin.exe", logger=default_logger)
     ):
         # 设置了启动服务端的同时启动客户端且客户端未在运行
         if Config.in_the_meantime_start_the_client_and_run_as_admin:
@@ -220,7 +233,7 @@ if __name__ == "__main__":
 
     app = QApplication([])
     apply_stylesheet(app, theme="dark_amber.xml")
-    gui = GUI()
+    gui = GUI(logger=default_logger)
     if not Config.shrink_automatically_to_tray:
         gui.show()
     sys.exit(app.exec())

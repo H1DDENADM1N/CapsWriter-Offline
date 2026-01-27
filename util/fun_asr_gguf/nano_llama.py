@@ -4,14 +4,24 @@ from os.path import relpath
 from pathlib import Path
 
 import gguf
+import loguru
 import numpy as np
-from loguru import logger
 
 # =========================================================================
 # Configuration
 # =========================================================================
 QUIET_LOGS = False
 _log_callback_ref = None
+
+# 使用模块变量 _logger，允许外部注入
+_logger = loguru.logger
+
+
+def set_llama_logger(logger_instance):
+    """外部调用此函数注入 logger，用于多进程日志"""
+    global _logger
+    _logger = logger_instance
+
 
 # =========================================================================
 # Type Definitions
@@ -100,12 +110,10 @@ class llama_batch(ctypes.Structure):
 # Llama Library Bindings
 # =========================================================================
 
-# Global library references
 llama = None
 ggml = None
 ggml_base = None
 
-# Global function pointers (will be initialized in init_llama_lib)
 llama_log_set = None
 llama_backend_init = None
 llama_backend_free = None
@@ -129,7 +137,7 @@ llama_memory_clear = None
 
 
 def init_llama_lib():
-    """初始化 llama.cpp 库，自动从模块所在目录加载 DLL"""
+    """初始化 llama.cpp 库"""
     global llama, ggml, ggml_base
     global llama_log_set, llama_backend_init, llama_backend_free
     global \
@@ -148,7 +156,6 @@ def init_llama_lib():
     ggml_base = ctypes.CDLL("./ggml-base.dll")
     llama = ctypes.CDLL("./llama.dll")
 
-    # 先设置日志回调（在加载 backend 之前）
     LOG_CALLBACK = ctypes.CFUNCTYPE(
         None, ctypes.c_int, ctypes.c_char_p, ctypes.c_void_p
     )
@@ -156,16 +163,14 @@ def init_llama_lib():
     llama_log_set.argtypes = [LOG_CALLBACK, ctypes.c_void_p]
     llama_log_set.restype = None
 
-    # 配置日志（默认捕获）
+    # 配置日志
     configure_logging(quiet=QUIET_LOGS)
 
-    # 然后再加载 backend
     ggml_backend_load_all = ggml.ggml_backend_load_all
     ggml_backend_load_all.argtypes = []
     ggml_backend_load_all.restype = None
     ggml_backend_load_all()
 
-    # Initialize backend
     llama_backend_init = llama.llama_backend_init
     llama_backend_init.argtypes = []
     llama_backend_init.restype = None
@@ -175,7 +180,6 @@ def init_llama_lib():
     llama_backend_free.argtypes = []
     llama_backend_free.restype = None
 
-    # Model
     llama_model_default_params = llama.llama_model_default_params
     llama_model_default_params.argtypes = []
     llama_model_default_params.restype = llama_model_params
@@ -192,7 +196,6 @@ def init_llama_lib():
     llama_model_get_vocab.argtypes = [ctypes.c_void_p]
     llama_model_get_vocab.restype = ctypes.c_void_p
 
-    # Context
     llama_context_default_params = llama.llama_context_default_params
     llama_context_default_params.argtypes = []
     llama_context_default_params.restype = llama_context_params
@@ -205,7 +208,6 @@ def init_llama_lib():
     llama_free.argtypes = [ctypes.c_void_p]
     llama_free.restype = None
 
-    # Batch
     llama_batch_init = llama.llama_batch_init
     llama_batch_init.argtypes = [ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
     llama_batch_init.restype = llama_batch
@@ -214,17 +216,14 @@ def init_llama_lib():
     llama_batch_free.argtypes = [llama_batch]
     llama_batch_free.restype = None
 
-    # Decode
     llama_decode = llama.llama_decode
     llama_decode.argtypes = [ctypes.c_void_p, llama_batch]
     llama_decode.restype = ctypes.c_int32
 
-    # Logits
     llama_get_logits = llama.llama_get_logits
     llama_get_logits.argtypes = [ctypes.c_void_p]
     llama_get_logits.restype = ctypes.POINTER(ctypes.c_float)
 
-    # Tokenize
     llama_tokenize = llama.llama_tokenize
     llama_tokenize.argtypes = [
         ctypes.c_void_p,
@@ -237,7 +236,6 @@ def init_llama_lib():
     ]
     llama_tokenize.restype = ctypes.c_int32
 
-    # Vocab
     llama_vocab_n_tokens = llama.llama_vocab_n_tokens
     llama_vocab_n_tokens.argtypes = [ctypes.c_void_p]
     llama_vocab_n_tokens.restype = ctypes.c_int32
@@ -257,7 +255,6 @@ def init_llama_lib():
     ]
     llama_token_to_piece.restype = ctypes.c_int
 
-    # Memory (KV Cache)
     llama_get_memory = llama.llama_get_memory
     llama_get_memory.argtypes = [ctypes.c_void_p]
     llama_get_memory.restype = ctypes.c_void_p
@@ -268,28 +265,18 @@ def init_llama_lib():
 
 
 def load_model(model_path: str):
-    """
-    加载 GGUF 模型（自动处理初始化和路径编码）
-
-    Args:
-        model_path: GGUF 模型文件路径
-
-    Returns:
-        model: llama_model 指针
-    """
     lib_dir = Path(__file__).parent / "bin"
     model_path = Path(model_path).resolve()
     model_rel = Path(relpath(model_path, lib_dir))
 
-    # 跳转到 dll 所在目录，并将其加到 Path
     original_cwd = Path.cwd()
     os.chdir(lib_dir)
     if hasattr(os, "add_dll_directory"):
         os.add_dll_directory(os.getcwd())
     os.environ["PATH"] = os.getcwd() + os.pathsep + os.environ["PATH"]
-    logger.info(f"Changed directory to: {Path.cwd()}")
 
-    # 初始化 backend，载入模型
+    _logger.info(f"Changed directory to: {Path.cwd()}")
+
     init_llama_lib()
     model_params = llama_model_default_params()
     model = llama_model_load_from_file(
@@ -298,13 +285,13 @@ def load_model(model_path: str):
 
     if model:
         os.chdir(original_cwd)
-        logger.info(f"Restored directory to: {Path.cwd()}")
+        _logger.info(f"Restored directory to: {Path.cwd()}")
         return model
     else:
-        logger.error(f"当前路径：{Path.cwd()}")
-        logger.error(f"模型绝对路径：{model_path.as_posix()}")
-        logger.error(f"模型可访问性：{model_path.exists()}")
-        logger.error(f"模型加载失败: {model_path}")
+        _logger.error(f"当前路径：{Path.cwd()}")
+        _logger.error(f"模型绝对路径：{model_path.as_posix()}")
+        _logger.error(f"模型可访问性：{model_path.exists()}")
+        _logger.error(f"模型加载失败: {model_path}")
         return None
 
 
@@ -316,11 +303,6 @@ def load_model(model_path: str):
 def python_log_callback(level, message, user_data):
     """
     llama.cpp 日志回调函数
-    level:
-        2 = ERROR (实际上包括了很多INFO信息)
-        3 = WARN
-        4 = INFO
-        5 = DEBUG
     """
     if not message:
         return
@@ -330,22 +312,20 @@ def python_log_callback(level, message, user_data):
         if not msg_str or msg_str in [".", "\n"]:
             return
 
-        # 检查消息内容，对真正的错误和警告做特殊处理
         if "error" in msg_str.lower() or "failed" in msg_str.lower():
-            logger.error(f"[llama.cpp] {msg_str}")
+            _logger.error(f"[llama.cpp] {msg_str}")
         elif "warn" in msg_str.lower():
-            logger.warning(f"[llama.cpp] {msg_str}")
+            _logger.warning(f"[llama.cpp] {msg_str}")
         elif level == 2:
-            # 对于level=2但实际是信息的消息，降级为info
-            logger.info(f"[llama.cpp] {msg_str}")
+            _logger.info(f"[llama.cpp] {msg_str}")
         elif level == 3:
-            logger.warning(f"[llama.cpp] {msg_str}")
+            _logger.warning(f"[llama.cpp] {msg_str}")
         elif level == 4:
-            logger.info(f"[llama.cpp] {msg_str}")
+            _logger.info(f"[llama.cpp] {msg_str}")
         elif level >= 5:
-            logger.debug(f"[llama.cpp] {msg_str}")
+            _logger.debug(f"[llama.cpp] {msg_str}")
         else:
-            logger.info(f"[llama.cpp] {msg_str}")
+            _logger.info(f"[llama.cpp] {msg_str}")
 
     except Exception as e:
         print(f"日志回调出错: {e}")
@@ -362,15 +342,6 @@ def configure_logging(quiet=False):
         None, ctypes.c_int, ctypes.c_char_p, ctypes.c_void_p
     )
 
-    # 始终设置回调为我们的 python 处理程序
-    # 如果 quiet 为 True，我们本可以传递一个空操作，但用户要求路由到服务器日志。
-    # 上下文中的 'quiet' 参数（来自之前的代码）意味着“抑制默认的 stderr”。
-    # 现在我们想要“重定向到 logger”。
-
-    # 如果用户真的想要静音，他们可以在外部调整 logger 配置
-    # 或者我们可以通过一个“Silence”标志来处理。
-    # 目前，我们将所有内容路由到 logger。
-
     _log_callback_ref = LOG_CALLBACK(python_log_callback)
     llama_log_set(_log_callback_ref, None)
 
@@ -381,10 +352,6 @@ def configure_logging(quiet=False):
 
 
 class ByteDecoder:
-    """
-    字节级解码器，用于处理 BPE 拆分的 UTF-8 字符
-    """
-
     def __init__(self):
         self.buffer = b""
 
@@ -421,8 +388,6 @@ class ByteDecoder:
 
 
 def text_to_tokens(vocab, text):
-    """使用 llama.dll 进行文本分词"""
-    # Note: requires llama_tokenize to be initialized
     text_bytes = text.encode("utf-8")
     n_tokens_max = len(text_bytes) + 32
     tokens = (llama_token * n_tokens_max)()
@@ -436,8 +401,6 @@ def text_to_tokens(vocab, text):
 
 
 def token_to_bytes(vocab, token_id):
-    """将 token 转换为原始字节 (用于 BPE 字节级 token)"""
-    # Note: requires llama_token_to_piece to be initialized
     buf = ctypes.create_string_buffer(256)
     n = llama_token_to_piece(vocab, token_id, buf, ctypes.sizeof(buf), 0, True)
     if n > 0:
@@ -446,11 +409,6 @@ def token_to_bytes(vocab, token_id):
 
 
 def get_token_embeddings_gguf(model_path, cache_dir=None):
-    """
-    使用 gguf 库从 GGUF 读取 token_embd.weight。
-    支持 F16/F32 和 Q8_0 量化格式
-    使用缓存机制：首次读取后保存为 .npy 文件，后续直接加载缓存
-    """
     if cache_dir is None:
         cache_dir = os.path.dirname(model_path)
 

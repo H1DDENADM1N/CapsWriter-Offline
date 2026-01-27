@@ -1,25 +1,26 @@
 import os
 import time
-import ctypes
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
+
+from loguru import logger as default_logger
+from loguru._logger import Logger
 
 from .. import nano_llama
-from ..nano_ctc import load_ctc_tokens
-from ..nano_onnx import load_onnx_models
 from ..hotword.manager import get_hotword_manager
-from ..utils import vprint
-from ..prompt_utils import PromptBuilder
+from ..nano_ctc import load_ctc_tokens
 from ..nano_dataclass import ASREngineConfig
-
-from loguru import logger
+from ..nano_onnx import load_onnx_models
+from ..prompt_utils import PromptBuilder
+from ..utils import vprint
 
 
 class ModelManager:
     """管理所有模型组件的代码"""
 
-    def __init__(self, config: ASREngineConfig):
+    def __init__(self, config: ASREngineConfig, logger: Optional[Logger] = None):
         self.config = config
+        self.logger = logger if logger is not None else default_logger
 
         # 运行时对象
         self.encoder_sess = None
@@ -71,7 +72,9 @@ class ModelManager:
             # 5. CTC & Prompt
             vprint("[5/6] 加载 CTC 词表与 Prompt 构建器...", verbose)
             self.ctc_id2token = load_ctc_tokens(self.config.tokens_path)
-            self.prompt_builder = PromptBuilder(self.vocab, self.embedding_table)
+            self.prompt_builder = PromptBuilder(
+                self.vocab, self.embedding_table, self.logger
+            )
 
             # 6. Hotwords
             vprint("[6/6] 初始化热词管理器...", verbose)
@@ -97,7 +100,7 @@ class ModelManager:
             return True
 
         except Exception as e:
-            logger.error(f"✗ 初始化失败: {e}", exc_info=True)
+            self.logger.error(f"✗ 初始化失败: {e}", exc_info=True)
             return False
 
     def _create_context(self):
@@ -121,4 +124,4 @@ class ModelManager:
             nano_llama.llama_model_free(self.model)
             nano_llama.llama_backend_free()
             self._initialized = False
-            logger.info("[ASR] 资源已释放")
+            self.logger.info("[ASR] 资源已释放")

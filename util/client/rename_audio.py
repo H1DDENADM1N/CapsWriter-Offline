@@ -7,7 +7,6 @@ from loguru import logger
 
 from util.client.cosmic import Cosmic, console
 from util.config import ClientConfig as Config
-from util.safe_logger import init_logging
 
 
 def rename_audio(task_id, text, time_start) -> Union[Path, None]:
@@ -18,7 +17,6 @@ def rename_audio(task_id, text, time_start) -> Union[Path, None]:
     if not file_path.exists():
         console.print(f"    文件不存在：{file_path}")
 
-        init_logging()
         logger.error(f"文件不存在：{file_path}")
         return
 
@@ -39,5 +37,4 @@ def rename_audio(task_id, text, time_start) -> Union[Path, None]:
     except Exception as e:
         console.print(f"重命名录音文件时出错: {e}")
 
-        init_logging()
         logger.error(f"重命名录音文件时出错: {e}")
