@@ -2,7 +2,7 @@
 
 ![alt text](assets/readme/main.png)
 
-# <img src="./assets/readme/windows-logo.png" width="25" height="25"> <span style="color: #4ABAFF;">[Windows](https://www.microsoft.com/zh-cn/windows)</span> 端离线语音输入简/繁体、中译英、字幕转录；在线多译多、云剪贴板等等 （选用SenseVoice模型时 支持中粤英日韩多语种）
+# <img src="./assets/readme/windows-logo.png" width="25" height="25"> <span style="color: #4ABAFF;">[Windows](https://www.microsoft.com/zh-cn/windows)</span> 端离线语音输入简/繁体、中译英、字幕转录；在线多译多、云剪贴板等等
 
 > [!IMPORTANT]
 > 图形化配置界面 `edit_config_gui.exe`，可方便修改大部分配置，更多自定义配置仍需手动修改 `config.toml` 文件
@@ -33,6 +33,11 @@
 
 <details>
 <summary><h1">展开最近更新</h1></summary>
+
+## 新增 可选模型 [Fun-ASR-Nano-2512-GGUF](https://www.modelscope.cn/models/HaujetZhao/Fun-ASR-Nano-2512-GGUF)
+> https://github.com/HaujetZhao/Fun-ASR-GGUF
+> 
+> 将 [Fun-ASR-Nano](https://www.modelscope.cn/models/FunAudioLLM/Fun-ASR-Nano-2512) 模型转换为可以在本地高效运行的格式，实现**准确、快速的离线语音识别**，可直接转录长音频生成 SRT。主要依赖了 [llama.cpp](https://github.com/ggml-org/llama.cpp) 对 LLM Decoder 的加速推理。
 
 ## 新增 配置选择器 `config_selector.exe`
 > 该工具用于选择 `./configs` 文件夹中的.toml配置文件
@@ -413,10 +418,9 @@ logger_level = "ERROR" # 调试日志级别
 [server]
 model = "FunASR"
 # 'FunASR' 、 'Sensevoice' 或 'Paraformer'
-# Sensevoice模型虽然多了粤英日韩多语种，但是，中文识别效果大不如Paraformer模型
-# 比如转录字幕不完整，识别结果不准确、丢失标点等
-# 如果你只说中文普通话，建议使用 'Paraformer' 模型
-# 不影响简繁转换和翻译
+# FunASR 目前的旗舰模型，速度较快，准确率最高,内存占用最多
+# Sensevoice 中粤英日韩多语种，速度最快，准确率最低，内存占用最少
+# Paraformer 中英，速度中速，准确率高，内存占用中
 
 vulkan_enable = true
 # 是否启用 Fun-ASR-Nano-GGUF 模型 Vulkan 加速 GPU 推理
@@ -1262,13 +1266,15 @@ debug = false
 
 ## 语音识别
 
+### FunASR
+
+- [Fun-ASR-Nano-2512-GGUF](https://www.modelscope.cn/models/HaujetZhao/Fun-ASR-Nano-2512-GGUF)
+
 ### Sensevoice
 
-[sensevoice模型](https://k2-fsa.github.io/sherpa/onnx/sense-voice/pretrained.html#sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17)
+- [sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17](https://k2-fsa.github.io/sherpa/onnx/sense-voice/pretrained.html#sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17)
 
 ### Paraformer
-
-[sherpa-onnx](https://k2-fsa.github.io/sherpa/onnx/index.html) ，载入阿里巴巴开源的 [Paraformer](https://www.modelscope.cn/models/damo/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch) 模型（[转为量化的 onnx 格式](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-paraformer/paraformer-models.html)），来作语音识别，整个模型约 230MB 大小。下载有已转换好的模型文件：
 
 - [yiyu-earth/sherpa-onnx-paraformer-zh-2024-04-25](https://huggingface.co/yiyu-earth/sherpa-onnx-paraformer-zh-2024-04-25)
 
