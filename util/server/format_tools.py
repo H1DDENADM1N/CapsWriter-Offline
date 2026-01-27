@@ -1,47 +1,65 @@
 import re
-from string import digits
+from typing import Match
 
-en_in_zh = re.compile(r"""(?ix)    # i 表示忽略大小写，x 表示开启注释模式
-    ([\u4e00-\u9fa5]|[a-z0-9]+\s)?      # 左侧是中文，或者英文加空格
-    ([a-z0-9 ]+)                    # 中间是一个或多个「英文数字加空格」
-    ([\u4e00-\u9fa5]|[a-z0-9]+)?       # 右是中文，或者英文加空格
+# 正则表达式模式：匹配中文-英文数字序列-中文的组合，用于识别中英文混排中的空格调整需求
+# 组1：左侧中文字符（可选）
+# 组2：英文数字序列（含常见标点和内部空格）
+# 组3：右侧中文字符（可选）
+_EN_IN_ZH_PATTERN = re.compile(r"""(?ix)
+    ([\u4e00-\u9fa5])?                  # 左侧：中文
+    ([a-z0-9][a-z0-9\s'.,!?-]*)        # 中间：英文数字序列（含常见标点和内部空格）
+    ([\u4e00-\u9fa5])?                  # 右侧：中文
 """)
 
 
-def replacer(original: re.Match):
-    left: str = original.group(1)
-    center: str = original.group(2)
-    right: str = original.group(3)
-    # 如果拼写字母中间有空格，就把空格都去掉
-    if center:
-        final = re.sub(r"((\d) )?(\b\w) ?(?!\w{2})", r"\2\3", center).strip()
-        # 测试地址 https://regex101.com/r/1Vtu7V/1
-        # final = re.sub(r'(\b\w) (?!\w{2})', r'\1', original.group(2)).strip()
+def _replacer(match: Match) -> str:
+    """
+    替换函数：处理匹配到的中英文混排文本，调整空格位置
 
-    # 如果英文的左边有汉字或英文，给两组之间加上空格
-    if left:
-        if (
-            left.strip(digits) == left and center.lstrip(digits) == center
-        ):  # 左侧结尾不是数字，中间开头不是数字
-            final = " " + final
-        final = left.rstrip() + final
+    Args:
+        match: 正则表达式匹配对象，包含三个捕获组
 
-    # 如果英文左边的汉字被前一个组消费了，就要手动去看一下前一个字是不是中文
-    elif re.match(r"[\u4e00-\u9fa5]", original.string[original.start(2) - 1]):
-        if center.lstrip(digits) == center:  # 确保中间开头不是数字
-            final = " " + final
+    Returns:
+        处理后的字符串，已调整中英文间的空格
+    """
+    left: str = match.group(1) or ""
+    center: str = match.group(2) or ""
+    right: str = match.group(3) or ""
 
-    # 如果英文的右边有汉字，给中英之间加上空格
-    if right:
-        if center.rstrip(digits) == center:  # 确保中间结尾不是数字
-            final += " "
-        final += right.lstrip()
+    final = center.strip()
+
+    # 检查中间部分是否包含英文字母
+    has_alpha = bool(re.search(r"[a-zA-Z]", final))
+
+    # 根据左侧中文和是否包含英文字母决定是否添加空格
+    if left and has_alpha:
+        final = left + " " + final
+    else:
+        final = left + final
+
+    # 根据右侧中文和是否包含英文字母决定是否添加空格
+    if right and has_alpha:
+        final = final + " " + right
+    else:
+        final = final + right
 
     return final
 
 
-def adjust_space(txt):
-    return en_in_zh.sub(replacer, txt)
+def adjust_space(text: str) -> str:
+    """
+    调整文本中中英文混排的空格
+
+    该函数会查找文本中中文与英文/数字相邻的情况，并在需要的地方添加适当的空格，
+    同时移除不必要的空格，使中英文混排更加规范美观。
+
+    Args:
+        text: 需要调整空格的原始文本
+
+    Returns:
+        调整空格后的文本
+    """
+    return _EN_IN_ZH_PATTERN.sub(_replacer, text)
 
 
 if __name__ == "__main__":

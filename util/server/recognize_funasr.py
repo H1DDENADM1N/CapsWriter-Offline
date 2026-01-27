@@ -20,8 +20,10 @@ from loguru import logger
 
 from util.config import ServerConfig as Config
 from util.safe_logger import init_logging
-from util.server.server_classes import Result, Task
-from util.server.server_cosmic import console
+from util.server.chinese_itn import chinese_to_num
+from util.server.classes import Result, Task
+from util.server.cosmic import console
+from util.server.format_tools import adjust_space
 
 # 导入拆分出去的模块
 from util.server.text_merge import (
@@ -30,8 +32,6 @@ from util.server.text_merge import (
     process_tokens_safely,
     tokens_to_text,
 )
-from util.tools.chinese_itn import chinese_to_num
-from util.tools.format_tools import adjust_space
 
 init_logging()
 

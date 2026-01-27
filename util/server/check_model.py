@@ -4,6 +4,7 @@ from loguru import logger
 
 from util.config import ModelPaths
 from util.config import ServerConfig as Config
+from util.safe_logger import init_logging
 from util.server.cosmic import console
 
 
@@ -12,6 +13,7 @@ def check_model() -> None:
     根据配置的模型类型检查所需的模型文件是否存在
     如果模型文件不存在，显示错误信息后退出程序。
     """
+    init_logging()
     model = Config.model
     logger.debug(f"检查模型文件, 类型: {model}")
 

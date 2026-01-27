@@ -6,6 +6,7 @@ from base64 import b64decode
 import websockets
 from loguru import logger
 
+from util.constants import AudioFormat
 from util.my_status import Status
 from util.safe_logger import init_logging
 from util.server.classes import Task
@@ -14,15 +15,36 @@ from util.server.cosmic import Cosmic, console
 status_mic = Status("正在接收音频", spinner="point")
 
 
-class Cache:
-    # 定义一个可变对象，用于保存音频数据、偏移时间
+class AudioCache:
+    """
+    音频缓冲区
+
+    用于缓存接收到的音频数据，直到达到分段阈值后提交处理。
+    """
+
     def __init__(self):
+        self.chunks: bytes = b""  # 音频数据缓冲
+        self.offset: float = 0.0  # 当前偏移时间（秒）
+        self.byte_count: int = 0  # 累计接收字节数
+
+    @property
+    def duration(self) -> float:
+        """缓冲区音频时长（秒）"""
+        return AudioFormat.bytes_to_seconds(len(self.chunks))
+
+    @property
+    def total_duration(self) -> float:
+        """累计接收的音频总时长（秒）"""
+        return AudioFormat.bytes_to_seconds(self.byte_count)
+
+    def reset(self) -> None:
+        """重置缓冲区"""
         self.chunks = b""
-        self.offset = 0
-        self.frame_num = 0
+        self.offset = 0.0
+        self.byte_count = 0
 
 
-async def message_handler(websocket, message, cache: Cache):
+async def message_handler(websocket, message, cache: AudioCache):
     """处理得到的音频流数据"""
 
     queue_in = Cosmic.queue_in
@@ -45,7 +67,7 @@ async def message_handler(websocket, message, cache: Cache):
     # 音频数据是 float32、单声道、16000采样率
     data = b64decode(message["data"])
     cache.chunks += data
-    cache.frame_num += len(data)
+    cache.byte_count += len(data)
 
     if not is_final:
         # 打印消息
@@ -81,9 +103,11 @@ async def message_handler(websocket, message, cache: Cache):
         if source == "mic":
             status_mic.stop()
         elif source == "file":
-            print(f"音频文件接收完毕，时长 {cache.frame_num / 16000 / 4:.2f}s")
+            print(f"音频文件接收完毕，时长 {cache.total_duration:.2f}s")
             init_logging()
-            logger.info(f"音频文件接收完毕，时长 {cache.frame_num / 16000 / 4:.2f}s")
+            logger.info(
+                f"音频文件接收完毕，任务ID: {task_id}, 时长: {cache.total_duration:.2f}s"
+            )
 
         # 客户端说片段结束，将缓冲区音频识别
         task = Task(
@@ -98,11 +122,12 @@ async def message_handler(websocket, message, cache: Cache):
             time_submit=time.time(),
         )
         queue_in.put(task)
+        logger.debug(
+            f"提交最终片段，任务ID: {task_id}, 数据大小: {len(cache.chunks)} bytes"
+        )
 
-        # 还原缓冲区、偏移时长
-        cache.chunks = b""
-        cache.offset = 0
-        cache.frame_num = 0
+        # 重置缓冲区
+        cache.reset()
 
 
 async def ws_recv(websocket):
@@ -149,7 +174,7 @@ async def ws_recv(websocket):
     seg_threshold = seg_duration + seg_overlap * 2
 
     # 片段缓冲区、偏移时长
-    cache = Cache()
+    cache = AudioCache()
 
     # 接收数据
     try:
