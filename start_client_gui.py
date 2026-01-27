@@ -12,8 +12,16 @@ import win32con
 import win32gui
 import win32print
 from loguru import logger
-from PySide6.QtCore import QFileSystemWatcher, QPoint, QStandardPaths, Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QFont, QIcon, QTextCursor, QWheelEvent
+from PySide6.QtCore import QFileSystemWatcher, QPoint, QStandardPaths, Qt, QTimer, QUrl
+from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
+    QDesktopServices,
+    QFont,
+    QIcon,
+    QTextCursor,
+    QWheelEvent,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -1423,10 +1431,12 @@ class GUI(QMainWindow):
         subprocess.Popen([vscode_exe_path, current_directory])
 
     def open_chatglm_website(self):
-        os.system("start https://chatglm.cn/main/alltoolsdetail")
+        QDesktopServices.openUrl(QUrl("https://chatglm.cn/main/alltoolsdetail"))
 
     def open_github_website(self):
-        os.system("start https://github.com/H1DDENADM1N/CapsWriter-Offline")
+        QDesktopServices.openUrl(
+            QUrl("https://github.com/H1DDENADM1N/CapsWriter-Offline")
+        )
 
     def transcribe_file(self):
         """转录音频/视频文件 - 修复版本"""
