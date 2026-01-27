@@ -9,3 +9,5 @@ python313.zip
 ../site-packages/win32/lib
 ../site-packages/win32ctypes/pywin32
 ../site-packages/win32ctypes
+
+../util/fun_asr_gguf/bin
