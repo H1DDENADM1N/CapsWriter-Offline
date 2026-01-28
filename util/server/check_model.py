@@ -88,7 +88,7 @@ def check_model(passed_logger) -> None:
 
     # 所有检查通过
     passed_logger.info(f"模型文件检查通过 ({model})")
-    console.print(f"[green4]模型文件检查通过 ({model})", end="\n\n")
+    # console.print(f"[green4]模型文件检查通过 ({model})", end="\n\n")
 
 
 def check_model_gui(passed_logger) -> None:
