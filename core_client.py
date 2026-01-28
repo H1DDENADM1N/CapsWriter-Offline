@@ -14,6 +14,8 @@ from loguru import logger as default_logger
 from loguru._logger import Logger
 
 from util.client.cosmic import Cosmic, console
+from util.client.transcribe.file_transcriber import FileTranscriber
+from util.client.transcribe.srt_adjuster import SrtAdjuster
 from util.config import ClientConfig as Config
 from util.safe_logger import SafeLogger
 
@@ -21,13 +23,11 @@ if sys.argv[1:]:
     Cosmic.transcribe_subtitles = True
 else:
     Cosmic.transcribe_subtitles = False
-from util.client.adjust_srt import adjust_srt
 from util.client.hot_update import observe_hot, update_hot_all
 from util.client.recv_result import recv_result
 from util.client.shortcut_handler import bond_shortcut
 from util.client.show_tips import show_file_tips, show_mic_tips
 from util.client.stream import stream_close, stream_open
-from util.client.transcribe import transcribe_check, transcribe_recv, transcribe_send
 from util.empty_working_set import empty_current_working_set
 
 # 确保根目录位置正确，用相对路径加载模型
@@ -93,19 +93,18 @@ async def main_mic(logger: Optional[Logger] = None):
 async def main_file(files: List[Path], logger: Optional[Logger] = None):
     _logger = logger if logger is not None else default_logger
     show_file_tips()
-
+    srt_adjuster = SrtAdjuster(logger=_logger)
     for file in files:
         try:
+            _logger.trace(f"正在处理文件 {str(file)}")
             if file.suffix in [".txt", ".json", ".srt"]:
-                adjust_srt(file)
+                srt_adjuster.adjust(file)
             else:
                 # 为每个文件重新建立连接
-                await transcribe_check(file, logger=_logger)
-                await asyncio.gather(
-                    transcribe_send(file, logger=_logger),
-                    transcribe_recv(file, logger=_logger),
-                )
-                console.print(f"[bold green]已完成转录: {file.name}[/bold green]")
+                transcriber = FileTranscriber(file, logger=_logger)
+                if await transcriber.check():
+                    await transcriber.send()
+                    await transcriber.receive()
 
                 # 处理完成后关闭连接，为下一个文件做准备
                 if Cosmic.websocket:
