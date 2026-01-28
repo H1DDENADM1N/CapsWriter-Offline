@@ -24,8 +24,8 @@ from siui.components.widgets import (
 from siui.core import SiGlobal
 
 from util.edit_config_gui.clearly_type import clearly_type
-from util.edit_config_gui.write_toml import write_toml
 from util.edit_config_gui.value_check import ValueCheck
+from util.edit_config_gui.write_toml import write_toml
 
 from .set_default_button import SetDefaultButton
 
@@ -254,17 +254,65 @@ class ServerConfigPage(SiPage):
             self.model.resize(325, 32)
             self.model.addOption("Paraformer")
             self.model.addOption("Sensevoice")
+            self.model.addOption("FunASR")
             self.model.menu().setShowIcon(False)
             if self.config["server"]["model"] == "Paraformer":
                 self.model.menu().setIndex(0)
-            else:
+            elif self.config["server"]["model"] == "Sensevoice":
                 self.model.menu().setIndex(1)
+            else:
+                self.model.menu().setIndex(2)
+            self.model.valueChanged.connect(self.model_changed)
             self.model_linear_attaching = SiOptionCardLinear(self)
             self.model_linear_attaching.setTitle("语音识别模型")
             self.model_linear_attaching.load(
                 SiGlobal.siui.iconpack.get("ic_fluent_brain_circuit_regular")
             )
             self.model_linear_attaching.addWidget(self.model)
+
+            # 是否启用 Fun-ASR-Nano-GGUF 模型 Vulkan 加速 GPU 推理
+            self.vulkan_enable = SiSwitch(self)
+            self.vulkan_enable.setChecked(self.config["server"]["vulkan_enable"])
+            self.vulkan_enable_linear_attaching = SiOptionCardLinear(self)
+            self.vulkan_enable_linear_attaching.setTitle(
+                "是否启用 Fun-ASR-Nano-GGUF 模型 Vulkan 加速 GPU 推理"
+            )
+            self.vulkan_enable_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_settings_light")
+            )
+            self.vulkan_enable_linear_attaching.addWidget(self.vulkan_enable)
+
+            # 是否强制 Fun-ASR-Nano-GGUF 模型 FP32 计算（如果 GPU 是 Intel 集显且出现精度溢出，可设为 true）
+            self.vulkan_force_fp32 = SiSwitch(self)
+            self.vulkan_force_fp32.setChecked(
+                self.config["server"]["vulkan_force_fp32"]
+            )
+            self.vulkan_force_fp32_linear_attaching = SiOptionCardLinear(self)
+            self.vulkan_force_fp32_linear_attaching.setTitle(
+                "是否强制 Fun-ASR-Nano-GGUF 模型 FP32 计算"
+            )
+            self.vulkan_force_fp32_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_settings_light")
+            )
+            self.vulkan_force_fp32_linear_attaching.addWidget(self.vulkan_force_fp32)
+
+            # 是否启用 Fun-ASR-Nano-GGUF 模型热词扩展功能
+            # 将 .\hot-zh.txt 和 .\hot-en.txt 文件追加到 FunASR 模型热词列表中
+            # .\models\Fun-ASR-Nano-GGUF\hot.txt
+            self.expand_funasr_hotwords = SiSwitch(self)
+            self.expand_funasr_hotwords.setChecked(
+                self.config["server"]["expand_funasr_hotwords"]
+            )
+            self.expand_funasr_hotwords_linear_attaching = SiOptionCardLinear(self)
+            self.expand_funasr_hotwords_linear_attaching.setTitle(
+                "是否启用 Fun-ASR-Nano-GGUF 模型热词扩展功能"
+            )
+            self.expand_funasr_hotwords_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_settings_light")
+            )
+            self.expand_funasr_hotwords_linear_attaching.addWidget(
+                self.expand_funasr_hotwords
+            )
 
             # 语音识别服务端口
             self.speech_recognition_port = SiIntSpinBox(self)
@@ -325,6 +373,15 @@ class ServerConfigPage(SiPage):
             self.speech_recognition_container.setFixedWidth(700)
             self.speech_recognition_container.setAdjustWidgetsSize(True)
             self.speech_recognition_container.addWidget(self.model_linear_attaching)
+            self.speech_recognition_container.addWidget(
+                self.vulkan_enable_linear_attaching
+            )
+            self.speech_recognition_container.addWidget(
+                self.vulkan_force_fp32_linear_attaching
+            )
+            self.speech_recognition_container.addWidget(
+                self.expand_funasr_hotwords_linear_attaching
+            )
             self.speech_recognition_container.addWidget(
                 self.speech_recognition_port_linear_attaching
             )
@@ -421,9 +478,20 @@ class ServerConfigPage(SiPage):
 
     def model_changed(self):
         if self.model.value_label.text() == "Paraformer":
-            self.format_punc.show()
+            self.format_punc_linear_attaching.show()
+            self.vulkan_enable_linear_attaching.hide()
+            self.vulkan_force_fp32_linear_attaching.hide()
+            self.expand_funasr_hotwords_linear_attaching.hide()
+        elif self.model.value_label.text() == "Sensevoice":
+            self.format_punc_linear_attaching.hide()
+            self.vulkan_enable_linear_attaching.hide()
+            self.vulkan_force_fp32_linear_attaching.hide()
+            self.expand_funasr_hotwords_linear_attaching.hide()
         else:
-            self.format_punc.hide()
+            self.format_punc_linear_attaching.hide()
+            self.vulkan_enable_linear_attaching.show()
+            self.vulkan_force_fp32_linear_attaching.show()
+            self.expand_funasr_hotwords_linear_attaching.show()
 
     def start_offline_translate_server_changed(self):
         if self.start_offline_translate_server.isChecked():
@@ -440,6 +508,13 @@ class ServerConfigPage(SiPage):
     def save_config(self):
         def get_value_from_gui():
             self.config["server"]["model"] = self.model.value_label.text()
+            self.config["server"]["vulkan_enable"] = self.vulkan_enable.isChecked()
+            self.config["server"]["vulkan_force_fp32"] = (
+                self.vulkan_force_fp32.isChecked()
+            )
+            self.config["server"]["expand_funasr_hotwords"] = (
+                self.expand_funasr_hotwords.isChecked()
+            )
             self.config["server"]["addr"] = self.addr.line_edit.text()
             self.config["server"]["speech_recognition_port"] = str(
                 self.speech_recognition_port.value()
@@ -477,6 +552,21 @@ class ServerConfigPage(SiPage):
                 "model",
                 clearly_type(self.config["server"]["model"]),
                 str(self.config["server"]["model"]),
+            )
+            table.add_row(
+                "vulkan_enable",
+                clearly_type(self.config["server"]["vulkan_enable"]),
+                str(self.config["server"]["vulkan_enable"]),
+            )
+            table.add_row(
+                "vulkan_force_fp32",
+                clearly_type(self.config["server"]["vulkan_force_fp32"]),
+                str(self.config["server"]["vulkan_force_fp32"]),
+            )
+            table.add_row(
+                "expand_funasr_hotwords",
+                clearly_type(self.config["server"]["expand_funasr_hotwords"]),
+                str(self.config["server"]["expand_funasr_hotwords"]),
             )
             table.add_row(
                 "addr",

@@ -60,16 +60,16 @@ class ClientConfigPage(SiPage):
             lambda: self.speech_recognition_port.setValue(6016)
         )
         self.mic_seg_duration_set_default.clicked.connect(
-            lambda: self.mic_seg_duration.setValue(15)
+            lambda: self.mic_seg_duration.setValue(60)
         )
         self.mic_seg_overlap_set_default.clicked.connect(
-            lambda: self.mic_seg_overlap.setValue(2)
+            lambda: self.mic_seg_overlap.setValue(4)
         )
         self.file_seg_duration_set_default.clicked.connect(
-            lambda: self.file_seg_duration.setValue(25)
+            lambda: self.file_seg_duration.setValue(60)
         )
         self.file_seg_overlap_set_default.clicked.connect(
-            lambda: self.file_seg_overlap.setValue(2)
+            lambda: self.file_seg_overlap.setValue(4)
         )
         self.hold_mode.toggled.connect(lambda: self.hold_mode_changed())
         self.start_music_path_set_default.clicked.connect(
@@ -125,6 +125,12 @@ class ClientConfigPage(SiPage):
         )
         self.online_translate_target_languages_set_default.clicked.connect(
             lambda: self.online_translate_target_languages.menu().setIndex(0)
+        )
+        self.ai_provider_set_default.clicked.connect(
+            lambda: self.ai_provider.menu().setIndex(0)
+        )
+        self.prompt_style_selection_set_default.clicked.connect(
+            lambda: self.prompt_style_selection.menu().setIndex(4)
         )
         self.save.longPressed.connect(self.save_config)
         # 数据校验绑定
@@ -482,7 +488,7 @@ class ClientConfigPage(SiPage):
             self.speech_recognition_port_linear_attaching.addWidget(
                 self.speech_recognition_port
             )
-            # 麦克风听写时分段长度：15 秒
+            # 麦克风听写时分段长度：60 秒
             self.mic_seg_duration = SiIntSpinBox(self)
             self.mic_seg_duration.resize(256, 32)
             self.mic_seg_duration.setMinimum(10)
@@ -491,7 +497,7 @@ class ClientConfigPage(SiPage):
             self.mic_seg_duration_set_default = SetDefaultButton(self)
             self.mic_seg_duration_linear_attaching = SiOptionCardLinear(self)
             self.mic_seg_duration_linear_attaching.setTitle(
-                "麦克风听写时分段长度", '默认值："15" 秒'
+                "麦克风听写时分段长度", '默认值："60" 秒'
             )
             self.mic_seg_duration_linear_attaching.load(
                 SiGlobal.siui.iconpack.get("ic_fluent_timer_regular")
@@ -510,7 +516,7 @@ class ClientConfigPage(SiPage):
             self.mic_seg_overlap_set_default = SetDefaultButton(self)
             self.mic_seg_overlap_linear_attaching = SiOptionCardLinear(self)
             self.mic_seg_overlap_linear_attaching.setTitle(
-                "麦克风听写时分段重叠", '默认值："2" 秒'
+                "麦克风听写时分段重叠", '默认值："4" 秒'
             )
             self.mic_seg_overlap_linear_attaching.load(
                 SiGlobal.siui.iconpack.get("ic_fluent_timer_regular")
@@ -529,7 +535,7 @@ class ClientConfigPage(SiPage):
             self.file_seg_duration_set_default = SetDefaultButton(self)
             self.file_seg_duration_linear_attaching = SiOptionCardLinear(self)
             self.file_seg_duration_linear_attaching.setTitle(
-                "转录文件时分段长度", '默认值："25" 秒'
+                "转录文件时分段长度", '默认值："60" 秒'
             )
             self.file_seg_duration_linear_attaching.load(
                 SiGlobal.siui.iconpack.get("ic_fluent_timer_regular")
@@ -548,7 +554,7 @@ class ClientConfigPage(SiPage):
             self.file_seg_overlap_set_default = SetDefaultButton(self)
             self.file_seg_overlap_linear_attaching = SiOptionCardLinear(self)
             self.file_seg_overlap_linear_attaching.setTitle(
-                "转录文件时分段重叠", '默认值："2" 秒'
+                "转录文件时分段重叠", '默认值："4" 秒'
             )
             self.file_seg_overlap_linear_attaching.load(
                 SiGlobal.siui.iconpack.get("ic_fluent_timer_regular")
@@ -913,12 +919,28 @@ class ClientConfigPage(SiPage):
             self.trash_punc_linear_attaching.addWidget(self.trash_punc_set_default)
             self.trash_punc_linear_attaching.addWidget(self.trash_punc)
 
+            # 新版 独立热词与纠错系统，整合了音素处理、相似度算法、FastRAG 加速检索
+            # 不建议与 旧版 hot_zh、hot_en  一起使用
+            # 不用重新编辑 hot-rag.txt 文件
+            # hot-en.txt 和 hot-zh.txt 文件仍然有效
+            self.hot_rag = SiSwitch(self)
+            self.hot_rag.setChecked(self.config["client"]["hot_rag"])
+            self.hot_rag_linear_attaching = SiOptionCardLinear(self)
+            self.hot_rag_linear_attaching.setTitle(
+                "中、英文热词替换（新版）",
+                "新版独立热词与纠错系统，整合了音素处理、相似度算法、FastRAG 加速检索",
+            )
+            self.hot_rag_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_ruler_regular")
+            )
+            self.hot_rag_linear_attaching.addWidget(self.hot_rag)
+
             # 是否启用中文热词替换，中文热词存储在 hot_zh.txt 文件里
             self.hot_zh = SiSwitch(self)
             self.hot_zh.setChecked(self.config["client"]["hot_zh"])
             self.hot_zh_linear_attaching = SiOptionCardLinear(self)
             self.hot_zh_linear_attaching.setTitle(
-                "中文热词替换",
+                "中文热词替换（旧版）",
                 "中文热词存储在 hot_zh.txt 文件里",
             )
             self.hot_zh_linear_attaching.load(
@@ -972,7 +994,7 @@ class ClientConfigPage(SiPage):
             self.hot_en.setChecked(self.config["client"]["hot_en"])
             self.hot_en_linear_attaching = SiOptionCardLinear(self)
             self.hot_en_linear_attaching.setTitle(
-                "英文热词替换",
+                "英文热词替换（旧版）",
                 "英文热词存储在 hot_en.txt 文件里",
             )
             self.hot_en_linear_attaching.load(
@@ -1190,6 +1212,7 @@ class ClientConfigPage(SiPage):
             self.speech_recognition_container.addWidget(
                 self.trash_punc_linear_attaching
             )
+            self.speech_recognition_container.addWidget(self.hot_rag_linear_attaching)
             self.speech_recognition_container.addWidget(self.hot_zh_linear_attaching)
             self.speech_recognition_container.addWidget(self.多音字_linear_attaching)
             self.speech_recognition_container.addWidget(self.声调_linear_attaching)
@@ -1525,6 +1548,171 @@ class ClientConfigPage(SiPage):
             )
             group.addWidget(self.online_translate_container)
 
+        with self.titled_widgets_group as group:
+            group.addTitle("AI 优化语言表达")
+
+            # 是否启用 AI 优化语言表达
+            # 启用后预计增加 5s 时间延长
+            self.enable_ai_optimize_language_expression = SiSwitch(self)
+            self.enable_ai_optimize_language_expression.setText(
+                "是否启用 AI 优化语言表达"
+            )
+            self.enable_ai_optimize_language_expression.setChecked(
+                self.config["client"]["enable_ai_optimize_language_expression"]
+            )
+            self.enable_ai_optimize_language_expression.toggled.connect(
+                self.enable_ai_optimize_language_expression_changed
+            )
+            self.enable_ai_optimize_language_expression_linear_attaching = (
+                SiOptionCardLinear(self)
+            )
+            self.enable_ai_optimize_language_expression_linear_attaching.setTitle(
+                "AI 优化语言表达",
+                "启用后预计增加 5s 时间延长",
+            )
+            self.enable_ai_optimize_language_expression_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_lightbulb_filled")
+            )
+            self.enable_ai_optimize_language_expression_linear_attaching.addWidget(
+                self.enable_ai_optimize_language_expression
+            )
+
+            # AI 优化语言表达 使用的 AI 服务商
+            # "zhipuai"  智谱
+            # "openai"  OpenAI 以及兼容 OpenAI API 的服务商
+            self.ai_provider = SiComboBox(self)
+            self.ai_provider.resize(256, 32)
+            self.ai_provider.addOption("openai")
+            self.ai_provider.addOption("zhipuai")
+            match self.config["client"]["ai_provider"]:
+                case "openai":
+                    self.ai_provider.menu().setIndex(0)
+                case "zhipuai":
+                    self.ai_provider.menu().setIndex(1)
+                case _:
+                    self.ai_provider.addOption(self.config["client"]["ai_provider"])
+                    self.ai_provider.menu().setIndex(-1)
+            self.ai_provider_set_default = SetDefaultButton(self)
+            self.ai_provider_linear_attaching = SiOptionCardLinear(self)
+            self.ai_provider_linear_attaching.setTitle(
+                "AI 服务商",
+                '默认值："openai"',
+            )
+            self.ai_provider_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_lightbulb_filled")
+            )
+            self.ai_provider_linear_attaching.addWidget(self.ai_provider_set_default)
+            self.ai_provider_linear_attaching.addWidget(self.ai_provider)
+
+            # 提示风格
+            # official 正式公文文本校对助手
+            # sweetheart 贴心的男友式文本润色助手
+            # social 社交媒体文案优化助手
+            # poetry 仿古诗
+            # english 翻译为英文
+            # academic 学术论文润色助手
+            # customer_service 客户服务回复助手
+            # creative_writing 创意写作助手
+            self.prompt_style_selection = SiComboBox(self)
+            self.prompt_style_selection.resize(256, 32)
+            self.prompt_style_selection.addOption("official")
+            self.prompt_style_selection.addOption("sweetheart")
+            self.prompt_style_selection.addOption("social")
+            self.prompt_style_selection.addOption("poetry")
+            self.prompt_style_selection.addOption("english")
+            self.prompt_style_selection.addOption("academic")
+            self.prompt_style_selection.addOption("customer_service")
+            self.prompt_style_selection.addOption("creative_writing")
+            match self.config["client"]["prompt_style_selection"]:
+                case "official":
+                    self.prompt_style_selection.menu().setIndex(0)
+                case "sweetheart":
+                    self.prompt_style_selection.menu().setIndex(1)
+                case "social":
+                    self.prompt_style_selection.menu().setIndex(2)
+                case "poetry":
+                    self.prompt_style_selection.menu().setIndex(3)
+                case "english":
+                    self.prompt_style_selection.menu().setIndex(4)
+                case "academic":
+                    self.prompt_style_selection.menu().setIndex(5)
+                case "customer_service":
+                    self.prompt_style_selection.menu().setIndex(6)
+                case "creative_writing":
+                    self.prompt_style_selection.menu().setIndex(7)
+                case _:
+                    self.prompt_style_selection.addOption(
+                        self.config["client"]["prompt_style_selection"]
+                    )
+                    self.prompt_style_selection.menu().setIndex(-1)
+            self.prompt_style_selection_set_default = SetDefaultButton(self)
+            self.prompt_style_selection_linear_attaching = SiOptionCardLinear(self)
+            self.prompt_style_selection_linear_attaching.setTitle(
+                "提示风格",
+                '默认值："english"',
+            )
+            self.prompt_style_selection_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_lightbulb_filled")
+            )
+            self.prompt_style_selection_linear_attaching.addWidget(
+                self.prompt_style_selection_set_default
+            )
+            self.prompt_style_selection_linear_attaching.addWidget(
+                self.prompt_style_selection
+            )
+
+            # 是否在切换提示风格时显示提示
+            self.show_prompt_style_changed_notification = SiSwitch(self)
+            self.show_prompt_style_changed_notification.setChecked(
+                self.config["client"]["show_prompt_style_changed_notification"]
+            )
+            self.show_prompt_style_changed_notification_linear_attaching = (
+                SiOptionCardLinear(self)
+            )
+            self.show_prompt_style_changed_notification_linear_attaching.setTitle(
+                "切换提示风格时显示提示",
+            )
+            self.show_prompt_style_changed_notification_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_lightbulb_filled")
+            )
+            self.show_prompt_style_changed_notification_linear_attaching.addWidget(
+                self.show_prompt_style_changed_notification
+            )
+
+            # 是否在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面
+            # 启用后不再进行靠边停靠，改善多显示屏用户体验
+            self.show_time_label = SiSwitch(self)
+            self.show_time_label.setChecked(self.config["client"]["show_time_label"])
+            self.show_time_label_linear_attaching = SiOptionCardLinear(self)
+            self.show_time_label_linear_attaching.setTitle(
+                "在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面",
+            )
+            self.show_time_label_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_lightbulb_filled")
+            )
+            self.show_time_label_linear_attaching.addWidget(self.show_time_label)
+
+            # 设置项
+            self.ai_optimize_language_expression_container = SiDenseVContainer(self)
+            self.ai_optimize_language_expression_container.setFixedWidth(700)
+            self.ai_optimize_language_expression_container.setAdjustWidgetsSize(True)
+            self.ai_optimize_language_expression_container.addWidget(
+                self.enable_ai_optimize_language_expression_linear_attaching
+            )
+            self.ai_optimize_language_expression_container.addWidget(
+                self.ai_provider_linear_attaching
+            )
+            self.ai_optimize_language_expression_container.addWidget(
+                self.prompt_style_selection_linear_attaching
+            )
+            self.ai_optimize_language_expression_container.addWidget(
+                self.show_prompt_style_changed_notification_linear_attaching
+            )
+            self.ai_optimize_language_expression_container.addWidget(
+                self.show_time_label_linear_attaching
+            )
+            group.addWidget(self.ai_optimize_language_expression_container)
+
         # 添加页脚的空白以增加美观性
         self.titled_widgets_group.addPlaceholder(64)
 
@@ -1620,6 +1808,12 @@ class ClientConfigPage(SiPage):
             self.online_translate_target_languages_libretranslate_linear_attaching.hide()
             self.online_translate_target_languages_linear_attaching.hide()
 
+    def enable_ai_optimize_language_expression_changed(self):
+        if self.enable_ai_optimize_language_expression.isChecked():
+            ...
+        else:
+            ...
+
     def save_config(self):
         def get_value_from_gui():
             self.config["client"]["addr"] = self.addr.line_edit.text()
@@ -1668,6 +1862,7 @@ class ClientConfigPage(SiPage):
                 self.reduce_audio_files.isChecked()
             )
             self.config["client"]["trash_punc"] = self.trash_punc.line_edit.text()
+            self.config["client"]["hot_rag"] = self.hot_rag.isChecked()
             self.config["client"]["hot_zh"] = self.hot_zh.isChecked()
             self.config["client"]["多音字"] = self.多音字.isChecked()
             self.config["client"]["声调"] = self.声调.isChecked()
@@ -1738,6 +1933,17 @@ class ClientConfigPage(SiPage):
             self.config["client"]["convert_to_traditional_chinese_main"] = (
                 "繁" if self.convert_to_traditional_chinese_main.isChecked() else "简"
             )
+            self.config["client"]["enable_ai_optimize_language_expression"] = (
+                self.enable_ai_optimize_language_expression.isChecked()
+            )
+            self.config["client"]["ai_provider"] = self.ai_provider.value_label.text()
+            self.config["client"]["prompt_style_selection"] = (
+                self.prompt_style_selection.value_label.text()
+            )
+            self.config["client"]["show_prompt_style_changed_notification"] = (
+                self.show_prompt_style_changed_notification.isChecked()
+            )
+            self.config["client"]["show_time_label"] = self.show_time_label.isChecked()
 
         def print_config():
             console = Console()
@@ -2047,6 +2253,36 @@ class ClientConfigPage(SiPage):
                 ),
                 str(self.config["client"]["convert_to_traditional_chinese_main"]),
             )
+            table.add_row(
+                "enable_ai_optimize_language_expression",
+                clearly_type(
+                    self.config["client"]["enable_ai_optimize_language_expression"]
+                ),
+                str(self.config["client"]["enable_ai_optimize_language_expression"]),
+            )
+            table.add_row(
+                "ai_provider",
+                clearly_type(self.config["client"]["ai_provider"]),
+                str(self.config["client"]["ai_provider"]),
+            )
+            table.add_row(
+                "prompt_style_selection",
+                clearly_type(self.config["client"]["prompt_style_selection"]),
+                str(self.config["client"]["prompt_style_selection"]),
+            )
+            table.add_row(
+                "show_prompt_style_changed_notification",
+                clearly_type(
+                    self.config["client"]["show_prompt_style_changed_notification"]
+                ),
+                str(self.config["client"]["show_prompt_style_changed_notification"]),
+            )
+            table.add_row(
+                "show_time_label",
+                clearly_type(self.config["client"]["show_time_label"]),
+                str(self.config["client"]["show_time_label"]),
+            )
+
             console.print(table)
 
         try:
