@@ -360,24 +360,6 @@ def process_tokens_safely(tokens: List) -> List[str]:
     return clean_tokens
 
 
-def tokens_to_text(tokens: List[str]) -> str:
-    """
-    将 tokens 合并为文本
-
-    处理 Paraformer 的 @@ 标记（表示后续 token 应直接拼接）。
-
-    Args:
-        tokens: token 列表
-
-    Returns:
-        合并后的文本
-    """
-    # 直接拼接所有 token，仅处理 Paraformer 的 @@ 标记
-    # 对于现代模型（如 Fun-ASR-Nano），空格本身就是作为独立 token 存在的
-    text = "".join(tokens).replace("@@", "")
-    return text
-
-
 # 任务结果缓存（按 task_id 索引）
 _results = {}
 
@@ -411,8 +393,8 @@ def _process_simple_merge(
     """
     _logger = logger if logger is not None else default_logger
     try:
-        # 清理文本：去除 @@ 标记和多余空格
-        segment_text = stream_result_text.replace("@@", "").strip()
+        # 清理文本：去除多余空格
+        segment_text = stream_result_text.strip()
         segment_text = re.sub(r"\s+", " ", segment_text)
 
         prev_len = len(result.text)
@@ -428,49 +410,68 @@ def _process_simple_merge(
         _logger.warning(f"简单文本拼接失败: {e}")
 
 
-def validate_audio_samples(samples, task):
+def is_silence(samples, samplerate, energy_threshold=1e-4, max_silence_ms=500):
+    """
+    检测音频是否为静音
+
+    Args:
+        samples: 音频样本
+        samplerate: 采样率
+        energy_threshold: 能量阈值
+        max_silence_ms: 最大允许静音时长（毫秒）
+
+    Returns:
+        bool: 是否为静音
+    """
+    if len(samples) == 0:
+        return True
+
+    # 计算能量
+    energy = np.sqrt(np.mean(samples**2))
+
+    # 如果能量低于阈值
+    if energy < energy_threshold:
+        return True
+
+    return False
+
+
+def validate_audio_samples(
+    samples, task, min_energy_threshold=1e-4, min_duration_ms=100
+):
     """
     验证音频样本的有效性，防止传入无效数据给识别器
 
     Args:
         samples: 音频样本数组
         task: 任务对象
+        min_energy_threshold: 最小能量阈值，低于此值视为静音
+        min_duration_ms: 最小有效时长（毫秒）
 
     Returns:
-        tuple: (is_valid, processed_samples) 或 (False, None)
+        tuple: (is_valid, processed_samples)
     """
     # 检查样本是否为空
     if samples is None or len(samples) == 0:
-        # console.print(f"任务 {task.task_id[:8]} 音频样本为空，跳过识别")
-        # logger.warning(f"任务 {task.task_id[:8]} 音频样本为空，跳过识别")
         return False, None
 
-    # # 检查样本类型
-    # if samples.dtype != np.float32:
-    #     console.print(f"任务 {task.task_id[:8]} 音频样本类型不是 float32，将进行转换")
-    #     logger.debug(f"任务 {task.task_id[:8]} 音频样本类型不是 float32，将进行转换")
-    #     samples = samples.astype(np.float32)
+    # 计算音频时长（毫秒）
+    duration_ms = len(samples) / task.samplerate * 1000
+    if duration_ms < min_duration_ms:
+        # console.print(f"任务 {task.task_id[:8]} 音频时长过短 ({duration_ms:.1f}ms < {min_duration_ms}ms)，跳过识别")
+        return False, None
 
-    # # 检查特殊值
-    # if np.any(np.isnan(samples)) or np.any(np.isinf(samples)):
-    #     console.print(f"任务 {task.task_id[:8]} 音频样本包含特殊值，将进行清理")
-    #     logger.debug(f"任务 {task.task_id[:8]} 音频样本包含特殊值，将进行清理")
-    #     samples = np.nan_to_num(samples, nan=0.0, posinf=1e-6, neginf=-1e-6)
+    # 计算音频能量（均方根）
+    energy = np.sqrt(np.mean(samples**2))
 
-    # # 检查音频长度
-    # min_samples = 160  # 至少10ms @ 16kHz
-    # if len(samples) < min_samples:
-    #     console.print(
-    #         f"任务 {task.task_id[:8]} 音频样本过短 (len={len(samples)})，将进行填充"
-    #     )
-    #     logger.debug(
-    #         f"任务 {task.task_id[:8]} 音频样本过短 (len={len(samples)})，将进行填充"
-    #     )
-    #     # 填充到最小长度
-    #     padding_needed = min_samples - len(samples)
-    #     samples = np.pad(
-    #         samples, (0, padding_needed), mode="constant", constant_values=0
-    #     )
+    # 检查是否是静音
+    if energy < min_energy_threshold:
+        # console.print(f"任务 {task.task_id[:8]} 音频能量过低 ({energy:.6f} < {min_energy_threshold:.6f})，视为静音")
+        return False, None
+
+    # 检查是否全是NaN或Inf
+    if np.any(np.isnan(samples)) or np.any(np.isinf(samples)):
+        return False, None
 
     return True, samples
 
@@ -505,6 +506,19 @@ def recognize(recognizer, task: Task, logger: Optional[Logger] = None) -> Result
         # 2. 解码音频
         samples = np.frombuffer(task.data, dtype=np.float32)
         duration = len(samples) / task.samplerate
+        # 静音检测
+        if is_silence(samples, task.samplerate):
+            _logger.debug(f"任务 {task.task_id[:8]} 检测到静音，跳过识别")
+
+            # 更新时长但不处理文本
+            result.duration += duration - task.overlap
+            if task.is_final:
+                result.duration += task.overlap
+                result = _results.pop(task.task_id)
+                result.is_final = True
+
+            return result
+
         result.duration += duration - task.overlap
         if task.is_final:
             result.duration += task.overlap
@@ -531,18 +545,7 @@ def recognize(recognizer, task: Task, logger: Optional[Logger] = None) -> Result
         # 4. 执行识别
         stream = recognizer.create_stream()
         stream.accept_waveform(task.samplerate, samples)
-
-        # 在 decode_stream 之前添加额外的防御措施
-        try:
-            recognizer.decode_stream(stream)
-        except Exception as decode_error:
-            _logger.error(f"解码流时发生错误: {decode_error}")
-            # 返回空结果而不是让程序崩溃
-            result.text = ""
-            result.text_accu = ""
-            result.tokens = []
-            result.timestamps = []
-            return result
+        recognizer.decode_stream(stream)
 
         # 更新时间戳
         result.time_start = task.time_start
@@ -576,7 +579,7 @@ def recognize(recognizer, task: Task, logger: Optional[Logger] = None) -> Result
             console.print(f"\n[red]编码错误: {e}")
 
         # 7. 生成 text_accu
-        result.text_accu = tokens_to_text(result.tokens)
+        result.text_accu = "".join(result.tokens)
 
         # 如果不是最终结果，直接返回
         if not task.is_final:
@@ -586,20 +589,6 @@ def recognize(recognizer, task: Task, logger: Optional[Logger] = None) -> Result
         # 8. 最终处理
         result.text = format_text(result.text)
         result.text_accu = format_text(result.text_accu)
-
-        # 如果模型不支持时间戳，用简单拼接结果回退
-        if not result.tokens and result.text:
-            result.text_accu = result.text
-            # 生成粗略的字级时间戳（均匀分布）
-            chars = list(result.text_accu.replace(" ", ""))
-            if chars and result.duration > 0:
-                time_per_char = result.duration / len(chars)
-                result.tokens = chars
-                result.timestamps = [i * time_per_char for i in range(len(chars))]
-                _logger.warning(
-                    f"模型无时间戳，使用粗略估计: {len(chars)} 字符, {result.duration:.2f}s"
-                )
-
         result = _results.pop(task.task_id)
         result.is_final = True
 
