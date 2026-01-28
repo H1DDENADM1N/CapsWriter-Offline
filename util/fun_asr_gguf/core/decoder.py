@@ -50,7 +50,8 @@ class CTCDecoder:
 class LLMDecoder:
     """负责 LLM 推理循环"""
 
-    def __init__(self, models: ModelManager):
+    def __init__(self, models: ModelManager, logger: Optional[Logger] = None):
+        self.logger = logger if logger is not None else default_logger
         self.models = models
         self.stop_tokens = [151643, 151645]
 
@@ -132,6 +133,15 @@ class LLMDecoder:
                     "[dim]- 强制使用 FP32 精度 (vulkan_force_fp32 = true)[/dim]\n",
                     "[dim]- 调整模型参数或检查硬件资源[/dim]",
                 )
+                self.logger.error(
+                    "警告: 检测到异常重复输出 (可能由 iGPU 溢出引起)，已熔断。"
+                )
+                self.logger.error("解决方案:")
+                self.logger.error(
+                    "尝试在 config.toml 中禁用 Vulkan (vulkan_enable = false)"
+                )
+                self.logger.error("强制使用 FP32 精度 (vulkan_force_fp32 = true)")
+                self.logger.error("调整模型参数或检查硬件资源")
                 break
 
             reporter.stream(text_piece)
@@ -161,10 +171,10 @@ class StreamDecoder:
     """协调完整流程的解码器"""
 
     def __init__(self, models: ModelManager, logger: Optional[Logger] = None):
+        self.logger = logger if logger is not None else default_logger
         self.models = models
         self.ctc_decoder = CTCDecoder(models)
-        self.llm_decoder = LLMDecoder(models)
-        self.logger = logger if logger is not None else default_logger
+        self.llm_decoder = LLMDecoder(models, logger=self.logger)
 
     def decode_stream(
         self,
