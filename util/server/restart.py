@@ -25,7 +25,8 @@ def stop_exe(exe_name: str, logger: Optional[Logger] = None):
         if stderr:
             _logger.error(f"Taskkill errors: {stderr}")
     except Exception as e:
-        _logger.error(f"Error stopping {exe_name}: {e}")
+        if "没有找到进程" not in str(e):  # 忽略没有找到进程的错误
+            _logger.error(f"Error stopping {exe_name}: {e}")
 
 
 def start_exe(exe_name: str, logger: Optional[Logger] = None):
