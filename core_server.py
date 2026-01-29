@@ -18,6 +18,7 @@ from util.server.check_model import check_model
 from util.server.cosmic import Cosmic, console
 from util.server.expand_funasr_hotwords import expand_funasr_hotwords
 from util.server.init_recognizer import init_recognizer
+from util.server.priority_queue import PriorityQueue
 from util.server.ws_recv import ws_recv
 from util.server.ws_send import ws_send
 
@@ -67,10 +68,14 @@ async def main(logger: Optional[Logger] = None):
     # 跨进程列表，用于保存 socket 的 id，用于让识别进程查看连接是否中断
     Cosmic.sockets_id = Manager().list()
 
+    # 初始化进程安全的优先级队列
+    manager = Manager()
+    Cosmic.priority_queue_in = PriorityQueue(manager)
+
     # 负责识别的子进程
     recognize_process = Process(
         target=init_recognizer,
-        args=(Cosmic.queue_in, Cosmic.queue_out, Cosmic.sockets_id, _logger),
+        args=(Cosmic.priority_queue_in, Cosmic.queue_out, Cosmic.sockets_id, _logger),
         daemon=True,
     )
     recognize_process.start()

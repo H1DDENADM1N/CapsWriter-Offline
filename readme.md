@@ -34,6 +34,8 @@
 <details>
 <summary><h1">展开最近更新</h1></summary>
 
+## 新增 优先级队列，转录文件同时语音输入，优先处理语音输入
+
 # 新增 可选项 转录文件时，是否进行热词替换
 > config.toml  use_hot_sub_when_transcribe_file
 

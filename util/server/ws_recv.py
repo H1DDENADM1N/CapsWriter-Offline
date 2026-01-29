@@ -46,7 +46,8 @@ class AudioCache:
 async def message_handler(websocket, message, cache: AudioCache):
     """处理得到的音频流数据"""
 
-    queue_in = Cosmic.queue_in
+    # 使用优先级队列
+    priority_queue = Cosmic.priority_queue_in
 
     global status_mic
     source = message["source"]
@@ -61,6 +62,14 @@ async def message_handler(websocket, message, cache: AudioCache):
     seg_duration = message["seg_duration"]
     seg_overlap = message["seg_overlap"]
     seg_threshold = seg_duration + seg_overlap * 2
+
+    # 根据来源设置优先级
+    if source == "mic":
+        priority = 1  # 麦克风输入：高优先级
+    elif source == "file":
+        priority = 10  # 文件转录：低优先级
+    else:
+        priority = 10  # 默认低优先级
 
     # base64 解码音频数据，再
     # 音频数据是 float32、单声道、16000采样率
@@ -95,7 +104,8 @@ async def message_handler(websocket, message, cache: AudioCache):
                 time_submit=time.time(),
             )
             cache.offset += seg_duration
-            queue_in.put(task)
+            # 使用优先级队列
+            priority_queue.put(task, priority)
 
     elif is_final:
         # 打印消息
@@ -120,7 +130,8 @@ async def message_handler(websocket, message, cache: AudioCache):
             time_start=message["time_start"],
             time_submit=time.time(),
         )
-        queue_in.put(task)
+        # 使用优先级队列
+        priority_queue.put(task, priority)
         logger.debug(
             f"提交最终片段，任务ID: {task_id}, 数据大小: {len(cache.chunks)} bytes"
         )

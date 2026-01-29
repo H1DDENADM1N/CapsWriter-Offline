@@ -17,7 +17,7 @@ from util.server.cosmic import console
 
 
 def init_recognizer(
-    queue_in: Queue, queue_out: Queue, sockets_id, passed_logger
+    priority_queue: Queue, queue_out: Queue, sockets_id, passed_logger
 ) -> None:
     # --- 辅助函数：确保传入的 logger 是可用的 ---
     # 虽然 passed_logger 应该总是存在，但加个保险防止意外
@@ -132,10 +132,15 @@ def init_recognizer(
     queue_out.put(True)  # 通知主进程加载完了
 
     while True:
-        # 从队列中获取任务消息
+        # 从优先级队列中获取任务消息
         try:
-            task = queue_in.get(timeout=1)
-        except Exception:
+            task = priority_queue.get(timeout=1)
+        except Exception as e:
+            log.error(f"从优先级队列中获取任务消息时出错: {e}", exc_info=True)
+            continue
+
+        # 添加 None 检查
+        if task is None:
             continue
 
         if task.socket_id not in sockets_id:  # 检查任务所属的连接是否存活
