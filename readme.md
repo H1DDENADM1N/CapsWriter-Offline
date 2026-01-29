@@ -437,6 +437,7 @@ expand_funasr_hotwords = false
 # 是否启用 Fun-ASR-Nano-GGUF 模型热词扩展功能
 # 将 .\hot-zh.txt 和 .\hot-en.txt 文件追加到 FunASR 模型热词列表中
 # .\models\Fun-ASR-Nano-GGUF\hot.txt
+# 不具有强制替换性，仅提供给 LLM 作为提示词
 
 addr = "0.0.0.0"
 # 服务端监听地址
