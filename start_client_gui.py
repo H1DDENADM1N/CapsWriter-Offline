@@ -1661,9 +1661,8 @@ class GUI(QMainWindow):
             self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
             self.show()
 
-        # 获取主屏幕几何信息（而非当前屏幕）
-        screen = QApplication.primaryScreen()
-        screen_geometry = screen.availableGeometry()
+        # 获取主屏幕几何信息
+        screen_geometry = QApplication.primaryScreen().availableGeometry()
 
         # 获取窗口几何信息
         window_geometry = self.frameGeometry()
@@ -1732,13 +1731,19 @@ class GUI(QMainWindow):
         if self.isActiveWindow():
             pass
         else:
-            x, y, width, height, screenWidth, screenHeight = self.checkWindowInfo()
+            x, y, width, height, screenWidth, screenHeight, currentScreen = (
+                self.checkWindowInfo()
+            )
             if x == 0:  # 窗口非活跃状态，从左边弹出的，恢复继续停靠在左边
-                self.berthToLeft(x, y, width, height, screenWidth, screenHeight)
+                self.berthToLeft(
+                    x, y, width, height, screenWidth, screenHeight, currentScreen
+                )
             elif (
                 x == screenWidth - width
             ):  # 窗口非活跃状态，从右边弹出的，恢复继续停靠在右边
-                self.berthToRight(x, y, width, height, screenWidth, screenHeight)
+                self.berthToRight(
+                    x, y, width, height, screenWidth, screenHeight, currentScreen
+                )
             else:
                 self.logger.debug("窗口无需恢复停靠")
                 pass
@@ -1776,6 +1781,7 @@ class GUI(QMainWindow):
 
     def enterEvent(self, event):
         super().enterEvent(event)
+        self.logger.trace("[enterEvent] 鼠标进入窗口")
         if Config.show_time_label:
             self.create_time_label()  # 确保时间标签存在
             self.time_label.stop_timer()  # 停止定时器
@@ -1784,8 +1790,19 @@ class GUI(QMainWindow):
                 "background-color: rgba(35, 38, 41, 255);"
             )
             self.time_label.setVisible(False)
+            self.adjust_time_label_position()
             self.setStyleSheet("background-color: rgba(49, 54, 59, 255);")
-            self.resize(425, 425)
+        # 添加诊断日志：记录resize前的窗口大小
+        geometry_before = self.geometry()
+        self.logger.trace(
+            f"[enterEvent] resize前窗口大小: width={geometry_before.width()}, height={geometry_before.height()}"
+        )
+        self.resize(425, 425)
+        # 添加诊断日志：记录resize后的窗口大小
+        geometry_after = self.geometry()
+        self.logger.trace(
+            f"[enterEvent] resize后窗口大小: width={geometry_after.width()}, height={geometry_after.height()}"
+        )
         for i in range(self.title_bar.count()):  # 鼠标进入时显示标题栏
             widget = self.title_bar.itemAt(i).widget()
             if widget is not None:
@@ -1795,27 +1812,57 @@ class GUI(QMainWindow):
             if widget is not None:
                 widget.setVisible(True)
         self.text_box_client.moveCursor(QTextCursor.End)  # 滚动到最下行
-        x, y, width, height, screenWidth, screenHeight = self.checkWindowInfo()
+        x, y, width, height, screenWidth, screenHeight, currentScreen = (
+            self.checkWindowInfo()
+        )
+        currentScreenRect = currentScreen.geometry()
+        self.logger.trace(
+            f"[enterEvent] 窗口位置: x={x}, y={y}, width={width}, height={height}"
+        )
+        self.logger.trace(
+            f"[enterEvent] 当前屏幕: left={currentScreenRect.left()}, right={currentScreenRect.right()}, width={screenWidth}, height={screenHeight}"
+        )
+        self.logger.trace(
+            f"[enterEvent] isBerthLeft={self.isBerthLeft}, isBerthRight={self.isBerthRight}"
+        )
+
         if self.isBerthLeft:  # 已停靠在左边
-            self.move(0, y)  # 从左边弹出，31是标题栏高度
+            target_x = currentScreenRect.left()
+            self.logger.trace(f"[enterEvent] 从左边弹出，移动到 ({target_x}, {y})")
+            self.move(target_x, y)  # 从左边弹出，使用当前屏幕的左边界
             self.isBerthLeft = False
         elif self.isBerthRight:  # 已停靠在右边
-            self.move(screenWidth - width, y)  # 从右边弹出，31是标题栏高度
+            target_x = currentScreenRect.right() - width
+            self.logger.trace(f"[enterEvent] 从右边弹出，移动到 ({target_x}, {y})")
+            self.move(target_x, y)  # 从右边弹出，使用当前屏幕的右边界
             self.isBerthRight = False
         else:
+            self.logger.trace("[enterEvent] 窗口未停靠")
             # print("窗口未停靠")
             pass
 
     def leaveEvent(self, event):
         super().leaveEvent(event)
+        self.logger.trace("[leaveEvent] 鼠标离开窗口")
         if Config.show_time_label:
             self.create_time_label()  # 确保时间标签存在
             self.time_label.start_timer()  # 启动定时器
             self.text_box_client.setVisible(False)
             self.text_box_client.setStyleSheet("background-color: rgba(35, 38, 41, 0);")
             self.time_label.setVisible(True)
+            self.adjust_time_label_position()
             self.setStyleSheet("background-color: rgba(49, 54, 59, 0);")
-            self.resize(425, 135)
+        # 添加诊断日志：记录resize前的窗口大小
+        geometry_before = self.geometry()
+        self.logger.trace(
+            f"[leaveEvent] resize前窗口大小: width={geometry_before.width()}, height={geometry_before.height()}"
+        )
+        self.resize(425, 425)
+        # 添加诊断日志：记录resize后的窗口大小
+        geometry_after = self.geometry()
+        self.logger.trace(
+            f"[leaveEvent] resize后窗口大小: width={geometry_after.width()}, height={geometry_after.height()}"
+        )
         for i in range(self.title_bar.count()):  # 鼠标离开时隐藏标题栏
             widget = self.title_bar.itemAt(i).widget()
             if widget is not None:
@@ -1824,47 +1871,136 @@ class GUI(QMainWindow):
             widget = self.layout2.itemAt(i).widget()
             if widget is not None:
                 widget.setVisible(False)
-        x, y, width, height, screenWidth, screenHeight = self.checkWindowInfo()
-        # print(f"左右，高低，宽，高，屏宽，屏高: {(x, y, width, height, screenWidth, screenHeight)}")
+        x, y, width, height, screenWidth, screenHeight, currentScreen = (
+            self.checkWindowInfo()
+        )
+        currentScreenRect = currentScreen.geometry()
+        self.logger.trace(
+            f"[leaveEvent] 窗口位置: x={x}, y={y}, width={width}, height={height}"
+        )
+        self.logger.trace(
+            f"[leaveEvent] 当前屏幕: left={currentScreenRect.left()}, right={currentScreenRect.right()}, width={screenWidth}, height={screenHeight}"
+        )
+        # 计算窗口的边界坐标
+        window_left = x
+        window_right = x + width
+        currentScreenRect = currentScreen.geometry()
+
+        # 检查窗口是否超出当前屏幕的边界
+        is_out_left = window_left < currentScreenRect.left() - width / 2
+        is_out_right = window_right > currentScreenRect.right() + width / 2
+
+        self.logger.trace(
+            f"[leaveEvent] 边界检查: window_left={window_left}, window_right={window_right}, screen_left={currentScreenRect.left()}, screen_right={currentScreenRect.right()}"
+        )
+        self.logger.trace(
+            f"[leaveEvent] 边界检查: is_out_left={is_out_left}, is_out_right={is_out_right}"
+        )
+        self.logger.trace(f"[leaveEvent] 窗口活跃状态: {self.isActiveWindow()}")
+
         if self.isActiveWindow():  # 窗口活跃状态，用户点击了窗口，则不恢复继续停靠
-            # print("窗口活跃状态")
-            if x < 0 - width / 2:
-                # print("活跃状态，但是窗口的一半已超出屏幕左边界，将窗口停靠在左边")
-                self.berthToLeft(x, y, width, height, screenWidth, screenHeight)
-            elif x > screenWidth - width / 2:
-                # print("窗口活跃状态，但是窗口的一半已超出屏幕右边界，将窗口停靠在右边")
-                self.berthToRight(x, y, width, height, screenWidth, screenHeight)
+            self.logger.trace("[leaveEvent] 窗口活跃状态")
+            if is_out_left:
+                self.logger.trace(
+                    "[leaveEvent] 活跃状态，窗口的一半已超出屏幕左边界，将窗口停靠在左边"
+                )
+                self.berthToLeft(
+                    x, y, width, height, screenWidth, screenHeight, currentScreen
+                )
+            elif is_out_right:
+                self.logger.trace(
+                    "[leaveEvent] 活跃状态，窗口的一半已超出屏幕右边界，将窗口停靠在右边"
+                )
+                self.berthToRight(
+                    x, y, width, height, screenWidth, screenHeight, currentScreen
+                )
             else:
+                self.logger.trace("[leaveEvent] 活跃状态，无需停靠")
                 # print("窗口活跃状态，无需停靠")
                 pass
         else:  # 窗口非活跃状态，用户可能只是鼠标划过看一眼，失去焦点时恢复继续停靠
-            # print("窗口不活跃状态")
-            if x < 0 - width / 2:
-                # print("窗口的一半已超出屏幕左边界")
-                self.berthToLeft(x, y, width, height, screenWidth, screenHeight)
-            elif x > screenWidth - width / 2:
-                # print("窗口的一半已超出屏幕右边界")
-                self.berthToRight(x, y, width, height, screenWidth, screenHeight)
-            elif x == 0:  # 窗口非活跃状态，从左边弹出的，恢复继续停靠在左边
-                self.berthToLeft(x, y, width, height, screenWidth, screenHeight)
+            self.logger.trace("[leaveEvent] 窗口不活跃状态")
+            if is_out_left:
+                self.logger.trace("[leaveEvent] 窗口的一半已超出屏幕左边界")
+                self.berthToLeft(
+                    x, y, width, height, screenWidth, screenHeight, currentScreen
+                )
+            elif is_out_right:
+                self.logger.trace("[leaveEvent] 窗口的一半已超出屏幕右边界")
+                self.berthToRight(
+                    x, y, width, height, screenWidth, screenHeight, currentScreen
+                )
             elif (
-                x == screenWidth - width
+                x == currentScreenRect.left()
+            ):  # 窗口非活跃状态，从左边弹出的，恢复继续停靠在左边
+                self.logger.trace(
+                    "[leaveEvent] 窗口非活跃状态，从左边弹出的，恢复继续停靠在左边"
+                )
+                self.berthToLeft(
+                    x, y, width, height, screenWidth, screenHeight, currentScreen
+                )
+            elif (
+                x == currentScreenRect.right() - width
             ):  # 窗口非活跃状态，从右边弹出的，恢复继续停靠在右边
-                self.berthToRight(x, y, width, height, screenWidth, screenHeight)
+                self.logger.trace(
+                    "[leaveEvent] 窗口非活跃状态，从右边弹出的，恢复继续停靠在右边"
+                )
+                self.berthToRight(
+                    x, y, width, height, screenWidth, screenHeight, currentScreen
+                )
             else:
+                self.logger.trace("[leaveEvent] 窗口未超出屏幕边界")
                 # print("窗口未超出屏幕边界")
                 pass
 
-    def berthToLeft(self, x, y, width, height, screenWidth, screenHeight):
+    def berthToLeft(
+        self, x, y, width, height, screenWidth, screenHeight, currentScreen
+    ):
+        self.logger.debug("[berthToLeft] 开始停靠到左边")
         if Config.show_time_label:
+            self.logger.trace("[berthToLeft] show_time_label为True，不进行停靠")
             return  # 不停靠
-        self.move(0 - width + self.edgeMargin, y)  # 停靠到左边，31是标题栏高度
+        # 检测是否在屏幕交界处，如果是则不应用贴边隐藏
+        is_at_boundary = self.isAtScreenBoundary(
+            x, y, width, height, currentScreen, is_left=True
+        )
+        self.logger.trace(f"[berthToLeft] isAtScreenBoundary结果: {is_at_boundary}")
+        if is_at_boundary:
+            self.logger.trace("[berthToLeft] 在屏幕交界处，不进行停靠")
+            return
+        # 使用当前屏幕的绝对坐标，确保在副屏上也能正确停靠
+        currentScreenRect = currentScreen.geometry()
+        target_x = currentScreenRect.left() - width + self.edgeMargin
+        self.logger.trace(f"[berthToLeft] 停靠位置: x={target_x}, y={y}")
+        self.logger.trace(
+            f"[berthToLeft] 当前屏幕左边界: {currentScreenRect.left()}, 窗口宽度: {width}, edgeMargin: {self.edgeMargin}"
+        )
+        self.move(target_x, y)  # 停靠到左边，31是标题栏高度
         self.isBerthLeft = True
 
-    def berthToRight(self, x, y, width, height, screenWidth, screenHeight):
+    def berthToRight(
+        self, x, y, width, height, screenWidth, screenHeight, currentScreen
+    ):
+        self.logger.debug("[berthToRight] 开始停靠到右边")
         if Config.show_time_label:
+            self.logger.trace("[berthToRight] show_time_label为True，不进行停靠")
             return  # 不停靠
-        self.move(screenWidth - self.edgeMargin, y)  # 停靠到右边，31是标题栏高度
+        # 检测是否在屏幕交界处，如果是则不应用贴边隐藏
+        is_at_boundary = self.isAtScreenBoundary(
+            x, y, width, height, currentScreen, is_left=False
+        )
+        self.logger.trace(f"[berthToRight] isAtScreenBoundary结果: {is_at_boundary}")
+        if is_at_boundary:
+            self.logger.trace("[berthToRight] 在屏幕交界处，不进行停靠")
+            return
+        # 使用当前屏幕的绝对坐标，确保在副屏上也能正确停靠
+        currentScreenRect = currentScreen.geometry()
+        target_x = currentScreenRect.right() - self.edgeMargin
+        self.logger.trace(f"[berthToRight] 停靠位置: x={target_x}, y={y}")
+        self.logger.trace(
+            f"[berthToRight] 当前屏幕右边界: {currentScreenRect.right()}, edgeMargin: {self.edgeMargin}"
+        )
+        self.move(target_x, y)  # 停靠到右边，31是标题栏高度
         self.isBerthRight = True
 
     def checkWindowInfo(self):
@@ -1873,11 +2009,135 @@ class GUI(QMainWindow):
         y = geometry.y()
         width = geometry.width()
         height = geometry.height()
-        primaryScreen = QApplication.instance().primaryScreen()
-        screenRect = primaryScreen.geometry()
+        # 添加诊断日志：记录窗口几何信息
+        self.logger.trace(
+            f"[checkWindowInfo] 获取窗口几何信息: x={x}, y={y}, width={width}, height={height}"
+        )
+        # 获取窗口中心点，用于确定窗口所在的屏幕
+        center_point = QPoint(x + width // 2, y + height // 2)
+        self.logger.trace(
+            f"[checkWindowInfo] 窗口中心点: ({center_point.x()}, {center_point.y()})"
+        )
+        # 获取所有屏幕信息（诊断日志）
+        screens = QApplication.instance().screens()
+        self.logger.trace(f"[checkWindowInfo] 所有屏幕数量: {len(screens)}")
+        for i, screen in enumerate(screens):
+            rect = screen.geometry()
+            self.logger.trace(
+                f"[checkWindowInfo] 屏幕{i}: left={rect.left()}, right={rect.right()}, width={rect.width()}, height={rect.height()}"
+            )
+        # 获取窗口当前所在的屏幕
+        currentScreen = QApplication.instance().screenAt(center_point)
+        if currentScreen is None:
+            # 如果找不到屏幕，找到与窗口重叠面积最大的屏幕
+            self.logger.debug(
+                "[checkWindowInfo] 找不到屏幕，查找与窗口重叠面积最大的屏幕"
+            )
+            self.logger.debug(
+                f"[checkWindowInfo] 窗口中心点({center_point.x()}, {center_point.y()})超出所有屏幕范围"
+            )
+            self.logger.debug(
+                f"[checkWindowInfo] 窗口位置: x={x}, y={y}, width={width}, height={height}"
+            )
+
+            max_overlap = 0
+            best_screen = None
+
+            for screen in screens:
+                screenRect = screen.geometry()
+                # 计算窗口与屏幕的交集
+                overlap_left = max(x, screenRect.left())
+                overlap_right = min(x + width, screenRect.right())
+                overlap_top = max(y, screenRect.top())
+                overlap_bottom = min(y + height, screenRect.bottom())
+
+                # 计算重叠面积
+                overlap_width = max(0, overlap_right - overlap_left)
+                overlap_height = max(0, overlap_bottom - overlap_top)
+                overlap_area = overlap_width * overlap_height
+
+                self.logger.trace(
+                    f"[checkWindowInfo] 屏幕{screenRect.left()}-{screenRect.right()}: 重叠面积={overlap_area}"
+                )
+
+                if overlap_area > max_overlap:
+                    max_overlap = overlap_area
+                    best_screen = screen
+
+            if best_screen is not None:
+                currentScreen = best_screen
+                self.logger.trace(
+                    f"[checkWindowInfo] 找到最佳屏幕: left={currentScreen.geometry().left()}, right={currentScreen.geometry().right()}"
+                )
+            else:
+                # 如果仍然找不到，使用主屏幕作为后备
+                self.logger.debug("[checkWindowInfo] 未找到重叠屏幕，使用主屏幕")
+                currentScreen = QApplication.instance().primaryScreen()
+        screenRect = currentScreen.geometry()
         screenWidth = screenRect.width()
         screenHeight = screenRect.height()
-        return x, y, width, height, screenWidth, screenHeight
+        self.logger.trace(
+            f"[checkWindowInfo] 当前屏幕: left={screenRect.left()}, right={screenRect.right()}, width={screenWidth}, height={screenHeight}"
+        )
+        return x, y, width, height, screenWidth, screenHeight, currentScreen
+
+    def isAtScreenBoundary(self, x, y, width, height, currentScreen, is_left=True):
+        """
+        检测窗口是否位于屏幕交界处（多显示器环境下的主副屏交界）
+        如果是交界处，则不应用贴边隐藏
+
+        Args:
+            x: 窗口x坐标（绝对坐标）
+            y: 窗口y坐标
+            width: 窗口宽度
+            height: 窗口高度
+            currentScreen: 窗口当前所在的屏幕
+            is_left: 是否检测左边界（True为左边界，False为右边界）
+
+        Returns:
+            bool: 如果在交界处返回True，否则返回False
+        """
+        self.logger.debug(f"[isAtScreenBoundary] 开始检测，is_left={is_left}")
+        # 获取所有屏幕
+        screens = QApplication.instance().screens()
+        self.logger.trace(f"[isAtScreenBoundary] 屏幕数量: {len(screens)}")
+        if len(screens) <= 1:
+            # 只有一个屏幕，不存在交界处问题
+            self.logger.trace("[isAtScreenBoundary] 只有一个屏幕，不存在交界处")
+            return False
+
+        # 获取当前屏幕的几何信息（绝对坐标）
+        currentScreenRect = currentScreen.geometry()
+        self.logger.trace(
+            f"[isAtScreenBoundary] 当前屏幕: left={currentScreenRect.left()}, right={currentScreenRect.right()}"
+        )
+
+        # 计算窗口的边界坐标（绝对坐标）
+        if is_left:
+            window_edge_x = x
+        else:
+            window_edge_x = x + width
+
+        self.logger.trace(f"[isAtScreenBoundary] 窗口边缘x坐标: {window_edge_x}")
+
+        # 检查窗口边缘是否与当前屏幕的边缘重合（使用绝对坐标）
+        if is_left:
+            # 检查左边界是否与当前屏幕的左边界重合
+            diff = abs(window_edge_x - currentScreenRect.left())
+            self.logger.trace(f"[isAtScreenBoundary] 左边界差值: {diff}")
+            if diff < 5:  # 5像素容差
+                self.logger.trace("[isAtScreenBoundary] 在当前屏幕的左边界")
+                return True  # 在当前屏幕的左边界
+        else:
+            # 检查右边界是否与当前屏幕的右边界重合
+            diff = abs(window_edge_x - currentScreenRect.right())
+            self.logger.trace(f"[isAtScreenBoundary] 右边界差值: {diff}")
+            if diff < 5:  # 5像素容差
+                self.logger.trace("[isAtScreenBoundary] 在当前屏幕的右边界")
+                return True  # 在当前屏幕的右边界
+
+        self.logger.trace("[isAtScreenBoundary] 不在屏幕交界处")
+        return False
 
     def wheelEvent(self, event: QWheelEvent):
         # 设置初始缩放因子
