@@ -52,6 +52,7 @@ from util.client.check_microphone_usage import is_microphone_in_use
 from util.config import ClientConfig as Config
 from util.config import DebugConfig
 from util.explorer_token_downgrade import downgraded_via_explorer_token
+from util.notice import DesktopNotification
 from util.safe_logger import SafeLogger
 
 
@@ -414,11 +415,59 @@ class GUI(QMainWindow):
         # 初始化文件系统监控器
         self.init_file_watcher()
 
+        # 初始化通知列表
+        self.notifications = []
+
     def create_time_label(self):
         """创建时间标签"""
         if not hasattr(self, "time_label") and Config.show_time_label:
             self.time_label = TimeOverlayLabel(self.centralWidget())
             self.adjust_time_label_position()
+
+    def show_notification(
+        self,
+        title: str,
+        message: str,
+        duration: int = 3000,
+        notification_type: str = "info",
+    ):
+        """显示自定义桌面通知
+
+        Args:
+            title: 通知标题
+            message: 通知内容
+            duration: 显示持续时间（毫秒）
+            notification_type: 通知类型（info/success/warning/error）
+        """
+        # 创建通知
+        notification = DesktopNotification(
+            title=title,
+            message=message,
+            duration=duration,
+            notification_type=notification_type,
+        )
+
+        # 计算通知位置（右上角）
+        screen_geometry = QApplication.primaryScreen().availableGeometry()
+        notification_x = screen_geometry.width() - 420
+        notification_y = 40 + len(self.notifications) * 135  # 每个通知间隔135像素
+
+        # 如果超出屏幕高度，重置位置
+        if notification_y > screen_geometry.height() - 150:
+            notification_y = 40
+
+        position = QPoint(notification_x, notification_y)
+        notification.show_notification(position)
+
+        # 添加到通知列表
+        self.notifications.append(notification)
+
+        # 清理已关闭的通知
+        def remove_notification():
+            if notification in self.notifications:
+                self.notifications.remove(notification)
+
+        notification.notification_closed.connect(remove_notification)
 
     def load_config(self):
         """加载配置文件到内存"""
@@ -674,12 +723,7 @@ class GUI(QMainWindow):
 
         if prompt_style in notifications:
             title, message = notifications[prompt_style]
-            self.tray_icon.showMessage(
-                title,
-                message,
-                QSystemTrayIcon.Information,
-                2000,
-            )
+            self.show_notification(title, message, 2000, "info")
 
     def update_prompt_style_menu(self, prompt_style: str):
         """更新提示风格菜单选中状态"""
@@ -1247,12 +1291,12 @@ class GUI(QMainWindow):
 
     def show_unsupported_provider_warning(self, provider):
         """显示不支持的 AI 提供商警告"""
-        # 在系统托盘显示气泡通知
-        self.tray_icon.showMessage(
+        # 显示自定义通知
+        self.show_notification(
             "不支持的 AI 提供商",
             f"当前配置的 AI 提供商 '{provider}' 不支持\n请修改 config.toml 文件中的 ai_provider 设置",
-            QSystemTrayIcon.Warning,
-            3000,  # 显示3秒
+            3000,
+            "warning",
         )
 
         # 同时记录到日志
@@ -1463,11 +1507,11 @@ class GUI(QMainWindow):
                 self.logger.info(f"  - {file}")
 
             # 显示通知
-            self.tray_icon.showMessage(
+            self.show_notification(
                 "开始转录",
                 f"已选择 {len(files)} 个文件，正在启动处理...",
-                QSystemTrayIcon.Information,
                 2000,
+                "info",
             )
 
             # 启动文件处理，但不要退出当前进程
@@ -1475,9 +1519,7 @@ class GUI(QMainWindow):
 
         except Exception as e:
             self.logger.error(f"选择文件时出错: {e}")
-            self.tray_icon.showMessage(
-                "错误", f"处理文件时出错: {str(e)}", QSystemTrayIcon.Critical, 3000
-            )
+            self.show_notification("错误", f"处理文件时出错: {str(e)}", 3000, "error")
 
     def start_batch_transcription(self, files):
         """启动批量转录"""
