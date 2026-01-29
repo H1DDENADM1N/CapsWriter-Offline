@@ -12,6 +12,7 @@ from tomlkit import parse
 from util.edit_config_gui.about_page import AboutPage
 from util.edit_config_gui.client_config_page import ClientConfigPage
 from util.edit_config_gui.deeplx_config_page import DeeplxConfigPage
+from util.edit_config_gui.funasr_args_config_page import FunASRArgsConfigPage
 from util.edit_config_gui.libretranslate_config_page import LibretranslateConfigPage
 from util.edit_config_gui.model_paths_config_page import ModelPathsConfigPage
 from util.edit_config_gui.paraformer_args_config_page import ParaformerArgsConfigPage
@@ -69,6 +70,12 @@ class ConfigEditor(SiliconApplication):
             ModelPathsConfigPage(self.config, self.config_path),
             icon=SiGlobal.siui.iconpack.get("ic_fluent_folder_filled"),
             hint="模型路径配置",
+            side="top",
+        )
+        self.layerMain().addPage(
+            FunASRArgsConfigPage(self.config, self.config_path),
+            icon=SiGlobal.siui.iconpack.get("ic_fluent_brain_circuit_filled"),
+            hint="FunASR 语音识别模型参数配置",
             side="top",
         )
         self.layerMain().addPage(
