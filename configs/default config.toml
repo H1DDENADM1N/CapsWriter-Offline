@@ -189,6 +189,9 @@ hot_rag = true
 # 不用重新编辑 hot-rag.txt 文件
 # hot-en.txt 和 hot-zh.txt 文件仍然有效
 
+use_hot_sub_when_transcribe_file = false
+# 转录文件时，是否进行热词替换
+
 mic_seg_duration = 60
 # 麦克风听写时分段长度：60 秒
 

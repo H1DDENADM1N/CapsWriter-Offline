@@ -34,6 +34,9 @@
 <details>
 <summary><h1">展开最近更新</h1></summary>
 
+# 新增 可选项 转录文件时，是否进行热词替换
+> config.toml  use_hot_sub_when_transcribe_file
+
 ## 新增 可选模型 [Fun-ASR-Nano-2512-GGUF](https://www.modelscope.cn/models/HaujetZhao/Fun-ASR-Nano-2512-GGUF)
 > https://github.com/HaujetZhao/Fun-ASR-GGUF
 > 
@@ -429,7 +432,7 @@ vulkan_force_fp32 = false
 # 是否强制 Fun-ASR-Nano-GGUF 模型 FP32 计算（如果 GPU 是 Intel 集显且出现精度溢出，可设为 true）
 
 expand_funasr_hotwords = false
-# 是否启用 Fun-ASR-Nano-GGUF 模型热词增强功能
+# 是否启用 Fun-ASR-Nano-GGUF 模型热词扩展功能
 # 将 .\hot-zh.txt 和 .\hot-en.txt 文件追加到 FunASR 模型热词列表中
 # .\models\Fun-ASR-Nano-GGUF\hot.txt
 
@@ -591,6 +594,9 @@ hot_rag = true
 # 不建议与 旧版 hot_zh、hot_en  一起使用
 # 不用重新编辑 hot-rag.txt 文件
 # hot-en.txt 和 hot-zh.txt 文件仍然有效
+
+use_hot_sub_when_transcribe_file = false
+# 转录文件时，是否进行热词替换
 
 mic_seg_duration = 60
 # 麦克风听写时分段长度：60 秒

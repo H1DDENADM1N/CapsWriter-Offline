@@ -189,6 +189,9 @@ hot_rag = true
 # 不用重新编辑 hot-rag.txt 文件
 # hot-en.txt 和 hot-zh.txt 文件仍然有效
 
+use_hot_sub_when_transcribe_file = false
+# 转录文件时，是否进行热词替换
+
 mic_seg_duration = 60
 # 麦克风听写时分段长度：60 秒
 
@@ -372,7 +375,7 @@ model = "Qwen/Qwen2.5-14B-Instruct"
 
 
 [client.prompt_style]
-prompt_official_shortcut = ""
+prompt_official_shortcut = "ctrl + alt + shift + f1"
 # 切换提示风格为正式公文文本校对助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -403,7 +406,7 @@ prompt_official = """
 输出要求：直接呈现润色完成的规范文本，无任何额外说明。
 """
 
-prompt_sweetheart_shortcut = ""
+prompt_sweetheart_shortcut = "ctrl + alt + shift + f2"
 # 切换提示风格为ptrue_heart的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -434,7 +437,7 @@ prompt_sweetheart = """
 输出要求：直接给出润色完成的"甜度满分"文本。
 """
 
-prompt_social_shortcut = ""
+prompt_social_shortcut = "ctrl + alt + shift + f3"
 # 切换提示风格为社交媒体文案优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -465,7 +468,7 @@ prompt_social = """
 输出要求：直接给出优化完成、适合一键发布的社交文案。
 """
 
-prompt_poetry_shortcut = ""
+prompt_poetry_shortcut = "ctrl + alt + shift + f4"
 # 切换提示风格为社交媒体文案优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -497,7 +500,7 @@ prompt_poetry = """
 输出要求：直接呈现创作完成的古典诗歌。
 """
 
-prompt_english_shortcut = ""
+prompt_english_shortcut = "ctrl + alt + shift + f5"
 # 切换提示风格为英文润色助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -529,7 +532,7 @@ prompt_english = """
 输出要求：直接给出润色后的地道美式英语文本。
 """
 
-prompt_academic_shortcut = ""
+prompt_academic_shortcut = "ctrl + alt + shift + f6"
 # 切换提示风格为学术论文优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -563,7 +566,7 @@ prompt_academic = """
 输出要求：直接呈现符合学术规范的润色文本。
 """
 
-prompt_customer_service_shortcut = ""
+prompt_customer_service_shortcut = "ctrl + alt + shift + f7"
 # 切换提示风格为客户服务回复优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -595,7 +598,7 @@ prompt_customer_service = """
 输出要求：直接呈现专业、完整的客户服务回复文本。
 """
 
-prompt_creative_writing_shortcut = ""
+prompt_creative_writing_shortcut = "ctrl + alt + shift + f8"
 # 切换提示风格为创意写作优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定

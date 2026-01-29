@@ -9,6 +9,7 @@ from loguru._logger import Logger
 
 from util.client import srt_from_txt
 from util.client.hot_sub import hot_sub
+from util.config import ClientConfig as Config
 
 
 class ResultHandler:
@@ -29,7 +30,7 @@ class ResultHandler:
 
         # 强标点（必须换行）
         strong_punct = {"。", "？", ".", "?", "!"}
-        punct_chars = set("，。？,.\?!")
+        punct_chars = set(r"，。？,.\?!")
 
         for part in parts:
             clean_part = part.strip()
@@ -75,9 +76,11 @@ class ResultHandler:
         _logger.debug(f"原始text: {message.get('text', 'NOT FOUND')}")
         _logger.debug(f"text_accu: {message.get('text_accu', 'NOT FOUND')}")
         text_display = message["text"]
-        text_display = hot_sub(text_display)
+        if Config.use_hot_sub_when_transcribe_file:
+            text_display = hot_sub(text_display)
         text_accu = message.get("text_accu", message["text"])
-        text_accu = hot_sub(text_accu, debug=True)
+        if Config.use_hot_sub_when_transcribe_file:
+            text_accu = hot_sub(text_accu, debug=True)
         text_split = cls.smart_split(text_accu)
         timestamps = message["timestamps"]
         tokens = message["tokens"]

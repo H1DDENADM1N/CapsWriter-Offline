@@ -94,6 +94,9 @@ class ClientConfig:
     hot_rule: bool = config["client"]["hot_rule"]
     hot_kwd: bool = config["client"]["hot_kwd"]
     hot_rag: bool = config["client"]["hot_rag"]
+    use_hot_sub_when_transcribe_file: bool = config["client"][
+        "use_hot_sub_when_transcribe_file"
+    ]
     mic_seg_duration: int = config["client"]["mic_seg_duration"]
     mic_seg_overlap: int = config["client"]["mic_seg_overlap"]
     file_seg_duration: int = config["client"]["file_seg_duration"]
