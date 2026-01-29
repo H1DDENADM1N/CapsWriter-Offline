@@ -864,14 +864,20 @@ class PhonemeCorrector:
         Returns:
             纠正结果对象
         """
+        self.logger.trace(f"正在纠正文本：{text}")
         in_phs = get_phoneme_info(text)
+        self.logger.trace(f"输入文本的音素信息：{in_phs}")
         if not in_phs or not self.hotwords:
             return CorrectionResult(text, [], [])
         with self._lock:
             fast_res = self.fast_rag.search(in_phs, top_k=100)
+            self.logger.trace(f"快速搜索结果：{fast_res}")
             processed = [p.info for p in in_phs]
+            self.logger.trace(f"处理后的输入：{processed}")
             matches, sims = self._find_matches(text, fast_res, processed)
+            self.logger.trace(f"匹配结果：{matches}")
         nt, fhw = self._resolve_and_replace(text, matches)
+        self.logger.trace(f"纠正后的文本：{nt}")
         return CorrectionResult(nt, fhw, sims[:k])
 
 
