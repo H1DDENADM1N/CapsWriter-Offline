@@ -125,7 +125,7 @@ async def recv_result(logger: Optional[Logger] = None):
             asr_text = strip_punc(asr_text)
 
             # 热词替换
-            text = hot_sub(text)
+            text = hot_sub(text, debug=True)
             asr_text = hot_sub(asr_text)
 
             # 简繁转换

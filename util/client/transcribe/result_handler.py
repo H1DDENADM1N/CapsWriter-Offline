@@ -77,7 +77,7 @@ class ResultHandler:
         text_display = message["text"]
         text_display = hot_sub(text_display)
         text_accu = message.get("text_accu", message["text"])
-        text_accu = hot_sub(text_accu)
+        text_accu = hot_sub(text_accu, debug=True)
         text_split = cls.smart_split(text_accu)
         timestamps = message["timestamps"]
         tokens = message["tokens"]

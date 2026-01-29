@@ -1016,11 +1016,28 @@ def 热词替换(句子, debug: bool = False):
     result = Cosmic.corrector.correct(句子)
     dur = time.time() - now
 
-    if debug and result.matchs:
-        for wrong, right, score in result.matchs:
-            console.print(
-                f"hot_sub_rag Result: [{score_to_color(score)}]{wrong} -> {right} [/]    Score: {score:.2f}    Duration: {dur:.2f}s"
+    if debug and (result.matchs or result.similars):
+        if result.matchs:
+            for wrong, right, score in result.matchs:
+                console.print(
+                    f"hot_sub_rag Result: [{score_to_color(score)}]{wrong} -> {right} [/]    Score: {score:.2f}    Duration: {dur:.2f}s"
+                )
+
+        if result.similars:
+            # 创建已匹配热词的集合
+            matched_words = (
+                {right for _, right, _ in result.matchs} if result.matchs else set()
             )
+
+            # 过滤掉已匹配的潜在热词
+            filtered_similars = [
+                (w, r, s) for w, r, s in result.similars if r not in matched_words
+            ]
+            if filtered_similars:
+                for original, potential, score in filtered_similars:
+                    console.print(
+                        f"hot_sub_rag Potential: [{score_to_color(score)}]{original} -> {potential} [/]    Score: {score:.2f}"
+                    )
 
     return result.text
 

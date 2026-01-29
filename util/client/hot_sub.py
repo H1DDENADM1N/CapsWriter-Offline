@@ -3,10 +3,10 @@ from util.config import ClientConfig as Config
 from util.config import DebugConfig
 
 
-def hot_sub(text: str) -> str:
+def hot_sub(text: str, debug: bool = False) -> str:
     # 热词替换
     if Config.hot_rag:
-        if DebugConfig.logger_level not in ("ERROR", "CRITICAL"):
+        if debug is True and DebugConfig.logger_level not in ("ERROR", "CRITICAL"):
             text = hot_sub_rag.热词替换(text, debug=True)
         else:
             text = hot_sub_rag.热词替换(text, debug=False)
