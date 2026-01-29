@@ -71,6 +71,12 @@ class ClientConfigPage(SiPage):
         self.file_seg_overlap_set_default.clicked.connect(
             lambda: self.file_seg_overlap.setValue(4)
         )
+        self.file_seg_duration_set_default.clicked.connect(
+            lambda: self.file_seg_duration.setValue(60)
+        )
+        self.file_seg_overlap_set_default.clicked.connect(
+            lambda: self.file_seg_overlap.setValue(4)
+        )
         self.hold_mode.toggled.connect(lambda: self.hold_mode_changed())
         self.start_music_path_set_default.clicked.connect(
             lambda: self.start_music_path.lineEdit().setText("assets/start.mp3")
@@ -525,44 +531,6 @@ class ClientConfigPage(SiPage):
                 self.mic_seg_overlap_set_default
             )
             self.mic_seg_overlap_linear_attaching.addWidget(self.mic_seg_overlap)
-
-            # 转录文件时分段长度：25 秒
-            self.file_seg_duration = SiIntSpinBox(self)
-            self.file_seg_duration.resize(256, 32)
-            self.file_seg_duration.setMinimum(10)
-            self.file_seg_duration.setMaximum(60)
-            self.file_seg_duration.setValue(self.config["client"]["file_seg_duration"])
-            self.file_seg_duration_set_default = SetDefaultButton(self)
-            self.file_seg_duration_linear_attaching = SiOptionCardLinear(self)
-            self.file_seg_duration_linear_attaching.setTitle(
-                "转录文件时分段长度", '默认值："60" 秒'
-            )
-            self.file_seg_duration_linear_attaching.load(
-                SiGlobal.siui.iconpack.get("ic_fluent_timer_regular")
-            )
-            self.file_seg_duration_linear_attaching.addWidget(
-                self.file_seg_duration_set_default
-            )
-            self.file_seg_duration_linear_attaching.addWidget(self.file_seg_duration)
-
-            # 转录文件时分段重叠：2 秒
-            self.file_seg_overlap = SiIntSpinBox(self)
-            self.file_seg_overlap.resize(256, 32)
-            self.file_seg_overlap.setMinimum(1)
-            self.file_seg_overlap.setMaximum(60)
-            self.file_seg_overlap.setValue(self.config["client"]["file_seg_overlap"])
-            self.file_seg_overlap_set_default = SetDefaultButton(self)
-            self.file_seg_overlap_linear_attaching = SiOptionCardLinear(self)
-            self.file_seg_overlap_linear_attaching.setTitle(
-                "转录文件时分段重叠", '默认值："4" 秒'
-            )
-            self.file_seg_overlap_linear_attaching.load(
-                SiGlobal.siui.iconpack.get("ic_fluent_timer_regular")
-            )
-            self.file_seg_overlap_linear_attaching.addWidget(
-                self.file_seg_overlap_set_default
-            )
-            self.file_seg_overlap_linear_attaching.addWidget(self.file_seg_overlap)
 
             # 长按模式，按下录音，松开停止，像对讲机一样用
             # 改为 False，则关闭长按模式，也就是单击模式
@@ -1151,12 +1119,6 @@ class ClientConfigPage(SiPage):
             self.speech_recognition_container.addWidget(
                 self.mic_seg_overlap_linear_attaching
             )
-            self.speech_recognition_container.addWidget(
-                self.file_seg_duration_linear_attaching
-            )
-            self.speech_recognition_container.addWidget(
-                self.file_seg_overlap_linear_attaching
-            )
             self.speech_recognition_container.addWidget(self.hold_mode_linear_attaching)
             self.hold_mode_changed()
             self.speech_recognition_container.addWidget(
@@ -1547,6 +1509,132 @@ class ClientConfigPage(SiPage):
                 self.online_translate_target_languages_linear_attaching
             )
             group.addWidget(self.online_translate_container)
+
+        with self.titled_widgets_group as group:
+            group.addTitle("文件转录")
+
+            # 转录文件时，是否进行热词替换
+            self.use_hot_sub_when_transcribe_file = SiSwitch(self)
+            self.use_hot_sub_when_transcribe_file.setChecked(
+                self.config["client"]["use_hot_sub_when_transcribe_file"]
+            )
+            self.use_hot_sub_when_transcribe_file_linear_attaching = SiOptionCardLinear(
+                self
+            )
+            self.use_hot_sub_when_transcribe_file_linear_attaching.setTitle(
+                "转录文件时进行热词替换"
+            )
+            self.use_hot_sub_when_transcribe_file_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_ruler_regular")
+            )
+            self.use_hot_sub_when_transcribe_file_linear_attaching.addWidget(
+                self.use_hot_sub_when_transcribe_file
+            )
+
+            # 转录文件时分段长度：25 秒
+            self.file_seg_duration = SiIntSpinBox(self)
+            self.file_seg_duration.resize(256, 32)
+            self.file_seg_duration.setMinimum(10)
+            self.file_seg_duration.setMaximum(60)
+            self.file_seg_duration.setValue(self.config["client"]["file_seg_duration"])
+            self.file_seg_duration_set_default = SetDefaultButton(self)
+            self.file_seg_duration_linear_attaching = SiOptionCardLinear(self)
+            self.file_seg_duration_linear_attaching.setTitle(
+                "转录文件时分段长度", '默认值："60" 秒'
+            )
+            self.file_seg_duration_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_timer_regular")
+            )
+            self.file_seg_duration_linear_attaching.addWidget(
+                self.file_seg_duration_set_default
+            )
+            self.file_seg_duration_linear_attaching.addWidget(self.file_seg_duration)
+
+            # 转录文件时分段重叠：2 秒
+            self.file_seg_overlap = SiIntSpinBox(self)
+            self.file_seg_overlap.resize(256, 32)
+            self.file_seg_overlap.setMinimum(1)
+            self.file_seg_overlap.setMaximum(60)
+            self.file_seg_overlap.setValue(self.config["client"]["file_seg_overlap"])
+            self.file_seg_overlap_set_default = SetDefaultButton(self)
+            self.file_seg_overlap_linear_attaching = SiOptionCardLinear(self)
+            self.file_seg_overlap_linear_attaching.setTitle(
+                "转录文件时分段重叠", '默认值："4" 秒'
+            )
+            self.file_seg_overlap_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_timer_regular")
+            )
+            self.file_seg_overlap_linear_attaching.addWidget(
+                self.file_seg_overlap_set_default
+            )
+            self.file_seg_overlap_linear_attaching.addWidget(self.file_seg_overlap)
+
+            # 转录文件时是否保存 srt 字幕
+            self.file_save_srt = SiSwitch(self)
+            self.file_save_srt.setChecked(self.config["client"]["file_save_srt"])
+            self.file_save_srt_linear_attaching = SiOptionCardLinear(self)
+            self.file_save_srt_linear_attaching.setTitle("保存 SRT 字幕文件")
+            self.file_save_srt_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_save_regular")
+            )
+            self.file_save_srt_linear_attaching.addWidget(self.file_save_srt)
+
+            # 转录文件时是否保存 txt 文本（按标点切分后的）
+            self.file_save_txt = SiSwitch(self)
+            self.file_save_txt.setChecked(self.config["client"]["file_save_txt"])
+            self.file_save_txt_linear_attaching = SiOptionCardLinear(self)
+            self.file_save_txt_linear_attaching.setTitle("保存 TXT 文本文件")
+            self.file_save_txt_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_save_regular")
+            )
+            self.file_save_txt_linear_attaching.addWidget(self.file_save_txt)
+
+            # 转录文件时是否保存 json 结果（含原始时间戳）
+            self.file_save_json = SiSwitch(self)
+            self.file_save_json.setChecked(self.config["client"]["file_save_json"])
+            self.file_save_json_linear_attaching = SiOptionCardLinear(self)
+            self.file_save_json_linear_attaching.setTitle("保存 JSON 结果文件")
+            self.file_save_json_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_save_regular")
+            )
+            self.file_save_json_linear_attaching.addWidget(self.file_save_json)
+
+            # 转录文件时是否保存 merge.txt（未切分的段落长文本）
+            self.file_save_merge = SiSwitch(self)
+            self.file_save_merge.setChecked(self.config["client"]["file_save_merge"])
+            self.file_save_merge_linear_attaching = SiOptionCardLinear(self)
+            self.file_save_merge_linear_attaching.setTitle("保存合并文本文件")
+            self.file_save_merge_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_save_regular")
+            )
+            self.file_save_merge_linear_attaching.addWidget(self.file_save_merge)
+
+            # 设置项
+            self.file_transcription_container = SiDenseVContainer(self)
+            self.file_transcription_container.setFixedWidth(700)
+            self.file_transcription_container.setAdjustWidgetsSize(True)
+            self.file_transcription_container.addWidget(
+                self.use_hot_sub_when_transcribe_file_linear_attaching
+            )
+            self.file_transcription_container.addWidget(
+                self.file_seg_duration_linear_attaching
+            )
+            self.file_transcription_container.addWidget(
+                self.file_seg_overlap_linear_attaching
+            )
+            self.file_transcription_container.addWidget(
+                self.file_save_srt_linear_attaching
+            )
+            self.file_transcription_container.addWidget(
+                self.file_save_txt_linear_attaching
+            )
+            self.file_transcription_container.addWidget(
+                self.file_save_json_linear_attaching
+            )
+            self.file_transcription_container.addWidget(
+                self.file_save_merge_linear_attaching
+            )
+            group.addWidget(self.file_transcription_container)
 
         with self.titled_widgets_group as group:
             group.addTitle("AI 优化语言表达")
@@ -1945,6 +2033,17 @@ class ClientConfigPage(SiPage):
             )
             self.config["client"]["show_time_label"] = self.show_time_label.isChecked()
 
+            # 文件转录配置项保存
+            self.config["client"]["use_hot_sub_when_transcribe_file"] = (
+                self.use_hot_sub_when_transcribe_file.isChecked()
+            )
+            self.config["client"]["file_seg_duration"] = self.file_seg_duration.value()
+            self.config["client"]["file_seg_overlap"] = self.file_seg_overlap.value()
+            self.config["client"]["file_save_srt"] = self.file_save_srt.isChecked()
+            self.config["client"]["file_save_txt"] = self.file_save_txt.isChecked()
+            self.config["client"]["file_save_json"] = self.file_save_json.isChecked()
+            self.config["client"]["file_save_merge"] = self.file_save_merge.isChecked()
+
         def print_config():
             console = Console()
             table = Table(title="保存 Paraformer 语音识别模型参数配置")
@@ -2281,6 +2380,41 @@ class ClientConfigPage(SiPage):
                 "show_time_label",
                 clearly_type(self.config["client"]["show_time_label"]),
                 str(self.config["client"]["show_time_label"]),
+            )
+            table.add_row(
+                "use_hot_sub_when_transcribe_file",
+                clearly_type(self.config["client"]["use_hot_sub_when_transcribe_file"]),
+                str(self.config["client"]["use_hot_sub_when_transcribe_file"]),
+            )
+            table.add_row(
+                "file_seg_duration",
+                clearly_type(self.config["client"]["file_seg_duration"]),
+                str(self.config["client"]["file_seg_duration"]),
+            )
+            table.add_row(
+                "file_seg_overlap",
+                clearly_type(self.config["client"]["file_seg_overlap"]),
+                str(self.config["client"]["file_seg_overlap"]),
+            )
+            table.add_row(
+                "file_save_srt",
+                clearly_type(self.config["client"]["file_save_srt"]),
+                str(self.config["client"]["file_save_srt"]),
+            )
+            table.add_row(
+                "file_save_txt",
+                clearly_type(self.config["client"]["file_save_txt"]),
+                str(self.config["client"]["file_save_txt"]),
+            )
+            table.add_row(
+                "file_save_json",
+                clearly_type(self.config["client"]["file_save_json"]),
+                str(self.config["client"]["file_save_json"]),
+            )
+            table.add_row(
+                "file_save_merge",
+                clearly_type(self.config["client"]["file_save_merge"]),
+                str(self.config["client"]["file_save_merge"]),
             )
 
             console.print(table)
