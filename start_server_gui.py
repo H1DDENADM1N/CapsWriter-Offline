@@ -8,7 +8,7 @@ from typing import Optional
 from loguru import logger as default_logger
 from loguru._logger import Logger
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QIcon, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -148,10 +148,66 @@ class GUI(QMainWindow):
         except Exception as e:
             logger.error(f"Error occurred while quitting the application: {e}")
 
+    def show_window_centered(self):
+        """显示窗口并居中"""
+        # 激活窗口
+        self.showNormal()
+        self.activateWindow()
+
+        # 临时设置窗口为置顶以便正确居中
+        was_on_top = bool(self.windowFlags() & Qt.WindowStaysOnTopHint)
+        if not was_on_top:
+            self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+            self.show()
+
+        # 获取主屏幕几何信息
+        screen_geometry = QApplication.primaryScreen().availableGeometry()
+
+        # 获取窗口几何信息
+        window_geometry = self.frameGeometry()
+
+        # 计算居中位置
+        center_point = screen_geometry.center()
+        window_geometry.moveCenter(center_point)
+
+        # 移动窗口到中心位置
+        self.move(window_geometry.topLeft())
+
+        # 恢复取消置顶
+        self.setWindowFlags(self.windowFlags() ^ Qt.WindowStaysOnTopHint)
+        self.show()
+
     def on_tray_icon_activated(self, reason):
         # Called when the system tray icon is activated
         if reason == QSystemTrayIcon.DoubleClick:
-            self.showNormal()  # Show the main window
+            # 如果窗口已经可见且在中心位置，则隐藏它
+            if self.isVisible() and self.is_centered():
+                self.hide()
+            else:
+                self.show_window_centered()  # Show the main window centered
+
+    def is_centered(self):
+        """检查窗口是否在屏幕中心"""
+        # 获取屏幕几何信息
+        screen = (
+            self.screen() if hasattr(self, "screen") else QApplication.primaryScreen()
+        )
+        screen_geometry = screen.availableGeometry()
+
+        # 获取窗口几何信息
+        window_geometry = self.frameGeometry()
+
+        # 计算预期的中心位置
+        center_point = screen_geometry.center()
+        expected_center_x = center_point.x() - window_geometry.width() // 2
+        expected_center_y = center_point.y() - window_geometry.height() // 2
+
+        # 检查当前窗口位置是否接近中心位置（允许几个像素的误差）
+        tolerance = 5  # 像素容差
+        return (
+            abs(window_geometry.x() - expected_center_x) <= tolerance
+            and abs(window_geometry.y() - expected_center_y) <= tolerance
+        )
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
@@ -194,6 +250,12 @@ class GUI(QMainWindow):
             except Exception as e:
                 self.text_box_server.append(e)
                 break
+
+    def showEvent(self, event):
+        self.text_box_server.moveCursor(QTextCursor.End)  # 滚动到最下行
+
+    def enterEvent(self, event):
+        self.text_box_server.moveCursor(QTextCursor.End)  # 滚动到最下行
 
 
 if __name__ == "__main__":
