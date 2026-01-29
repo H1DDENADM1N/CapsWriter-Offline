@@ -6,6 +6,7 @@ CapsWriter-Offline 独立热词与纠错系统 (Portable Standalone)
 整合了最新的音素处理、相似度算法、FastRAG 加速检索
 """
 
+import multiprocessing as mul
 import re
 import threading
 import time
@@ -16,7 +17,6 @@ from pathlib import Path
 from typing import Dict, List, Literal, NamedTuple, Optional, Tuple
 
 import numpy as np
-from loguru import logger
 from loguru import logger as default_logger
 from loguru._logger import Logger
 from numba import njit
@@ -25,6 +25,8 @@ from rich import box
 from rich.console import Console
 from rich.rule import Rule
 from rich.table import Table
+
+from util.safe_logger import SafeLogger
 
 # 配置日志
 
@@ -677,14 +679,21 @@ class PhonemeCorrector:
     音素纠正器类，用于处理文本中的音素错误
     """
 
-    def __init__(self, threshold: float = 0.7, similar_threshold: float = None):
+    def __init__(
+        self,
+        threshold: float = 0.7,
+        similar_threshold: float = None,
+        logger: Optional[Logger] = None,
+    ):
         """
         初始化音素纠正器
 
         Args:
             threshold: 主要阈值，默认为0.7
             similar_threshold: 相似阈值，默认为None
+            logger: 日志记录器，默认为None
         """
+        self.logger = logger if logger is not None else default_logger
         self.threshold = threshold
         self.similar_threshold = (
             similar_threshold if similar_threshold is not None else threshold - 0.2
@@ -735,7 +744,7 @@ class PhonemeCorrector:
             if phs:
                 new_hw[hw] = phs
             else:
-                logger.warning(f"未获取到热词 {hw} 的因素信息")
+                self.logger.warning(f"未获取到热词 {hw} 的因素信息")
 
         with self._lock:
             if append_mode:
@@ -744,7 +753,9 @@ class PhonemeCorrector:
                 # 只向现有 FastRAG 索引添加新热词，不重置
                 now = time.time()
                 self.fast_rag.add_hotwords(new_hw)  # 只添加新热词
-                logger.trace(f"向fast_rag索引添加新热词耗时：{time.time() - now:.5f}秒")
+                self.logger.trace(
+                    f"向fast_rag索引添加新热词耗时：{time.time() - now:.5f}秒"
+                )
             else:
                 # 覆盖模式：替换整个热词字典
                 self.hotwords = new_hw
@@ -754,7 +765,7 @@ class PhonemeCorrector:
                 )
                 now = time.time()
                 self.fast_rag.add_hotwords(self.hotwords)
-                logger.trace(f"重建fast_rag索引耗时：{time.time() - now:.5f}秒")
+                self.logger.trace(f"重建fast_rag索引耗时：{time.time() - now:.5f}秒")
 
         return len(new_hw)
 
@@ -773,7 +784,7 @@ class PhonemeCorrector:
             with open(path, "r", encoding="utf-8") as f:
                 return self.update_hotwords(f.read(), append_mode=append_mode)
         else:
-            logger.warning(f"热词文件不存在：{path}")
+            self.logger.warning(f"热词文件不存在：{path}")
             return 0
 
     def _find_matches(self, text, fast_results, input_processed):
@@ -1011,6 +1022,7 @@ def 热词替换(句子, debug: bool = False, logger: Optional[Logger] = None):
 
     句子：       被查找和替换的句子
     debug:       是否进行调试
+    logger:      日志记录器
     """
     _logger = logger if logger is not None else default_logger
     from util.client.cosmic import Cosmic, console
@@ -1070,6 +1082,9 @@ def score_to_color(score: float) -> str:
 
 
 if __name__ == "__main__":
+    ctx = mul.get_context("spawn")
+    SafeLogger(mp_context=ctx)
+    default_logger.info("Starting hot_sub_rag...")
     # =============================================================================
     # 7. 数据准备与主流演示
     # =============================================================================
@@ -1104,13 +1119,15 @@ if __name__ == "__main__":
     for txt_path in txt_paths:
         now = time.time()
         新增热词数量: int = corrector.load_hotwords_file(txt_path, append_mode=True)
-        logger.trace(
+        default_logger.trace(
             f"已从外部文件 {txt_path} 加载 {新增热词数量} 个热词，总计 {len(corrector.hotwords)} 个热词，耗时 {time.time() - now:.5f} 秒"
         )
 
     # 追加演示数据
     新增热词数量: int = corrector.update_hotwords(hotwords_data, append_mode=True)
-    logger.trace(f"已追加 {新增热词数量} 个热词，总计 {len(corrector.hotwords)} 个热词")
+    default_logger.trace(
+        f"已追加 {新增热词数量} 个热词，总计 {len(corrector.hotwords)} 个热词"
+    )
 
     def format_score_with_gradient_bar(score: float) -> str:
         """创建进度条"""
