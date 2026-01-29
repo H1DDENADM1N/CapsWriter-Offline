@@ -610,6 +610,18 @@ file_seg_duration = 60
 file_seg_overlap = 4
 # 转录文件时分段重叠：4 秒
 
+file_save_srt = true
+# 转录文件时是否保存 srt 字幕
+
+file_save_txt = false
+# 转录文件时是否保存 txt 文本（按标点切分后的）
+
+file_save_json = false
+# 转录文件时是否保存 json 结果（含原始时间戳）
+
+file_save_merge = false
+# 转录文件时是否保存 merge.txt（未切分的段落长文本）
+
 mute_other_audio = true
 # 录音时是否静音其他音频播放
 

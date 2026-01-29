@@ -93,38 +93,51 @@ class ResultHandler:
         merge_filename = file.with_suffix(".merge.txt")
 
         # 1. 保存 merge.txt
-        with open(merge_filename, "w", encoding="utf-8") as f:
-            f.write(text_accu)
-        _logger.debug(f"保存合并文本: {merge_filename}")
+        if Config.file_save_merge:
+            with open(merge_filename, "w", encoding="utf-8") as f:
+                f.write(text_accu)
+            _logger.debug(f"保存合并文本: {merge_filename}")
 
         # 2. 保存 txt
-        with open(txt_filename, "w", encoding="utf-8") as f:
-            f.write(text_split)
-        _logger.debug(f"保存切分文本: {txt_filename}")
+        if Config.file_save_txt:
+            with open(txt_filename, "w", encoding="utf-8") as f:
+                f.write(text_split)
+            _logger.debug(f"保存切分文本: {txt_filename}")
 
         # 3. 保存 json
-        with open(json_filename, "w", encoding="utf-8") as f:
-            json.dump(
-                {"timestamps": timestamps, "tokens": tokens}, f, ensure_ascii=False
-            )
-        _logger.debug(f"保存 JSON 结果: {json_filename}")
+        if Config.file_save_json:
+            with open(json_filename, "w", encoding="utf-8") as f:
+                json.dump(
+                    {"timestamps": timestamps, "tokens": tokens}, f, ensure_ascii=False
+                )
+            _logger.debug(f"保存 JSON 结果: {json_filename}")
 
         # 4. 生成 srt
-        # 构建 words 信息（无需依赖 json 文件）
-        words = [
-            {
-                "word": token.replace("@", ""),
-                "start": timestamp,
-                "end": timestamp + 0.2,
-            }
-            for (timestamp, token) in zip(timestamps, tokens)
-        ]
-        for i in range(len(words) - 1):
-            words[i]["end"] = min(words[i]["end"], words[i + 1]["start"])
+        if Config.file_save_srt:
+            # 构建 words 信息（无需依赖 json 文件）
+            words = [
+                {
+                    "word": token.replace("@", ""),
+                    "start": timestamp,
+                    "end": timestamp + 0.2,
+                }
+                for (timestamp, token) in zip(timestamps, tokens)
+            ]
+            for i in range(len(words) - 1):
+                words[i]["end"] = min(words[i]["end"], words[i + 1]["start"])
 
-        text_lines = text_split.splitlines()
-        srt_filename = file.with_suffix(".srt")
+            text_lines = text_split.splitlines()
+            srt_filename = file.with_suffix(".srt")
 
-        srt_from_txt.generate_srt_file(words, text_lines, srt_filename)
+            srt_from_txt.generate_srt_file(words, text_lines, srt_filename)
+            _logger.debug(f"保存 SRT 字幕: {srt_filename}")
+
+        # 5. 清理中间生成的 txt
+        if not Config.file_save_txt and txt_filename.exists():
+            try:
+                txt_filename.unlink()
+                logger.debug(f"清理中间 TXT 文件: {txt_filename}")
+            except Exception as e:
+                logger.warning(f"清理中间 TXT 文件失败: {e}")
 
         return text_display

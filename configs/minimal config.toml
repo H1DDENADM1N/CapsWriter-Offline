@@ -204,7 +204,19 @@ file_seg_duration = 60
 file_seg_overlap = 4
 # 转录文件时分段重叠：4 秒
 
-mute_other_audio = false
+file_save_srt = true
+# 转录文件时是否保存 srt 字幕
+
+file_save_txt = false
+# 转录文件时是否保存 txt 文本（按标点切分后的）
+
+file_save_json = false
+# 转录文件时是否保存 json 结果（含原始时间戳）
+
+file_save_merge = false
+# 转录文件时是否保存 merge.txt（未切分的段落长文本）
+
+mute_other_audio = true
 # 录音时是否静音其他音频播放
 
 pause_other_audio = false
@@ -375,7 +387,7 @@ model = "Qwen/Qwen2.5-14B-Instruct"
 
 
 [client.prompt_style]
-prompt_official_shortcut = "ctrl + alt + shift + f1"
+prompt_official_shortcut = ""
 # 切换提示风格为正式公文文本校对助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -406,7 +418,7 @@ prompt_official = """
 输出要求：直接呈现润色完成的规范文本，无任何额外说明。
 """
 
-prompt_sweetheart_shortcut = "ctrl + alt + shift + f2"
+prompt_sweetheart_shortcut = ""
 # 切换提示风格为ptrue_heart的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -437,7 +449,7 @@ prompt_sweetheart = """
 输出要求：直接给出润色完成的"甜度满分"文本。
 """
 
-prompt_social_shortcut = "ctrl + alt + shift + f3"
+prompt_social_shortcut = ""
 # 切换提示风格为社交媒体文案优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -468,7 +480,7 @@ prompt_social = """
 输出要求：直接给出优化完成、适合一键发布的社交文案。
 """
 
-prompt_poetry_shortcut = "ctrl + alt + shift + f4"
+prompt_poetry_shortcut = ""
 # 切换提示风格为社交媒体文案优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -500,7 +512,7 @@ prompt_poetry = """
 输出要求：直接呈现创作完成的古典诗歌。
 """
 
-prompt_english_shortcut = "ctrl + alt + shift + f5"
+prompt_english_shortcut = ""
 # 切换提示风格为英文润色助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -532,7 +544,7 @@ prompt_english = """
 输出要求：直接给出润色后的地道美式英语文本。
 """
 
-prompt_academic_shortcut = "ctrl + alt + shift + f6"
+prompt_academic_shortcut = ""
 # 切换提示风格为学术论文优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -566,7 +578,7 @@ prompt_academic = """
 输出要求：直接呈现符合学术规范的润色文本。
 """
 
-prompt_customer_service_shortcut = "ctrl + alt + shift + f7"
+prompt_customer_service_shortcut = ""
 # 切换提示风格为客户服务回复优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -598,7 +610,7 @@ prompt_customer_service = """
 输出要求：直接呈现专业、完整的客户服务回复文本。
 """
 
-prompt_creative_writing_shortcut = "ctrl + alt + shift + f8"
+prompt_creative_writing_shortcut = ""
 # 切换提示风格为创意写作优化助手的快捷键
 # 注意避免快捷键冲突
 # 留空则 不绑定
@@ -631,7 +643,7 @@ prompt_creative_writing = """
 """
 
 [client.additional_special_apps]
-"vlc.exe" = { hotkey = "ctrl + alt + f9", name = "VLC Media Player" } # VLC 设置全局快捷键后需要重启 VLC 才能生效
+# "vlc.exe" = { hotkey = "ctrl + alt + f9", name = "VLC Media Player" } # VLC 设置全局快捷键后需要重启 VLC 才能生效
 # 如果还有除了 QQ音乐、网易云音乐、PotPlayer、foobar2000
 # 以外，还有 其他特殊应用
 # 也希望使用对应程序设置的全局快捷键 在录音时播放/暂停
