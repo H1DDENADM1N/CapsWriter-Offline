@@ -77,10 +77,10 @@ class ResultHandler:
         _logger.debug(f"text_accu: {message.get('text_accu', 'NOT FOUND')}")
         text_display = message["text"]
         if Config.use_hot_sub_when_transcribe_file:
-            text_display = hot_sub(text_display)
+            text_display = hot_sub(text_display, logger=_logger)
         text_accu = message.get("text_accu", message["text"])
         if Config.use_hot_sub_when_transcribe_file:
-            text_accu = hot_sub(text_accu, debug=True)
+            text_accu = hot_sub(text_accu, debug=True, logger=_logger)
         text_split = cls.smart_split(text_accu)
         timestamps = message["timestamps"]
         tokens = message["tokens"]

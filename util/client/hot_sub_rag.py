@@ -13,10 +13,12 @@ from collections import defaultdict
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Dict, List, Literal, NamedTuple, Tuple
+from typing import Dict, List, Literal, NamedTuple, Optional, Tuple
 
 import numpy as np
 from loguru import logger
+from loguru import logger as default_logger
+from loguru._logger import Logger
 from numba import njit
 from pypinyin import Style, pinyin
 from rich import box
@@ -1003,13 +1005,14 @@ def find_best_match(
     return 1.0 - (min_dist / n), best_start, end_pos
 
 
-def 热词替换(句子, debug: bool = False):
+def 热词替换(句子, debug: bool = False, logger: Optional[Logger] = None):
     """
     从热词词典中查找匹配的热词，替换句子
 
     句子：       被查找和替换的句子
     debug:       是否进行调试
     """
+    _logger = logger if logger is not None else default_logger
     from util.client.cosmic import Cosmic, console
 
     now = time.time()
@@ -1021,6 +1024,9 @@ def 热词替换(句子, debug: bool = False):
             for wrong, right, score in result.matchs:
                 console.print(
                     f"hot_sub_rag Result: [{score_to_color(score)}]{wrong} -> {right} [/]    Score: {score:.2f}    Duration: {dur:.2f}s"
+                )
+                _logger.debug(
+                    f"hot_sub_rag Result: {wrong} -> {right}    Score: {score:.2f}    Duration: {dur:.2f}s"
                 )
 
         if result.similars:
@@ -1037,6 +1043,9 @@ def 热词替换(句子, debug: bool = False):
                 for original, potential, score in filtered_similars:
                     console.print(
                         f"hot_sub_rag Potential: [{score_to_color(score)}]{original} -> {potential} [/]    Score: {score:.2f}"
+                    )
+                    _logger.debug(
+                        f"hot_sub_rag Potential: {original} -> {potential}    Score: {score:.2f}"
                     )
 
     return result.text
