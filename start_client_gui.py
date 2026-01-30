@@ -934,6 +934,7 @@ class GUI(QMainWindow):
         github_website_action = QAction("🌐 GitHub Website", self)
         transcribe_file_action = QAction("📽️ Transcribe File", self)
         show_action = QAction("🪟 Show", self)
+        config_selector_action = QAction("⚙️ Config Selector", self)
         restart_client_action = QAction("🔄 Restart Client", self)
         quit_action = QAction("❌ Quit", self)
 
@@ -961,6 +962,7 @@ class GUI(QMainWindow):
         github_website_action.triggered.connect(self.open_github_website)
         transcribe_file_action.triggered.connect(self.transcribe_file)
         show_action.triggered.connect(self.showNormal)
+        config_selector_action.triggered.connect(self.open_config_selector)
         restart_client_action.triggered.connect(self.restart_client)
         quit_action.triggered.connect(self.quit_app)
 
@@ -998,6 +1000,7 @@ class GUI(QMainWindow):
         tray_menu.addAction(transcribe_file_action)
         tray_menu.addSeparator()
         tray_menu.addAction(show_action)
+        tray_menu.addAction(config_selector_action)
         tray_menu.addAction(restart_client_action)
         tray_menu.addAction(quit_action)
         self.tray_icon.setContextMenu(tray_menu)
@@ -1484,6 +1487,19 @@ class GUI(QMainWindow):
         QDesktopServices.openUrl(
             QUrl("https://github.com/H1DDENADM1N/CapsWriter-Offline")
         )
+
+    def open_config_selector(self):
+        config_selector_path = Path("config_selector.exe")
+        if config_selector_path.exists():
+            subprocess.Popen(
+                [str(config_selector_path)],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                shell=True,
+                encoding="utf-8",
+            )
 
     def transcribe_file(self):
         """转录音频/视频文件 - 修复版本"""
