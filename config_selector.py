@@ -13,9 +13,9 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QHBoxLayout,
-    QLabel,
     QMessageBox,
     QPushButton,
+    QTextBrowser,
     QVBoxLayout,
 )
 from qt_material import apply_stylesheet
@@ -48,10 +48,22 @@ class ConfigSelector(QDialog):
         main_layout.setSpacing(10)
         main_layout.setContentsMargins(15, 15, 15, 15)
 
-        self.label = QLabel(
-            '请在切换配置前，<font color="#f44336">手动关闭</font> 服务端和客户端！<br><br>请选择一个配置文件:'
+        self.stop_service_btn = QTextBrowser()
+        html_content = (
+            '<span style="font-size: 14px; text-decoration: none;">'
+            "请在切换配置前，手动 / "
+            '<a href="close://services" style="color: #f44336; font-size: 14px; text-decoration: none;">'
+            "点击此处关闭</a> 服务端和客户端！"
+            "<br><br>"
+            "请选择一个配置文件:"
+            "</span>"
         )
-        main_layout.addWidget(self.label)
+        self.stop_service_btn.setHtml(html_content)
+        self.stop_service_btn.setOpenExternalLinks(False)
+        self.stop_service_btn.setReadOnly(True)
+        self.stop_service_btn.setCursor(Qt.PointingHandCursor)
+        self.stop_service_btn.anchorClicked.connect(self.on_stop_service_btn_click)
+        main_layout.addWidget(self.stop_service_btn)
 
         self.combo_box = QComboBox()
         self.combo_box.setMinimumHeight(50)
@@ -176,6 +188,37 @@ class ConfigSelector(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "错误", f"操作过程中发生未知错误:\n{e}")
             self.logger.error(f"操作过程中发生未知错误:\n{e}")
+
+    def on_stop_service_btn_click(self, url):
+        """
+        处理关闭服务链接点击事件，关闭服务端和客户端
+        """
+        if url.toString() == "close://services":
+            try:
+                self.logger.info("用户点击了关闭服务链接，正在关闭服务端和客户端...")
+
+                # 关闭客户端和服务端
+                stop_client(logger=self.logger)
+                stop_server(logger=self.logger)
+
+                html_content = (
+                    '<span style="color: #4CAF50; font-size: 14px; text-decoration: none;">'
+                    "服务端和客户端已成功关闭"
+                    "</span>"
+                    "<br><br>"
+                    '<span style="font-size: 14px; text-decoration: none;">'
+                    "请选择一个配置文件:"
+                    "</span>"
+                )
+                self.stop_service_btn.setHtml(html_content)
+
+                self.logger.info("服务端和客户端已成功关闭")
+
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "错误", f"关闭服务端和客户端时发生错误:\n{e}"
+                )
+                self.logger.error(f"关闭服务端和客户端时发生错误: {e}")
 
     def on_restart_to_enable_new_config(self):
         stop_client(logger=self.logger)
