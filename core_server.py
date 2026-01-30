@@ -15,6 +15,7 @@ from util.config import ServerConfig as Config
 from util.empty_working_set import empty_current_working_set
 from util.safe_logger import SafeLogger
 from util.server.check_model import check_model
+from util.server.check_port import check_port_server
 from util.server.cosmic import Cosmic, console
 from util.server.expand_funasr_hotwords import expand_funasr_hotwords
 from util.server.init_recognizer import init_recognizer
@@ -45,6 +46,16 @@ async def main(logger: Optional[Logger] = None):
     _logger = logger if logger is not None else default_logger
     # 检查模型文件
     check_model(_logger)
+
+    # 检查端口占用情况
+    if Config.check_port_usage_before_start:
+        used_port_infos: list | None = check_port_server(_logger)
+        if used_port_infos:
+            console.print(
+                f"[bold red]端口被占用，无法启动服务端 {used_port_infos}[/bold red]"
+            )
+            input("按回车退出")
+            sys.exit(1)
 
     console.line(2)
     with console.resize(width=50):

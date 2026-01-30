@@ -26,6 +26,7 @@ from util.config import DebugConfig
 from util.config import ServerConfig as Config
 from util.safe_logger import SafeLogger
 from util.server.check_model import check_model_gui
+from util.server.check_port import check_port_server
 
 
 class GUI(QMainWindow):
@@ -267,7 +268,14 @@ if __name__ == "__main__":
         catch=True,
     )
     default_logger.info("Starting CapsWriter-Offline-Server GUI...")
+
+    # 检查模型文件
     check_model_gui(passed_logger=default_logger)
+    # 检查端口占用情况
+    if Config.check_port_usage_before_start:
+        used_port_infos: list | None = check_port_server(default_logger)
+        if used_port_infos:
+            raise Exception(f"端口被占用，无法启动服务端 {used_port_infos}")
 
     if Config.only_run_once and check_process(
         "python_CapsWriter_Server.exe", logger=default_logger

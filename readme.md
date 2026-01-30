@@ -34,6 +34,9 @@
 <details>
 <summary><h1">展开最近更新</h1></summary>
 
+## 新增 可选项 是否在启动服务端之前，先检查所需端口占用情况
+> 如果启用，服务端启动时间增加约 25 秒
+
 ## 新增 优先级队列，转录文件同时语音输入，优先处理语音输入
 
 # 新增 可选项 转录文件时，是否进行热词替换
@@ -444,6 +447,10 @@ addr = "0.0.0.0"
 
 speech_recognition_port = "6016"
 # 语音识别服务端口
+
+check_port_usage_before_start = false
+# 是否在启动服务端之前，先检查所需端口占用情况
+# 如果启用，服务端启动时间增加约 25 秒
 
 start_online_translate_server = true
 # 是否启用在线翻译服务

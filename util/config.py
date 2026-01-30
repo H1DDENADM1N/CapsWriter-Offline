@@ -26,6 +26,9 @@ class ServerConfig:
     expand_funasr_hotwords: bool = config["server"]["expand_funasr_hotwords"]
     addr: str = config["server"]["addr"]
     speech_recognition_port: str = config["server"]["speech_recognition_port"]
+    check_port_usage_before_start: bool = config["server"][
+        "check_port_usage_before_start"
+    ]
     start_online_translate_server: bool = config["server"][
         "start_online_translate_server"
     ]

@@ -11,7 +11,6 @@
 # gsudo uv run .\dev\check_port.py 6016 6017 1188
 
 import ctypes
-import sys
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import psutil
@@ -715,82 +714,94 @@ def display_ports_details(
         console.print(Rule(style="yellow"))
 
 
-def capswriter_ports_infos() -> List[PortInfo]:
+def check_server_ports(logger) -> List[PortInfo]:
     """
-    检查 CapsWriter Offline 所需的端口占用情况
+    检查 CapsWriter Offline 服务端所需的端口占用情况
 
     语音识别端口：config.toml 中的 ServerConfig.speech_recognition_port
     离线翻译端口：config.toml 中的 ServerConfig.offline_translate_port
-    DeepLX在线翻译端口：config.toml 中的 DeepLXConfig.online_translate_port
-        DeepLX 仅在 LiberTranslate 不可用时作为 fallback
 
     Returns:
         list[dict]: 端口信息列表
     """
+    try:
+        from util.config import ServerConfig
 
-    sys.path.append(".")
-    from util.config import DeepLXConfig, ServerConfig
+        ports: List[int] = [
+            int(ServerConfig.speech_recognition_port),
+            int(ServerConfig.offline_translate_port),
+        ]
 
-    ports: List[int] = [
-        int(ServerConfig.speech_recognition_port),
-        int(ServerConfig.offline_translate_port),
-        int(DeepLXConfig.online_translate_port),
-    ]
+        port_names: Dict[int, str] = {
+            int(ServerConfig.speech_recognition_port): "语音识别",
+            int(ServerConfig.offline_translate_port): "离线翻译",
+        }
 
-    port_names: Dict[int, str] = {
-        int(ServerConfig.speech_recognition_port): "语音识别",
-        int(ServerConfig.offline_translate_port): "离线翻译",
-        int(DeepLXConfig.online_translate_port): "DeepLX在线翻译",
-    }
+        port_infos: List[PortInfo] = []
+        for port in ports:
+            info: PortInfo = check_port(port, check_privileged=is_running_as_admin())
+            info["name"] = f"{info['name']} ({port_names.get(port, '未知')})"
+            port_infos.append(info)
 
-    port_infos: List[PortInfo] = []
-    for port in ports:
-        info: PortInfo = check_port(port, check_privileged=is_admin)
-        info["name"] = f"{info['name']} ({port_names.get(port, '未知')})"
-        port_infos.append(info)
-
-    return port_infos
+        return port_infos
+    except Exception as e:
+        logger.error(f"检查端口时发生错误: {e}")
+        return []
 
 
-if __name__ == "__main__":
-    is_admin: bool = is_running_as_admin()
-    show_privileged: bool = is_admin
+def check_port_server(logger) -> List[PortInfo] | None:
+    """
+    检查服务端端口并显示结果
+    返回端口信息列表
+    """
+    is_admin = is_running_as_admin()
 
-    if not is_admin:
-        console.print(
-            Panel(
-                "[yellow]⚠ 当前脚本未以管理员权限运行[/]\n"
-                "[dim]无法准确读取所有进程的详细特权令牌[/]",
-                border_style="yellow",
-            )
-        )
-        console.print("\n")
+    # if not is_admin:
+    # console.print(
+    #     Panel(
+    #         "[yellow]⚠ 当前脚本未以管理员权限运行[/]\n"
+    #         "[dim]无法准确读取所有进程的详细特权令牌[/]",
+    #         border_style="yellow",
+    #     )
+    # )
+    # console.print("\n")
 
-    ports: List[int] = []
-    for arg in sys.argv[1:]:
-        try:
-            ports.append(int(arg))
-        except ValueError:
-            pass
-    port_infos: List[PortInfo] = []
-    match len(ports):
-        case 0:
-            # 无参数调用，检查 CapsWriter Offline 所需的端口占用情况
-            port_infos = capswriter_ports_infos()
-        case _:
-            for port in ports:
-                info: PortInfo = check_port(port, check_privileged=is_admin)
-                port_infos.append(info)
+    port_infos = check_server_ports(logger)
+
+    if not port_infos:
+        logger.error("无法获取端口信息")
+        return None  # 无法获取端口信息
 
     display_ports_info(port_infos, show_privileged=is_admin)
 
-    used_port_infos: List[PortInfo] = [
-        info for info in port_infos if info["status"] == "已占用"
-    ]
-    if used_port_infos:
+    used_ports: Tuple[int, ...] = tuple(
+        info["port"] for info in port_infos if info["status"] == "已占用"
+    )
+    if used_ports:
+        used_port_infos: List[PortInfo] = [
+            info for info in port_infos if info["status"] == "已占用"
+        ]
         display_ports_details(
             used_port_infos,
             show_privileged=is_admin,
             show_process_tree=True,
             show_child_processes=True,
         )
+        return used_port_infos
+    else:
+        console.print("[bold green]✅ 所有端口均未占用[/bold green]")
+        return None
+
+
+if __name__ == "__main__":
+    from loguru import logger as default_logger
+
+    from util.config import ServerConfig as Config
+    from util.server.cosmic import console
+
+    console.print("检查服务端端口配置:")
+    console.print(f"语音识别端口: {Config.speech_recognition_port}")
+    console.print(f"离线翻译端口: {Config.offline_translate_port}")
+    console.print("\n")
+
+    check_port_server(default_logger)
