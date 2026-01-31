@@ -2,6 +2,8 @@ import time
 import warnings
 
 warnings.filterwarnings("ignore", message=".*pkg_resources.*")
+warnings.filterwarnings("ignore", category=SyntaxWarning, module="jieba")
+warnings.filterwarnings("ignore", message=".*invalid escape sequence.*", module="jieba")
 from multiprocessing import Queue
 from pathlib import Path
 from platform import system
