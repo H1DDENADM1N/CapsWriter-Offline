@@ -420,7 +420,9 @@ class GUI(QMainWindow):
 
     def create_time_label(self):
         """创建时间标签"""
-        if not hasattr(self, "time_label") and Config.show_time_label:
+        if not hasattr(self, "time_label") and self.get_config_value(
+            "client.show_time_label", False
+        ):
             self.time_label = TimeOverlayLabel(self.centralWidget())
             self.adjust_time_label_position()
 
@@ -551,6 +553,7 @@ class GUI(QMainWindow):
             | Qt.WindowStaysOnTopHint  # 置顶
         )
         self.create_stay_on_top_button()
+        self.create_show_time_label_button()
         self.create_cloudypaste_button()  # Create cloudy paste button
         self.create_clear_button()  # Create clear button
         self.create_close_button()
@@ -790,6 +793,7 @@ class GUI(QMainWindow):
         # 创建自定义标题栏
         self.title_bar = QHBoxLayout()
         self.title_bar.addWidget(self.stay_on_top_button)
+        self.title_bar.addWidget(self.show_time_label_button)
         self.title = QLabel("CapsWriter-Offline-Client")
         font = QFont()
         font.setBold(True)
@@ -809,6 +813,24 @@ class GUI(QMainWindow):
         self.stay_on_top_button.setToolTip("置顶窗口，将它显示在其他窗口之上 / 不置顶")
         self.stay_on_top_button.setMaximumSize(50, 50)
         self.stay_on_top_button.clicked.connect(self.window_stay_on_top_toggled)
+
+    def create_show_time_label_button(self):
+        self.show_time_label_button = QPushButton()
+        old_value_show_time_label = self.get_config_value(
+            "client.show_time_label", False
+        )
+        show_char = chr(0xF43A)
+        hide_char = chr(0xEAAE)
+        match old_value_show_time_label:
+            case True:
+                self.show_time_label_button.setText(show_char)
+            case False:
+                self.show_time_label_button.setText(hide_char)
+        self.show_time_label_button.setToolTip(
+            "是否在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面"
+        )
+        self.show_time_label_button.setMaximumSize(50, 50)
+        self.show_time_label_button.clicked.connect(self.show_time_label_button_toggled)
 
     def create_close_button(self):
         self.close_button = QPushButton(chr(0xE8BB))
@@ -1444,6 +1466,23 @@ class GUI(QMainWindow):
             self.stay_on_top_button.setText(unpin_char)
         self.show()  # 重新显示窗口以应用更改
 
+    def show_time_label_button_toggled(self):
+        # 切换是否在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面
+        old_value_show_time_label = self.get_config_value(
+            "client.show_time_label", False
+        )
+        show_char = chr(0xF43A)
+        hide_char = chr(0xEAAE)
+        match old_value_show_time_label:
+            case True:
+                if self.set_config_value("client.show_time_label", False):
+                    if self.save_config():
+                        self.show_time_label_button.setText(hide_char)
+            case False:
+                if self.set_config_value("client.show_time_label", True):
+                    if self.save_config():
+                        self.show_time_label_button.setText(show_char)
+
     def update_word_count_toggled(self):
         select_text_count = len(self.text_box_client.textCursor().selectedText())
         select_text_bytes = len(
@@ -1551,7 +1590,9 @@ class GUI(QMainWindow):
 
     def hideEvent(self, event):
         """当窗口被隐藏时停止时间标签计时器"""
-        if Config.show_time_label and hasattr(self, "time_label"):
+        if self.get_config_value("client.show_time_label", False) and hasattr(
+            self, "time_label"
+        ):
             self.time_label.stop_timer()
         super().hideEvent(event)
 
@@ -1567,7 +1608,9 @@ class GUI(QMainWindow):
 
     def show_client_interface(self):
         """不显示时间标签，显示客户端界面，并滚动到最下行"""
-        if Config.show_time_label and hasattr(self, "time_label"):
+        if self.get_config_value("client.show_time_label", False) and hasattr(
+            self, "time_label"
+        ):
             self.time_label.stop_timer()
             self.time_label.hide()  # 隐藏时间标签
         self.resize(425, 425)
@@ -1632,7 +1675,7 @@ class GUI(QMainWindow):
 
     def is_clock(self):
         """检查窗口是否是时钟状态"""
-        if not Config.show_time_label:
+        if not self.get_config_value("client.show_time_label", False):
             return False
         if not hasattr(self, "time_label"):
             return False
@@ -1776,12 +1819,14 @@ class GUI(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if Config.show_time_label:
+        if self.get_config_value("client.show_time_label", False):
             self.adjust_time_label_position()
 
     def adjust_time_label_position(self):
         """调整时间标签的位置，使其显示在文本框的中心，宽度与文本框相同"""
-        if not Config.show_time_label or not hasattr(self, "time_label"):
+        if not self.get_config_value("client.show_time_label", False) or not hasattr(
+            self, "time_label"
+        ):
             return
 
         # 获取文本框的尺寸
@@ -1798,7 +1843,7 @@ class GUI(QMainWindow):
     def enterEvent(self, event):
         super().enterEvent(event)
         self.logger.trace("[enterEvent] 鼠标进入窗口")
-        if Config.show_time_label:
+        if self.get_config_value("client.show_time_label", False):
             self.create_time_label()  # 确保时间标签存在
             self.time_label.stop_timer()  # 停止定时器
             self.text_box_client.setVisible(True)
@@ -1860,7 +1905,7 @@ class GUI(QMainWindow):
     def leaveEvent(self, event):
         super().leaveEvent(event)
         self.logger.trace("[leaveEvent] 鼠标离开窗口")
-        if Config.show_time_label:
+        if self.get_config_value("client.show_time_label", False):
             self.create_time_label()  # 确保时间标签存在
             self.time_label.start_timer()  # 启动定时器
             self.text_box_client.setVisible(False)
@@ -1973,7 +2018,7 @@ class GUI(QMainWindow):
         self, x, y, width, height, screenWidth, screenHeight, currentScreen
     ):
         self.logger.debug("[berthToLeft] 开始停靠到左边")
-        if Config.show_time_label:
+        if self.get_config_value("client.show_time_label", False):
             self.logger.trace("[berthToLeft] show_time_label为True，不进行停靠")
             return  # 不停靠
         # 检测是否在屏幕交界处，如果是则不应用贴边隐藏
@@ -1998,7 +2043,7 @@ class GUI(QMainWindow):
         self, x, y, width, height, screenWidth, screenHeight, currentScreen
     ):
         self.logger.debug("[berthToRight] 开始停靠到右边")
-        if Config.show_time_label:
+        if self.get_config_value("client.show_time_label", False):
             self.logger.trace("[berthToRight] show_time_label为True，不进行停靠")
             return  # 不停靠
         # 检测是否在屏幕交界处，如果是则不应用贴边隐藏
