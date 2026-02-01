@@ -19,9 +19,12 @@ from PySide6.QtCore import QFileSystemWatcher, QPoint, QStandardPaths, Qt, QTime
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
+    QColor,
+    QCursor,
     QDesktopServices,
     QFont,
     QIcon,
+    QPalette,
     QTextCursor,
     QWheelEvent,
 )
@@ -62,6 +65,13 @@ class Hint_While_Recording_At_Cursor_Position(QLabel):
         self.setWindowFlags(
             Qt.ToolTip | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         )
+        font = QFont("Segoe MDL2 Assets", 14)
+        self.setFont(font)
+        palette = self.palette()
+        palette.setColor(QPalette.Window, QColor("#212121"))  # 设置背景颜色
+        palette.setColor(QPalette.WindowText, QColor("#00B294"))  # 设置文本颜色
+        self.setPalette(palette)
+        self.setText(chr(0xF8B1))
         self.setVisible(False)  # 初始时隐藏标签
 
         # 创建一个定时器来定期更新鼠标位置
@@ -69,15 +79,57 @@ class Hint_While_Recording_At_Cursor_Position(QLabel):
         self.timer.timeout.connect(self.update_tooltip_position)
         self.timer.start(100)  # 每100毫秒更新一次
 
+        # 当前屏幕和缩放比例缓存
+        self.current_screen = None
+        self.current_device_pixel_ratio = 1.0
+        self.test_counter = 0
+
     def update_tooltip_position(self):
-        # 使用pywin32获取全局鼠标位置
-        x, y = win32api.GetCursorPos()
-        global scale_x, scale_y
-        x, y = x / scale_x, y / scale_y
+        # 使用Qt的QCursor获取全局鼠标位置
+        cursor_pos = QCursor.pos()
+
+        # 获取当前鼠标所在的屏幕
+        current_screen = QApplication.screenAt(cursor_pos)
+
+        # 如果屏幕发生变化，更新缩放比例
+        if current_screen and current_screen != self.current_screen:
+            self.current_screen = current_screen
+            self.current_device_pixel_ratio = current_screen.devicePixelRatio()
+
+        # 如果没有找到屏幕，使用主屏幕
+        if current_screen is None:
+            current_screen = QApplication.primaryScreen()
+            self.current_device_pixel_ratio = (
+                current_screen.devicePixelRatio() if current_screen else 1.0
+            )
+
+        # 获取屏幕的几何区域
+        screen_geometry = current_screen.geometry()
+
+        # 直接使用全局坐标，但需要考虑设备像素比的影响
+        # 在高DPI显示器上，Qt会自动处理坐标转换，所以我们只需要添加偏移量
+        final_x = cursor_pos.x() + 20
+        final_y = cursor_pos.y() + 20
+
+        # 检查并调整位置，确保提示框完全在屏幕内
+        widget_width = self.sizeHint().width()
+        widget_height = self.sizeHint().height()
+
+        # 右边界检查
+        if final_x + widget_width > screen_geometry.right():
+            final_x = cursor_pos.x() - widget_width - 20
+
+        # 下边界检查
+        if final_y + widget_height > screen_geometry.bottom():
+            final_y = cursor_pos.y() - widget_height - 20
+
+        # 确保位置不小于屏幕左上角
+        final_x = max(screen_geometry.left(), final_x)
+        final_y = max(screen_geometry.top(), final_y)
+
         # 更新标签的位置和文本
-        self.move(x + (20 / scale_x), y + (20 / scale_y))
+        self.move(int(final_x), int(final_y))
         if is_microphone_in_use():
-            self.setText(chr(0xF8B1))
             self.setVisible(True)
         else:
             self.setVisible(False)
