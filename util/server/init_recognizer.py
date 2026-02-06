@@ -30,11 +30,11 @@ def init_recognizer(
         jieba.setLogLevel("INFO")
     try:
         # 只有在导入这些模块后才能设置
-        from util.fun_asr_gguf import nano_llama, utils
+        from util.fun_asr_gguf import llama, utils
         from util.fun_asr_gguf.hotword import rag_fast
 
         # 注入 logger，使得 llama.cpp 的日志和 vprint 的日志都通过 passed_logger 发送
-        nano_llama.set_llama_logger(log)
+        llama.set_llama_logger(log)
         utils.set_utils_logger(log)
         rag_fast.set_rag_logger(passed_logger)
 
