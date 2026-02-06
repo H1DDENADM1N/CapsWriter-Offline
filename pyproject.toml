@@ -2,7 +2,7 @@
 name = "CapsWriter-Offline"
 authors = [{ name = "HaujetZhao" }]
 maintainers = [{ name = "H1DDENADM1N" }, { name = "JoanthanWu" }]
-version = "4.0.0"
+version = "5.0.0"
 description = "离线语音输入简/繁体、中译英、字幕转录；在线多译多、云剪贴板等等 （选用SenseVoice模型 支持中粤英日韩多语种）"
 readme = "readme.md"
 requires-python = "==3.13.11"
@@ -10,7 +10,7 @@ dependencies = [
     "loguru>=0.7.3",
     "numpy>=1.22,<2.4",
     "pyside6>=6.10.1",
-    "rich>=14.3.1",
+    "rich>=14.3.2",
     "tomlkit>=0.14.0",
 ]
 
@@ -21,7 +21,7 @@ server = [
     "httpx>=0.28.1",
     "jieba>=0.42.1",
     "numba>=0.63.1",
-    "onnxruntime>=1.23.2",
+    "onnxruntime>=1.24.1",
     "pydub>=0.25.1",
     "pypinyin>=0.55.0",
     "qt-material>=2.17",
@@ -42,7 +42,7 @@ client = [
     "keyboard>=0.13.5",
     "libretranslatepy>=2.1.4",
     "opencc-python-reimplemented>=0.1.7",
-    "openai>=2.16.0",
+    "openai>=2.17.0",
     "psutil>=7.2.2",
     "pycaw>=20251023",
     "pypinyin>=0.55.0",
@@ -55,7 +55,7 @@ client = [
     "typer>=0.21.1",
     "watchdog>=6.0.0",
     "websockets>=16.0",
-    "zai-sdk>=0.2.1",
+    "zai-sdk>=0.2.2",
 ]
 editconfiggui = [
     "keyboard>=0.13.5",
