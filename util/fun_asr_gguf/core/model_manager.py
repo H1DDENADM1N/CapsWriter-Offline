@@ -6,7 +6,7 @@ from typing import Optional
 from loguru import logger as default_logger
 from loguru._logger import Logger
 
-from .. import nano_llama
+from .. import llama
 from ..hotword.manager import get_hotword_manager
 from ..nano_ctc import load_ctc_tokens
 from ..nano_dataclass import ASREngineConfig
@@ -25,8 +25,8 @@ class ModelManager:
         # 运行时对象
         self.encoder_sess = None
         self.ctc_sess = None
-        self.model = None
-        self.ctx = None
+        self.model = None  # LlamaModel 实例
+        self.ctx = None  # LlamaContext 实例
         self.vocab = None
         self.eos_token = None
         self.embedding_table = None
@@ -52,29 +52,33 @@ class ModelManager:
 
             # 2. GGUF
             vprint("[2/6] 加载 GGUF LLM Decoder...", verbose)
-            self.model = nano_llama.load_model(self.config.decoder_gguf_path)
-            if not self.model:
-                raise RuntimeError("Failed to load GGUF model")
-
-            self.vocab = nano_llama.llama_model_get_vocab(self.model)
-            self.eos_token = nano_llama.llama_vocab_eos(self.vocab)
+            self.model = llama.LlamaModel(
+                self.config.decoder_gguf_path, n_gpu_layers=-1
+            )
+            self.vocab = self.model.vocab
+            self.eos_token = self.model.eos_token
 
             # 3. Embeddings
             vprint("[3/6] 加载 Embedding 权重...", verbose)
-            self.embedding_table = nano_llama.get_token_embeddings_gguf(
+            self.embedding_table = llama.get_token_embeddings_gguf(
                 self.config.decoder_gguf_path
             )
 
             # 4. Context
             vprint("[4/6] 创建 LLM 上下文...", verbose)
-            self.ctx = self._create_context()
+            self.ctx = llama.LlamaContext(
+                self.model,
+                n_ctx=2048,
+                n_batch=2048,
+                n_ubatch=self.config.n_ubatch,
+                n_threads=self.config.n_threads,
+                n_threads_batch=self.config.n_threads_batch,
+            )
 
             # 5. CTC & Prompt
             vprint("[5/6] 加载 CTC 词表与 Prompt 构建器...", verbose)
             self.ctc_id2token = load_ctc_tokens(self.config.tokens_path)
-            self.prompt_builder = PromptBuilder(
-                self.vocab, self.embedding_table, self.logger
-            )
+            self.prompt_builder = PromptBuilder(self.vocab, self.embedding_table)
 
             # 6. Hotwords
             vprint("[6/6] 初始化热词管理器...", verbose)
@@ -103,25 +107,19 @@ class ModelManager:
             self.logger.error(f"✗ 初始化失败: {e}", exc_info=True)
             return False
 
-    def _create_context(self):
-        ctx_params = nano_llama.llama_context_default_params()
-        ctx_params.n_ctx = 2048
-        ctx_params.n_batch = 2048
-        ctx_params.n_ubatch = self.config.n_ubatch
-        ctx_params.embeddings = False
-        ctx_params.no_perf = True
-        ctx_params.n_threads = self.config.n_threads or (os.cpu_count() // 2)
-        ctx_params.n_threads_batch = self.config.n_threads_batch or os.cpu_count()
-        return nano_llama.llama_init_from_model(self.model, ctx_params)
-
     def cleanup(self):
         if self.hotword_manager:
             self.hotword_manager.stop_file_watcher()
-        if self.ctx:
-            nano_llama.llama_free(self.ctx)
-            self.ctx = None
-        if self.model:
-            nano_llama.llama_model_free(self.model)
-            nano_llama.llama_backend_free()
-            self._initialized = False
-            self.logger.info("[ASR] 资源已释放")
+
+        # 显式释放高级对象
+        self.ctx = None
+        self.model = None
+
+        # 尝试清理后端
+        try:
+            llama.llama_backend_free()
+        except:
+            pass
+
+        self._initialized = False
+        self.logger.info("[ASR] 资源已释放")

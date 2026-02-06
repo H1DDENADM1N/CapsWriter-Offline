@@ -529,18 +529,18 @@ def recognize(recognizer, task: Task, logger: Optional[Logger] = None) -> Result
         )
 
         # 3. 音频样本验证 - 在传递给识别器之前
-        is_valid, processed_samples = validate_audio_samples(samples, task)
-        if not is_valid:
-            # 如果验证失败，返回空结果
-            _logger.debug(f"任务 {task.task_id[:8]} 音频验证失败，返回空结果")
-            # 返回一个带有基本信息的结果对象
-            result.text = ""
-            result.text_accu = ""
-            result.tokens = []
-            result.timestamps = []
-            return result
-        else:
-            samples = processed_samples  # 获取可能经过处理的samples
+        # is_valid, processed_samples = validate_audio_samples(samples, task)
+        # if not is_valid:
+        #     # 如果验证失败，返回空结果
+        #     _logger.debug(f"任务 {task.task_id[:8]} 音频验证失败，返回空结果")
+        #     # 返回一个带有基本信息的结果对象
+        #     result.text = ""
+        #     result.text_accu = ""
+        #     result.tokens = []
+        #     result.timestamps = []
+        #     return result
+        # else:
+        #     samples = processed_samples  # 获取可能经过处理的samples
 
         # 4. 执行识别
         stream = recognizer.create_stream()

@@ -8,7 +8,7 @@ import numpy as np
 from loguru import logger as default_logger
 from loguru._logger import Logger
 
-from . import nano_llama
+from . import llama
 
 
 class PromptBuilder:
@@ -60,8 +60,8 @@ class PromptBuilder:
         suffix_prompt = "<|im_end|>\n<|im_start|>assistant\n"
 
         # 转换为 embeddings
-        prefix_tokens = nano_llama.text_to_tokens(self.vocab, prefix_prompt)
-        suffix_tokens = nano_llama.text_to_tokens(self.vocab, suffix_prompt)
+        prefix_tokens = llama.text_to_tokens(self.vocab, prefix_prompt)
+        suffix_tokens = llama.text_to_tokens(self.vocab, suffix_prompt)
 
         prefix_embd = self.embedding_table[prefix_tokens].astype(np.float32)
         suffix_embd = self.embedding_table[suffix_tokens].astype(np.float32)

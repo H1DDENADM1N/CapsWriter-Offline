@@ -32,6 +32,9 @@ class TranscriptionOrchestrator:
         start_second: Optional[float] = None,
         duration: Optional[float] = None,
         srt: bool = False,
+        temperature: float = 0.3,
+        top_p: float = 1.0,
+        top_k: int = 50,
     ) -> TranscriptionResult:
         result = TranscriptionResult()
 
@@ -42,12 +45,14 @@ class TranscriptionOrchestrator:
 
                 # 1. Load Audio
                 reporter.print("\n[1] 加载音频...")
+                t_load_s = time.perf_counter()
                 audio = load_audio(
                     audio_path,
                     self.models.config.sample_rate,
                     start_second=start_second,
                     duration=duration,
                 )
+                result.timings.load_audio = time.perf_counter() - t_load_s
 
                 audio_duration = len(audio) / self.models.config.sample_rate
                 reporter.print(f"    音频长度: {audio_duration:.2f}s")
@@ -56,10 +61,22 @@ class TranscriptionOrchestrator:
 
                 base_offset = start_second if start_second else 0.0
 
+                # 开始记录核心处理耗时
+                t_proc_start = time.perf_counter()
+
                 # 2. Strategy Selection
                 if audio_duration <= segment_size + 2.0:
                     self._transcribe_short(
-                        audio, result, language, context, verbose, reporter, base_offset
+                        audio,
+                        result,
+                        language,
+                        context,
+                        verbose,
+                        reporter,
+                        base_offset,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k,
                     )
                 else:
                     self._transcribe_long(
@@ -72,9 +89,12 @@ class TranscriptionOrchestrator:
                         overlap,
                         reporter,
                         base_offset,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k,
                     )
 
-                result.timings.total = time.perf_counter() - t_start
+                result.timings.total = time.perf_counter() - t_proc_start
                 self._print_stats(reporter, result)
 
                 # 3. Export SRT
@@ -100,16 +120,56 @@ class TranscriptionOrchestrator:
                 raise
 
     def _transcribe_short(
-        self, audio, result, language, context, verbose, reporter, base_offset
+        self,
+        audio,
+        result,
+        language,
+        context,
+        verbose,
+        reporter,
+        base_offset,
+        temperature=0.8,
+        top_p=1.0,
+        top_k=50,
     ):
         stream = RecognitionStream()
         stream.accept_waveform(self.models.config.sample_rate, audio)
 
-        d_res = self.decoder.decode_stream(stream, language, context, reporter)
+        d_res = self.decoder.decode_stream(
+            stream,
+            language,
+            context,
+            verbose,
+            reporter,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+        )
 
         # Sync stats
-        for field in ["encode", "ctc", "prepare", "inject", "llm_generate", "align"]:
-            setattr(result.timings, field, getattr(d_res.timings, field))
+        for field in [
+            "encode",
+            "ctc",
+            "prepare",
+            "inject",
+            "llm_generate",
+            "align",
+            "ctc_infer",
+            "ctc_decode",
+            "hotword_verify",
+            "ctc_cast",
+            "ctc_argmax",
+            "ctc_loop",
+        ]:
+            if hasattr(d_res.timings, field):
+                # Don't overwrite if already set (like load_audio which is set in parent)
+                val = getattr(d_res.timings, field)
+                if (
+                    val > 0
+                    or not hasattr(result.timings, field)
+                    or getattr(result.timings, field) == 0
+                ):
+                    setattr(result.timings, field, val)
 
         result.text = d_res.text
         result.segments = []
@@ -142,6 +202,9 @@ class TranscriptionOrchestrator:
         overlap,
         reporter,
         base_offset,
+        temperature=0.8,
+        top_p=1.0,
+        top_k=50,
     ):
         reporter.print("    检测到长音频，开启分段识别模式...", force=True)
         reporter.skip_technical = True
@@ -171,7 +234,16 @@ class TranscriptionOrchestrator:
             stream.accept_waveform(self.models.config.sample_rate, chunk)
 
             # Sub-segment always uses verbose=True for tokens, but reporter will filter tech logs
-            d_res = self.decoder.decode_stream(stream, language, context, reporter)
+            d_res = self.decoder.decode_stream(
+                stream,
+                language,
+                context,
+                True,
+                reporter,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+            )
 
             segment_results.append(
                 {
@@ -188,6 +260,12 @@ class TranscriptionOrchestrator:
             # Accumulate timings
             result.timings.encode += d_res.timings.encode
             result.timings.ctc += d_res.timings.ctc
+            result.timings.ctc_infer += d_res.timings.ctc_infer
+            result.timings.ctc_decode += d_res.timings.ctc_decode
+            result.timings.ctc_cast += getattr(d_res.timings, "ctc_cast", 0)
+            result.timings.ctc_argmax += getattr(d_res.timings, "ctc_argmax", 0)
+            result.timings.ctc_loop += getattr(d_res.timings, "ctc_loop", 0)
+            result.timings.hotword_verify += getattr(d_res.timings, "hotword_verify", 0)
             result.timings.prepare += d_res.timings.prepare
             result.timings.inject += d_res.timings.inject
             result.timings.llm_generate += d_res.timings.llm_generate
