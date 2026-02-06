@@ -97,7 +97,7 @@ def stream_open(logger: Optional[Logger] = None):
             dtype="float32",
             channels=channels,
             callback=record_callback,
-            finished_callback=stream_reopen(logger=_logger),
+            finished_callback=lambda: stream_reopen(logger=_logger),
         )
         stream.start()
 
