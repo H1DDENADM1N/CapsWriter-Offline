@@ -93,7 +93,7 @@ def encode_audio(audio, encoder_sess, padding_secs=30, logger: Optional[Logger] 
     # [Optimize] 检测 Provider，如果是 CPU，跳过固定长度 Padding (因为 CPU 不存在 DML 的重编译开销)
     if encoder_sess.get_providers()[0] == "CPUExecutionProvider":
         _logger.trace("用 cpu ，不填充")
-        padding_secs = 0
+        padding_secs = 1  # 对音频张量进行 padding，使其至少达到 1 秒
 
     target_samples = int(padding_secs * 16000)
 
