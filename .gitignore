@@ -12,3 +12,4 @@ __pycache__
 /202*
 /logs
 /util/fun_asr_gguf/bin
+configs/my config.toml
