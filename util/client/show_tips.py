@@ -21,7 +21,7 @@ def show_mic_tips():
 1. 运行 Server 端，它会载入语音和标点模型（共占用约 2GB 的内存）
 2. 运行 Client 端，它会打开系统默认麦克风（Ctrl+C 可重载麦克风）
 3. 按住 `{Config.speech_recognition_shortcut}` 键，录音开始，松开 `{Config.speech_recognition_shortcut}` 键，录音结束，识别结果立刻被输入
-4. 将音视频文件拖动到 Client 端打开，可以转录生成字幕
+4. 将音视频文件拖动到 `start_client_gui.exe` 打开，可以转录生成字幕
 
 
 特性：
@@ -32,15 +32,14 @@ def show_mic_tips():
 4. 关键词日记：识别结果若以关键词开头，会被记录在 `年份/月份/关键词-日期.md`，关键词在 `keywords.txt` 中定义
 5. 转录功能：将音视频文件拖动到客户端打开，即可转录生成 srt 字幕
 6. 服务端、客户端分离，可以服务多台客户端
-7. 编辑 `config.py` ，可以配置服务端地址、快捷键、录音开关……
+7. 编辑 `config.toml` ，可以配置服务端地址、快捷键、录音开关……
 
 
 注意事项：
 
 1. 当用户安装了 `FFmpeg` 时，会以 `mp3` 格式保存录音；当用户没有装 `FFmpeg` 时，会以 `wav` 格式保存录音
 2. 音视频文件转录功能依赖于 `FFmpeg`
-3. 默认的快捷键是 {Config.speech_recognition_shortcut}，你可以打开 `core_client.py` 进行修改
-4. MacOS 无法监测到 `caps lock` 按键，可改为 `right shift` 按键
+3. 当前快捷键是 {Config.speech_recognition_shortcut}，你可以打开 `config.toml` 进行修改
     """
     console.print(Markdown(markdown), highlight=True)
     with console.resize(width=45):
