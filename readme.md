@@ -1291,7 +1291,7 @@ debug = false
 
 ### FunASR
 
-- [Fun-ASR-Nano-2512-GGUF](https://www.modelscope.cn/models/HaujetZhao/Fun-ASR-Nano-2512-GGUF)
+- [Fun-ASR-Nano-2512-GGUF](https://github.com/HaujetZhao/Fun-ASR-GGUF)
 
 ### Sensevoice
 
