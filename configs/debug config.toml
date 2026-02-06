@@ -20,15 +20,15 @@ model = "FunASR"
 # Paraformer 中英，速度中速，准确率高，内存占用中
 
 vulkan_enable = true
-# 是否启用 Fun-ASR-Nano-GGUF 模型 Vulkan 加速 GPU 推理
+# 是否启用 Fun-ASR-Nano-GGUF-2026-02-06 模型 Vulkan 加速 GPU 推理
 
 vulkan_force_fp32 = false
-# 是否强制 Fun-ASR-Nano-GGUF 模型 FP32 计算（如果 GPU 是 Intel 集显且出现精度溢出，可设为 true）
+# 是否强制 Fun-ASR-Nano-GGUF-2026-02-06 模型 FP32 计算（如果 GPU 是 Intel 集显且出现精度溢出，可设为 true）
 
 expand_funasr_hotwords = false
-# 是否启用 Fun-ASR-Nano-GGUF 模型热词扩展功能
+# 是否启用 Fun-ASR-Nano-GGUF-2026-02-06 模型热词扩展功能
 # 将 .\hot-zh.txt 和 .\hot-en.txt 文件追加到 FunASR 模型热词列表中
-# .\models\Fun-ASR-Nano-GGUF\hot.txt
+# .\models\Fun-ASR-Nano-GGUF-2026-02-06\hot.txt
 # 不具有强制替换性，仅提供给 LLM 作为提示词
 
 addr = "0.0.0.0"
@@ -357,7 +357,7 @@ prompt_style_selection = "english"
 show_prompt_style_changed_notification = true
 # 是否在切换提示风格时显示提示
 
-show_time_label = true
+show_time_label = false
 # 是否在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面
 # 启用后不再进行靠边停靠，改善多显示屏用户体验
 
@@ -693,22 +693,22 @@ api = "http://127.0.0.1:1188/translate"
 model_dir = "models"
 # 模型文件目录
 
-funasr_dir = "models/Fun-ASR-Nano-GGUF"
+funasr_dir = "models/Fun-ASR-Nano-GGUF-2026-02-06"
 # FunASR 路径
 
-funasr_encoder_adaptor_path = "models/Fun-ASR-Nano-GGUF/model/Fun-ASR-Nano-Encoder-Adaptor.fp32.onnx"
+funasr_encoder_adaptor_path = "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx"
 # FunASR encoder_adaptor 模型路径
 
-funasr_ctc_path = "models/Fun-ASR-Nano-GGUF/model/Fun-ASR-Nano-CTC.int8.onnx"
+funasr_ctc_path = "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-CTC.fp16.onnx"
 # CTC 快速预识别
 
-funasr_llm_path = "models/Fun-ASR-Nano-GGUF/model/Fun-ASR-Nano-Decoder.q8_0.gguf"
+funasr_llm_path = "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Decoder.q8_0.gguf"
 # FunASR llm 模型路径
 
-funasr_tokens_path = "models/Fun-ASR-Nano-GGUF/model/tokens.txt"
+funasr_tokens_path = "models/Fun-ASR-Nano-GGUF-2026-02-06/model/tokens.txt"
 # FunASR tokens 路径
 
-funasr_hotwords_path = "models/Fun-ASR-Nano-GGUF/hot.txt"
+funasr_hotwords_path = "models/Fun-ASR-Nano-GGUF-2026-02-06/hot.txt"
 # FunASR 热词文件路径
 
 sensevoice_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx"
