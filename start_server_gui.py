@@ -38,7 +38,7 @@ class GUI(QMainWindow):
         self.start_script()
 
     def init_ui(self):
-        self.resize(425, 425)
+        self.resize(440, 440)
         self.setWindowTitle("CapsWriter-Offline-Server")
         self.setWindowIcon(QIcon("assets/icon/server-icon.ico"))
         self.create_text_box()
