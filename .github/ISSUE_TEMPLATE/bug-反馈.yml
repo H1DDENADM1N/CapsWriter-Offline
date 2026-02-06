@@ -109,7 +109,7 @@ body:
   - type: textarea
     id: logs_note
     attributes:
-      label: 日志文件
+      label: 日志文件（修改 config.toml 中的 logger_level = "TRACE" 然后重启服务端和客户端，复现 Bug ，已获得更多详细日志）
       description: |
         请压缩 `./logs` 文件夹中的所有日志文件为 logs.zip，然后拖拽上传到此处。
         
