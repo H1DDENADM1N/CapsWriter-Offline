@@ -11,3 +11,4 @@ __pycache__
 /202*
 /logs
 /util/fun_asr_gguf/bin
+/models
