@@ -22,13 +22,14 @@ class PromptBuilder:
     ):
         self.vocab = vocab
         self.embedding_table = embedding_table
-        self.logger = logger or default_logger
+        self.logger = logger if logger is not None else default_logger
 
     def build_prompt(
         self,
         hotwords: List[str] = None,
         language: Optional[str] = None,
         context: Optional[str] = None,
+        logger: Optional[Logger] = None,
     ) -> Tuple[np.ndarray, np.ndarray, int, int, str]:
         """
         构建 Prompt Embeddings
@@ -36,6 +37,7 @@ class PromptBuilder:
         Returns:
             (prefix_embd, suffix_embd, n_prefix, n_suffix, prefix_prompt_text)
         """
+        self.logger = logger if logger is not None else default_logger
         # 构建 Prompt
         prefix_prompt = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n"
 

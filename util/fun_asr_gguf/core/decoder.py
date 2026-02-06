@@ -186,7 +186,7 @@ class StreamDecoder:
 
             t_s = time.perf_counter()
             p_embd, s_embd, n_p, n_s, p_text = self.models.prompt_builder.build_prompt(
-                current_hotwords, language, context
+                current_hotwords, language, context, logger=self.logger
             )
 
             # 确保属性已初始化
