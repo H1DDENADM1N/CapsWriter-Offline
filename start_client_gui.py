@@ -447,6 +447,37 @@ class InputDialog_Api_Key:
         dialog.move(frame_geometry.topLeft())
 
 
+class CustomTextEdit(QTextEdit):
+    def __init__(self, parent=None, logger: Optional[Logger] = None):
+        super().__init__(parent)
+        self.logger = logger if logger is not None else default_logger
+        self.font_size = 12
+        self.min_font_size = 5
+        self.max_font_size = 45
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+    def wheelEvent(self, event: QWheelEvent):
+        # 检测Ctrl键是否被按下
+        if event.modifiers() == Qt.ControlModifier:
+            # 获取当前字体大小
+            if self.font().pointSize() < 0:
+                self.font_size = 12
+            else:
+                self.font_size = self.font().pointSize()
+            if event.angleDelta().y() > 0:  # 滚轮向上滚动
+                self.font_size = min(self.max_font_size, self.font_size + 1)
+            else:  # 滚轮向下滚动
+                self.font_size = max(self.min_font_size, self.font_size - 1)
+            # 更新字体大小
+            self.setStyleSheet(f"""
+                font-size: {self.font_size}pt;
+                background-color: rgba(35, 38, 41, 255);
+            """)
+        else:
+            super().wheelEvent(event)
+
+
 class GUI(QMainWindow):
     def __init__(self, logger: Optional[Logger] = None):
         self.logger = logger if logger is not None else default_logger
@@ -890,9 +921,7 @@ class GUI(QMainWindow):
         self.close_button.clicked.connect(self.hide)
 
     def create_text_box(self):
-        self.text_box_client = QTextEdit()
-        self.text_box_client.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.text_box_client.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.text_box_client = CustomTextEdit(parent=self, logger=self.logger)
 
     def create_monitor_checkbox(self):
         # 创建一个QCheckBox控件
@@ -2251,39 +2280,6 @@ class GUI(QMainWindow):
 
         self.logger.trace("[isAtScreenBoundary] 不在屏幕交界处")
         return False
-
-    def wheelEvent(self, event: QWheelEvent):
-        # 设置初始缩放因子
-        self.scale_factor = 1.0
-        # 设置缩放因子的最小和最大值
-        self.min_scale = 0.5
-        self.max_scale = 2.0
-        # 检测Ctrl键是否被按下
-        if event.modifiers() == Qt.ControlModifier:
-            # 计算缩放因子
-            # print(event.angleDelta().y())
-            if event.angleDelta().y() > 0:
-                self.scale_factor *= 1.1  # 放大
-            elif event.angleDelta().y() < 0:
-                self.scale_factor *= 0.9  # 缩小
-            # 限制缩放因子的范围
-            self.scale_factor = max(
-                self.min_scale, min(self.max_scale, self.scale_factor)
-            )
-            # 应用缩放因子到所有控件
-            self.apply_scale_factor()
-        else:
-            super().wheelEvent(event)
-
-    def apply_scale_factor(self):
-        # 应用缩放因子
-        for widget in [self.text_box_client]:
-            # 检查字体大小是否已设置，如果没有设置，则使用一个默认值
-            current_font = widget.font()
-            if current_font.pointSizeF() < 9:
-                current_font.setPointSizeF(9)  # 设置一个默认字体大小
-            current_font.setPointSizeF(current_font.pointSizeF() * self.scale_factor)
-            widget.setFont(current_font)
 
 
 def start_client_gui(logger: Optional[Logger] = None):
