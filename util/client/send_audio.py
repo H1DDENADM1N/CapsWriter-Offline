@@ -93,6 +93,7 @@ async def send_audio():
                     "task_id": task_id,  # 任务 ID
                     "seg_duration": Config.mic_seg_duration,  # 分段长度
                     "seg_overlap": Config.mic_seg_overlap,  # 分段重叠
+                    "realtime_paste_interval": Config.realtime_paste_interval,  # 实时粘贴间隔
                     "is_final": False,  # 是否结束
                     "time_start": time_start,  # 录音起始时间
                     "time_frame": task["time"],  # 该帧时间

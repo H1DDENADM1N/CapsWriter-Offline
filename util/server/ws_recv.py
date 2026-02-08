@@ -58,10 +58,19 @@ async def message_handler(websocket, message, cache: AudioCache):
     task_id = message["task_id"]
     socket_id = str(websocket.id)
 
-    # 获取分段长度（以多长的音频进行识别）
-    seg_duration = message["seg_duration"]
+    # 获取麦克风听写时分段重叠
     seg_overlap = message["seg_overlap"]
-    seg_threshold = seg_duration + seg_overlap * 2
+
+    # 实时粘贴分段长度（从客户端消息获取，用于中间结果）
+    realtime_seg_duration = message.get("realtime_paste_interval", 5)
+    if realtime_seg_duration > 0:
+        # 确保最小值为1秒，避免过于频繁的分段
+        realtime_seg_duration = max(realtime_seg_duration, 1)
+        realtime_seg_overlap = 1
+        realtime_seg_threshold = realtime_seg_duration + realtime_seg_overlap * 2
+    else:
+        # 如果为0，禁用实时粘贴，设置一个很大的阈值
+        realtime_seg_threshold = float("inf")
 
     # 根据来源设置优先级
     if source == "mic":
@@ -89,21 +98,24 @@ async def message_handler(websocket, message, cache: AudioCache):
             )
 
         # 若缓冲已达到分段长度，将片段作为任务提交
-        while len(cache.chunks) / 4 / 16000 >= seg_threshold:
-            data = cache.chunks[: 4 * 16000 * (seg_duration + seg_overlap)]
-            cache.chunks = cache.chunks[4 * 16000 * seg_duration :]
+        while len(cache.chunks) / 4 / 16000 >= realtime_seg_threshold:
+            # 转换为整数，避免浮点数切片错误
+            chunk_size = int(4 * 16000 * (realtime_seg_duration + realtime_seg_overlap))
+            advance_size = int(4 * 16000 * realtime_seg_duration)
+            data = cache.chunks[:chunk_size]
+            cache.chunks = cache.chunks[advance_size:]
             task = Task(
                 source=message["source"],
                 data=data,
                 offset=cache.offset,
                 task_id=task_id,
                 socket_id=socket_id,
-                overlap=seg_overlap,
+                overlap=realtime_seg_overlap,
                 is_final=False,
                 time_start=message["time_start"],
                 time_submit=time.time(),
             )
-            cache.offset += seg_duration
+            cache.offset += realtime_seg_duration
             # 使用优先级队列
             priority_queue.put(task, priority)
 
@@ -175,11 +187,6 @@ async def ws_recv(websocket):
 
     except Exception as e:
         console.print(f"[red]发送欢迎消息失败: {e}[/red]")
-
-    # 设定分段长度
-    seg_duration = 15
-    seg_overlap = 2
-    seg_threshold = seg_duration + seg_overlap * 2
 
     # 片段缓冲区、偏移时长
     cache = AudioCache()
