@@ -1,3 +1,4 @@
+from util.fun_asr_gguf.hotword.rag_fast import _logger
 import time
 from typing import Optional
 
@@ -22,9 +23,16 @@ ONNX 推理底层工具 - DirectML (DML) 性能优化指南
 """
 
 
-def load_onnx_models(encoder_path, ctc_path, padding_secs=30):
+def load_onnx_models(
+    encoder_path,
+    ctc_path,
+    padding_secs=30,
+    directml_enable=True,
+    logger: Optional[Logger] = None,
+):
     """步骤 1: 加载 ONNX 音频编码器和 CTC Head 并进行热身"""
-    # logger.info("\n[1] 加载 ONNX Models (Encoder + CTC)...")
+    _logger = logger if logger is not None else default_logger
+    _logger.trace("\n[1] 加载 ONNX Models (Encoder + CTC)...")
 
     t_start = time.perf_counter()
     session_opts = onnxruntime.SessionOptions()
@@ -35,8 +43,13 @@ def load_onnx_models(encoder_path, ctc_path, padding_secs=30):
     )
 
     providers = ["CPUExecutionProvider"]
-    if "DmlExecutionProvider" in onnxruntime.get_available_providers():
+    if (
+        directml_enable
+        and "DmlExecutionProvider" in onnxruntime.get_available_providers()
+    ):
         providers.insert(0, "DmlExecutionProvider")
+        _logger.debug(f"[1] 加载 ONNX Models (Encoder + CTC) with DML...")
+    _logger.info(f"Onnxruntime providers: {providers}")
 
     encoder_sess = onnxruntime.InferenceSession(
         encoder_path, sess_options=session_opts, providers=providers
@@ -90,9 +103,9 @@ def encode_audio(audio, encoder_sess, padding_secs=30, logger: Optional[Logger] 
     # Padding logic
     actual_samples = len(audio)
 
-    # [Optimize] 检测 Provider，如果是 CPU，跳过固定长度 Padding (因为 CPU 不存在 DML 的重编译开销)
+    # [Optimize] 检测 Provider，如果是 CPU，就按最低限度填充 Padding (因为 CPU 不存在 DML 的重编译开销)
     if encoder_sess.get_providers()[0] == "CPUExecutionProvider":
-        _logger.trace("用 cpu ，不填充")
+        _logger.trace("用 cpu ，按最低限度填充")
         padding_secs = 1  # 对音频张量进行 padding，使其至少达到 1 秒
 
     target_samples = int(padding_secs * 16000)

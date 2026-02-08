@@ -12,6 +12,7 @@ from ..nano_ctc import align_timestamps, decode_ctc
 from ..nano_dataclass import DecodeResult, RecognitionStream, Timings
 from ..nano_onnx import encode_audio
 from .model_manager import ModelManager
+from .windows_notification import show_igpu_overflow_warning
 
 # 全局静默 Reporter，用于默认参数，避免重复创建线程
 _SILENT_REPORTER = DisplayReporter(verbose=False)
@@ -119,6 +120,32 @@ class LLMDecoder:
                 if token_id == self.models.eos_token or token_id in self.stop_tokens:
                     break
                 asr_decoder.push(token_id)
+                if len(asr_decoder.generated_text) > 10:
+                    if len(set(asr_decoder.generated_text[-10:])) == 1:
+                        console.print(
+                            "[bold red]警告: 检测到异常重复输出 (可能由 iGPU 溢出引起)，已熔断。[/bold red]\n",
+                            "[dim]解决方案:[/dim]\n",
+                            "[dim]- 尝试在 config.toml 中禁用 DirectML (directml_enable = false)[/dim]\n",
+                            "[dim]- 尝试在 config.toml 中禁用 Vulkan (vulkan_enable = false)[/dim]\n",
+                            "[dim]- 强制使用 FP32 精度 (vulkan_force_fp32 = true)[/dim]\n",
+                            "[dim]- 调整模型参数或检查硬件资源[/dim]",
+                        )
+                        self.logger.error(
+                            "警告: 检测到异常重复输出 (可能由 iGPU 溢出引起)，已熔断。"
+                        )
+                        self.logger.error("解决方案:")
+                        self.logger.error(
+                            "尝试在 config.toml 中禁用 DirectML (directml_enable = false)"
+                        )
+                        self.logger.error(
+                            "尝试在 config.toml 中禁用 Vulkan (vulkan_enable = false)"
+                        )
+                        self.logger.error(
+                            "强制使用 FP32 精度 (vulkan_force_fp32 = true)"
+                        )
+                        self.logger.error("调整模型参数或检查硬件资源")
+                        show_igpu_overflow_warning()  # # 显示 Windows 弹窗通知
+                        break
 
         asr_decoder.flush()
 

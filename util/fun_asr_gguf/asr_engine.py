@@ -35,6 +35,9 @@ class FunASREngine:
         n_threads: int = None,
         similar_threshold: float = 0.6,
         max_hotwords: int = 10,
+        directml_enable: bool = True,
+        vulkan_enable: bool = True,
+        vulkan_force_fp32: bool = False,
         logger: Optional[Logger] = None,
     ):
         # 封装配置
@@ -49,6 +52,9 @@ class FunASREngine:
             n_threads=n_threads,
             similar_threshold=similar_threshold,
             max_hotwords=max_hotwords,
+            directml_enable=directml_enable,
+            vulkan_enable=vulkan_enable,
+            vulkan_force_fp32=vulkan_force_fp32,
         )
 
         # 初始化组件
@@ -136,6 +142,9 @@ def create_asr_engine(
     n_threads: int = None,
     similar_threshold: float = 0.6,
     max_hotwords: int = 10,
+    directml_enable: bool = True,
+    vulkan_enable: bool = True,
+    vulkan_force_fp32: bool = False,
     verbose: bool = True,
     logger: Optional[Logger] = None,
 ) -> FunASREngine:
@@ -151,6 +160,9 @@ def create_asr_engine(
         n_threads=n_threads,
         similar_threshold=similar_threshold,
         max_hotwords=max_hotwords,
+        directml_enable=directml_enable,
+        vulkan_enable=vulkan_enable,
+        vulkan_force_fp32=vulkan_force_fp32,
         logger=logger,
     )
     if not engine.initialize(verbose=verbose):

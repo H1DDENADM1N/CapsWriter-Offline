@@ -21,8 +21,6 @@ class DebugConfig:
 # 服务端配置
 class ServerConfig:
     model: str = config["server"]["model"]
-    vulkan_enable: bool = config["server"]["vulkan_enable"]
-    vulkan_force_fp32: bool = config["server"]["vulkan_force_fp32"]
     expand_funasr_hotwords: bool = config["server"]["expand_funasr_hotwords"]
     addr: str = config["server"]["addr"]
     speech_recognition_port: str = config["server"]["speech_recognition_port"]
@@ -247,6 +245,9 @@ class FunASRArgs:
     n_threads: int = config["funasr_args"]["n_threads"]
     similar_threshold: float = config["funasr_args"]["similar_threshold"]
     max_hotwords: int = config["funasr_args"]["max_hotwords"]
+    directml_enable: bool = config["funasr_args"]["directml_enable"]
+    vulkan_enable: bool = config["funasr_args"]["vulkan_enable"]
+    vulkan_force_fp32: bool = config["funasr_args"]["vulkan_force_fp32"]
     verbose: bool = config["funasr_args"]["verbose"]
 
 

@@ -152,6 +152,44 @@ class FunASRArgsConfigPage(SiPage):
             self.max_hotwords_linear_attaching.addWidget(self.max_hotwords_set_default)
             self.max_hotwords_linear_attaching.addWidget(self.max_hotwords)
 
+            # 是否启用 DirectML 加速 GPU 推理
+            self.directml_enable = SiSwitch(self)
+            self.directml_enable.setChecked(
+                self.config["funasr_args"]["directml_enable"]
+            )
+            self.directml_enable_linear_attaching = SiOptionCardLinear(self)
+            self.directml_enable_linear_attaching.setTitle(
+                "是否启用 DirectML 加速 GPU 推理"
+            )
+            self.directml_enable_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_settings_light")
+            )
+            self.directml_enable_linear_attaching.addWidget(self.directml_enable)
+
+            # 是否启用 Vulkan 加速 GPU 推理
+            self.vulkan_enable = SiSwitch(self)
+            self.vulkan_enable.setChecked(self.config["funasr_args"]["vulkan_enable"])
+            self.vulkan_enable_linear_attaching = SiOptionCardLinear(self)
+            self.vulkan_enable_linear_attaching.setTitle(
+                "是否启用 Vulkan 加速 GPU 推理"
+            )
+            self.vulkan_enable_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_settings_light")
+            )
+            self.vulkan_enable_linear_attaching.addWidget(self.vulkan_enable)
+
+            # 是否强制 FP32 计算（如果 GPU 是 Intel 集显且出现精度溢出，可设为 true）
+            self.vulkan_force_fp32 = SiSwitch(self)
+            self.vulkan_force_fp32.setChecked(
+                self.config["funasr_args"]["vulkan_force_fp32"]
+            )
+            self.vulkan_force_fp32_linear_attaching = SiOptionCardLinear(self)
+            self.vulkan_force_fp32_linear_attaching.setTitle("是否强制 FP32 计算")
+            self.vulkan_force_fp32_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_settings_light")
+            )
+            self.vulkan_force_fp32_linear_attaching.addWidget(self.vulkan_force_fp32)
+
             # verbose
             self.verbose = SiSwitch(self)
             self.verbose.setChecked(self.config["funasr_args"]["verbose"])
@@ -171,6 +209,9 @@ class FunASRArgsConfigPage(SiPage):
             self.params_container.addWidget(self.n_threads_linear_attaching)
             self.params_container.addWidget(self.similar_threshold_linear_attaching)
             self.params_container.addWidget(self.max_hotwords_linear_attaching)
+            self.params_container.addWidget(self.directml_enable_linear_attaching)
+            self.params_container.addWidget(self.vulkan_enable_linear_attaching)
+            self.params_container.addWidget(self.vulkan_force_fp32_linear_attaching)
             self.params_container.addWidget(self.verbose_linear_attaching)
 
             group.addWidget(self.params_container)
@@ -190,6 +231,13 @@ class FunASRArgsConfigPage(SiPage):
                 self.similar_threshold.value()
             )
             self.config["funasr_args"]["max_hotwords"] = self.max_hotwords.value()
+            self.config["funasr_args"]["directml_enable"] = (
+                self.directml_enable.isChecked()
+            )
+            self.config["funasr_args"]["vulkan_enable"] = self.vulkan_enable.isChecked()
+            self.config["funasr_args"]["vulkan_force_fp32"] = (
+                self.vulkan_force_fp32.isChecked()
+            )
             self.config["funasr_args"]["verbose"] = self.verbose.isChecked()
 
         def print_config():
@@ -222,6 +270,21 @@ class FunASRArgsConfigPage(SiPage):
                 "max_hotwords",
                 clearly_type(self.config["funasr_args"]["max_hotwords"]),
                 str(self.config["funasr_args"]["max_hotwords"]),
+            )
+            table.add_row(
+                "directml_enable",
+                clearly_type(self.config["funasr_args"]["directml_enable"]),
+                str(self.config["funasr_args"]["directml_enable"]),
+            )
+            table.add_row(
+                "vulkan_enable",
+                clearly_type(self.config["funasr_args"]["vulkan_enable"]),
+                str(self.config["funasr_args"]["vulkan_enable"]),
+            )
+            table.add_row(
+                "vulkan_force_fp32",
+                clearly_type(self.config["funasr_args"]["vulkan_force_fp32"]),
+                str(self.config["funasr_args"]["vulkan_force_fp32"]),
             )
             table.add_row(
                 "verbose",

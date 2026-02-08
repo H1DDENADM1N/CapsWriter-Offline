@@ -5,8 +5,8 @@ Windows 原生弹窗通知工具模块
 """
 
 import ctypes
-import time
 import threading
+import time
 from typing import Optional
 
 # Windows API 常量定义
@@ -77,6 +77,7 @@ class NotificationManager:
         message = (
             "警告: 服务端 FunASR-GGUF 转录文件时检测到异常重复输出（可能由 iGPU 溢出引起），已熔断。\n\n"
             "解决方案:\n"
+            "• 尝试在 config.toml 中禁用 DirectML (directml_enable = false)\n"
             "• 尝试在 config.toml 中禁用 Vulkan (vulkan_enable = false)\n"
             "• 强制使用 FP32 精度 (vulkan_force_fp32 = true)\n"
             "• 调整模型参数或检查硬件资源"
@@ -85,9 +86,7 @@ class NotificationManager:
         try:
             # 在单独的线程中显示弹窗，避免阻塞主程序
             thread = threading.Thread(
-                target=self._show_message_box,
-                args=(message, title),
-                daemon=True
+                target=self._show_message_box, args=(message, title), daemon=True
             )
             thread.start()
 

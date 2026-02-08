@@ -475,7 +475,7 @@ def load_model(model_path: str):
         model: llama_model 指针
     """
     lib_dir = Path(__file__).parent / "bin"
-    model_path = Path(model_path).resolve()
+    model_path = Path(model_path)
     model_rel = Path(relpath(model_path, lib_dir))
 
     # 跳转到 dll 所在目录，并将其加到 Path
@@ -628,7 +628,7 @@ class LlamaContext:
 
         if n_threads_batch:
             params.n_threads_batch = n_threads_batch
-        elif hasattr(params, 'n_threads_batch'):
+        elif hasattr(params, "n_threads_batch"):
             # 仅当结构体中有此字段时才设置
             params.n_threads_batch = os.cpu_count()
 

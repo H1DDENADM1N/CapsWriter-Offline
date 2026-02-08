@@ -273,7 +273,7 @@ class ModelPathsConfigPage(SiPage):
                         "MAIN_WINDOW"
                     ].LayerRightMessageSidebar().send(
                         title="FunASR encoder_adaptor 模型路径 模型位置错误",
-                        text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx",
+                        text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx",
                         msg_type=3,
                         icon=SiGlobal.siui.iconpack.get("ic_fluent_warning_regular"),
                         fold_after=5000,
@@ -281,9 +281,9 @@ class ModelPathsConfigPage(SiPage):
                 except ValueError:
                     pass
                 self.funasr_encoder_adaptor_path_selector.path_input.lineEdit().setText(
-                    "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx"
+                    "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx"
                 )
-                self.funasr_encoder_adaptor_path = "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx"
+                self.funasr_encoder_adaptor_path = "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx"
         is_valid, error = ValueCheck.is_file_exist(self.funasr_encoder_adaptor_path)
 
         if is_valid:
@@ -295,12 +295,12 @@ class ModelPathsConfigPage(SiPage):
 
         if error:
             self.funasr_encoder_adaptor_path_selector.path_input.lineEdit().setText(
-                "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx"
+                "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx"
             )
             try:
                 SiGlobal.siui.windows["MAIN_WINDOW"].LayerRightMessageSidebar().send(
                     title="FunASR encoder_adaptor 模型路径 模型位置错误",
-                    text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx",
+                    text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx",
                     msg_type=3,
                     icon=SiGlobal.siui.iconpack.get("ic_fluent_warning_regular"),
                     fold_after=5000,
@@ -319,7 +319,7 @@ class ModelPathsConfigPage(SiPage):
                         "MAIN_WINDOW"
                     ].LayerRightMessageSidebar().send(
                         title="FunASR CTC 快速预识别 模型位置错误",
-                        text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-CTC.fp16.onnx",
+                        text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-CTC.fp16.onnx",
                         msg_type=3,
                         icon=SiGlobal.siui.iconpack.get("ic_fluent_warning_regular"),
                         fold_after=5000,
@@ -327,9 +327,9 @@ class ModelPathsConfigPage(SiPage):
                 except ValueError:
                     pass
                 self.funasr_ctc_path_selector.path_input.lineEdit().setText(
-                    "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-CTC.fp16.onnx"
+                    "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-CTC.fp16.onnx"
                 )
-                self.funasr_ctc_path = "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-CTC.fp16.onnx"
+                self.funasr_ctc_path = "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-CTC.fp16.onnx"
         is_valid, error = ValueCheck.is_file_exist(self.funasr_ctc_path)
 
         if is_valid:
@@ -339,12 +339,12 @@ class ModelPathsConfigPage(SiPage):
 
         if error:
             self.funasr_ctc_path_selector.path_input.lineEdit().setText(
-                "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-CTC.fp16.onnx"
+                "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-CTC.fp16.onnx"
             )
             try:
                 SiGlobal.siui.windows["MAIN_WINDOW"].LayerRightMessageSidebar().send(
                     title="FunASR CTC 快速预识别 模型位置错误",
-                    text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-CTC.fp16.onnx",
+                    text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-CTC.fp16.onnx",
                     msg_type=3,
                     icon=SiGlobal.siui.iconpack.get("ic_fluent_warning_regular"),
                     fold_after=5000,
@@ -363,7 +363,7 @@ class ModelPathsConfigPage(SiPage):
                         "MAIN_WINDOW"
                     ].LayerRightMessageSidebar().send(
                         title="FunASR llm 模型路径 模型位置错误",
-                        text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Decoder.q8_0.gguf",
+                        text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Decoder.q8_0.gguf",
                         msg_type=3,
                         icon=SiGlobal.siui.iconpack.get("ic_fluent_warning_regular"),
                         fold_after=5000,
@@ -371,9 +371,9 @@ class ModelPathsConfigPage(SiPage):
                 except ValueError:
                     pass
                 self.funasr_llm_path_selector.path_input.lineEdit().setText(
-                    "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Decoder.q8_0.gguf"
+                    "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Decoder.q8_0.gguf"
                 )
-                self.funasr_llm_path = "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Decoder.q8_0.gguf"
+                self.funasr_llm_path = "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Decoder.q8_0.gguf"
         is_valid, error = ValueCheck.is_file_exist(self.funasr_llm_path)
 
         if is_valid:
@@ -383,12 +383,12 @@ class ModelPathsConfigPage(SiPage):
 
         if error:
             self.funasr_llm_path_selector.path_input.lineEdit().setText(
-                "models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Decoder.q8_0.gguf"
+                "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Decoder.q8_0.gguf"
             )
             try:
                 SiGlobal.siui.windows["MAIN_WINDOW"].LayerRightMessageSidebar().send(
                     title="FunASR llm 模型路径 模型位置错误",
-                    text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Decoder.q8_0.gguf",
+                    text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Decoder.q8_0.gguf",
                     msg_type=3,
                     icon=SiGlobal.siui.iconpack.get("ic_fluent_warning_regular"),
                     fold_after=5000,
@@ -407,7 +407,7 @@ class ModelPathsConfigPage(SiPage):
                         "MAIN_WINDOW"
                     ].LayerRightMessageSidebar().send(
                         title="FunASR tokens 路径 模型位置错误",
-                        text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-06/model/tokens.txt",
+                        text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-08/model/tokens.txt",
                         msg_type=3,
                         icon=SiGlobal.siui.iconpack.get("ic_fluent_warning_regular"),
                         fold_after=5000,
@@ -415,10 +415,10 @@ class ModelPathsConfigPage(SiPage):
                 except ValueError:
                     pass
                 self.funasr_tokens_path_selector.path_input.lineEdit().setText(
-                    "models/Fun-ASR-Nano-GGUF-2026-02-06/model/tokens.txt"
+                    "models/Fun-ASR-Nano-GGUF-2026-02-08/model/tokens.txt"
                 )
                 self.funasr_tokens_path = (
-                    "models/Fun-ASR-Nano-GGUF-2026-02-06/model/tokens.txt"
+                    "models/Fun-ASR-Nano-GGUF-2026-02-08/model/tokens.txt"
                 )
         is_valid, error = ValueCheck.is_file_exist(self.funasr_tokens_path)
 
@@ -431,12 +431,12 @@ class ModelPathsConfigPage(SiPage):
 
         if error:
             self.funasr_tokens_path_selector.path_input.lineEdit().setText(
-                "models/Fun-ASR-Nano-GGUF-2026-02-06/model/tokens.txt"
+                "models/Fun-ASR-Nano-GGUF-2026-02-08/model/tokens.txt"
             )
             try:
                 SiGlobal.siui.windows["MAIN_WINDOW"].LayerRightMessageSidebar().send(
                     title="FunASR tokens 路径 模型位置错误",
-                    text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-06/model/tokens.txt",
+                    text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-08/model/tokens.txt",
                     msg_type=3,
                     icon=SiGlobal.siui.iconpack.get("ic_fluent_warning_regular"),
                     fold_after=5000,
@@ -455,7 +455,7 @@ class ModelPathsConfigPage(SiPage):
                         "MAIN_WINDOW"
                     ].LayerRightMessageSidebar().send(
                         title="FunASR 热词文件路径 模型位置错误",
-                        text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-06/hot.txt",
+                        text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-08/hot.txt",
                         msg_type=3,
                         icon=SiGlobal.siui.iconpack.get("ic_fluent_warning_regular"),
                         fold_after=5000,
@@ -463,10 +463,10 @@ class ModelPathsConfigPage(SiPage):
                 except ValueError:
                     pass
                 self.funasr_hotwords_path_selector.path_input.lineEdit().setText(
-                    "models/Fun-ASR-Nano-GGUF-2026-02-06/hot.txt"
+                    "models/Fun-ASR-Nano-GGUF-2026-02-08/hot.txt"
                 )
                 self.funasr_hotwords_path = (
-                    "models/Fun-ASR-Nano-GGUF-2026-02-06/hot.txt"
+                    "models/Fun-ASR-Nano-GGUF-2026-02-08/hot.txt"
                 )
         is_valid, error = ValueCheck.is_file_exist(self.funasr_hotwords_path)
 
@@ -479,12 +479,12 @@ class ModelPathsConfigPage(SiPage):
 
         if error:
             self.funasr_hotwords_path_selector.path_input.lineEdit().setText(
-                "models/Fun-ASR-Nano-GGUF-2026-02-06/hot.txt"
+                "models/Fun-ASR-Nano-GGUF-2026-02-08/hot.txt"
             )
             try:
                 SiGlobal.siui.windows["MAIN_WINDOW"].LayerRightMessageSidebar().send(
                     title="FunASR 热词文件路径 模型位置错误",
-                    text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-06/hot.txt",
+                    text="已恢复默认值：models/Fun-ASR-Nano-GGUF-2026-02-08/hot.txt",
                     msg_type=3,
                     icon=SiGlobal.siui.iconpack.get("ic_fluent_warning_regular"),
                     fold_after=5000,
@@ -821,7 +821,7 @@ class ModelPathsConfigPage(SiPage):
             self.funasr_encoder_adaptor_path_selector = SelectPath(
                 self,
                 title="FunASR encoder_adaptor 模型路径",
-                label_text='默认值："models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx"',
+                label_text='默认值："models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx"',
                 default_path=self.config["model_paths"]["funasr_encoder_adaptor_path"],
                 file_filter="*.onnx",
                 mode="file",
@@ -830,7 +830,7 @@ class ModelPathsConfigPage(SiPage):
             self.funasr_ctc_path_selector = SelectPath(
                 self,
                 title="CTC 快速预识别 模型路径",
-                label_text='默认值："models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-CTC.fp32.onnx"',
+                label_text='默认值："models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-CTC.fp32.onnx"',
                 default_path=self.config["model_paths"]["funasr_ctc_path"],
                 file_filter="*.onnx",
                 mode="file",
@@ -839,7 +839,7 @@ class ModelPathsConfigPage(SiPage):
             self.funasr_llm_path_selector = SelectPath(
                 self,
                 title="FunASR llm 模型路径",
-                label_text='默认值："models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Decoder.q8_0.gguf"',
+                label_text='默认值："models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Decoder.q8_0.gguf"',
                 default_path=self.config["model_paths"]["funasr_llm_path"],
                 file_filter="*.gguf",
                 mode="file",
@@ -848,7 +848,7 @@ class ModelPathsConfigPage(SiPage):
             self.funasr_tokens_path_selector = SelectPath(
                 self,
                 title="FunASR tokens 模型路径",
-                label_text='默认值："models/Fun-ASR-Nano-GGUF-2026-02-06/model/Fun-ASR-Nano-Tokens.txt"',
+                label_text='默认值："models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Tokens.txt"',
                 default_path=self.config["model_paths"]["funasr_tokens_path"],
                 file_filter="*.txt",
             )
@@ -856,7 +856,7 @@ class ModelPathsConfigPage(SiPage):
             self.funasr_hotwords_path_selector = SelectPath(
                 self,
                 title="FunASR 热词文件路径",
-                label_text='默认值："models/Fun-ASR-Nano-GGUF-2026-02-06/hot.txt"',
+                label_text='默认值："models/Fun-ASR-Nano-GGUF-2026-02-08/hot.txt"',
                 default_path=self.config["model_paths"]["funasr_hotwords_path"],
                 file_filter="*.txt",
             )

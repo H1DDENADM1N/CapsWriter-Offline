@@ -4,7 +4,7 @@ uv.lock
 __pycache__
 /.vscode
 /models/Fun-ASR-Nano-GGUF
-/models/Fun-ASR-Nano-GGUF-2026-02-06
+/models/Fun-ASR-Nano-GGUF-2026-02-08
 /models/Helsinki-NLP--opus-mt-zh-en
 /models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17
 /models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12

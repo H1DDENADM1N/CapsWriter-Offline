@@ -129,29 +129,9 @@ async def main(logger: Optional[Logger] = None):
     await asyncio.gather(recv, send)
 
 
-def apply_vulkan_config(logger: Optional[Logger] = None):
-    """根据配置应用 Vulkan 相关的环境变量"""
-    _logger = logger if logger is not None else default_logger
-    if not Config.vulkan_enable:
-        # 强制禁用 Vulkan 推理
-        os.environ["VK_ICD_FILENAMES"] = "none"
-        _logger.info("GPU 加速: 已禁用 (vulkan_enable=False)")
-    else:
-        # 启用 Vulkan 并根据配置调整精度
-        if Config.vulkan_force_fp32:
-            os.environ["GGML_VK_DISABLE_F16"] = "1"
-            _logger.info("GPU 加速: 已启用 Vulkan (强制 FP32 模式)")
-        else:
-            # 清理环境变量，确保不残留之前的设置
-            os.environ.pop("GGML_VK_DISABLE_F16", None)
-            _logger.info("GPU 加速: 已启用 Vulkan (自动精度模式)")
-
-
 def init(logger: Optional[Logger] = None):
     _logger = logger if logger is not None else default_logger
     try:
-        if Config.model == "FunASR":
-            apply_vulkan_config(logger=_logger)
         asyncio.run(main(logger=_logger))
     except KeyboardInterrupt:  # Ctrl-C 停止
         console.print("\n再见！")

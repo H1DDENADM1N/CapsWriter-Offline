@@ -2,7 +2,7 @@
 name = "CapsWriter-Offline"
 authors = [{ name = "HaujetZhao" }]
 maintainers = [{ name = "H1DDENADM1N" }, { name = "JoanthanWu" }]
-version = "5.0.0"
+version = "6.0.0"
 description = "离线语音输入简/繁体、中译英、字幕转录；在线多译多、云剪贴板等等 （选用SenseVoice模型 支持中粤英日韩多语种）"
 readme = "readme.md"
 requires-python = "==3.13.11"
@@ -21,7 +21,7 @@ server = [
     "httpx>=0.28.1",
     "jieba>=0.42.1",
     "numba>=0.63.1",
-    "onnxruntime>=1.24.1",
+    "onnxruntime-directml>=1.23.0",
     "pydub>=0.25.1",
     "pypinyin>=0.55.0",
     "qt-material>=2.17",

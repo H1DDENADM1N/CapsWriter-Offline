@@ -270,32 +270,6 @@ class ServerConfigPage(SiPage):
             )
             self.model_linear_attaching.addWidget(self.model)
 
-            # 是否启用 Fun-ASR-Nano-GGUF 模型 Vulkan 加速 GPU 推理
-            self.vulkan_enable = SiSwitch(self)
-            self.vulkan_enable.setChecked(self.config["server"]["vulkan_enable"])
-            self.vulkan_enable_linear_attaching = SiOptionCardLinear(self)
-            self.vulkan_enable_linear_attaching.setTitle(
-                "是否启用 Fun-ASR-Nano-GGUF 模型 Vulkan 加速 GPU 推理"
-            )
-            self.vulkan_enable_linear_attaching.load(
-                SiGlobal.siui.iconpack.get("ic_fluent_settings_light")
-            )
-            self.vulkan_enable_linear_attaching.addWidget(self.vulkan_enable)
-
-            # 是否强制 Fun-ASR-Nano-GGUF 模型 FP32 计算（如果 GPU 是 Intel 集显且出现精度溢出，可设为 true）
-            self.vulkan_force_fp32 = SiSwitch(self)
-            self.vulkan_force_fp32.setChecked(
-                self.config["server"]["vulkan_force_fp32"]
-            )
-            self.vulkan_force_fp32_linear_attaching = SiOptionCardLinear(self)
-            self.vulkan_force_fp32_linear_attaching.setTitle(
-                "是否强制 Fun-ASR-Nano-GGUF 模型 FP32 计算"
-            )
-            self.vulkan_force_fp32_linear_attaching.load(
-                SiGlobal.siui.iconpack.get("ic_fluent_settings_light")
-            )
-            self.vulkan_force_fp32_linear_attaching.addWidget(self.vulkan_force_fp32)
-
             # 是否启用 Fun-ASR-Nano-GGUF 模型热词扩展功能
             # 将 .\hot-zh.txt 和 .\hot-en.txt 文件追加到 FunASR 模型热词列表中
             # .\models\Fun-ASR-Nano-GGUF\hot.txt
@@ -374,12 +348,6 @@ class ServerConfigPage(SiPage):
             self.speech_recognition_container.setFixedWidth(700)
             self.speech_recognition_container.setAdjustWidgetsSize(True)
             self.speech_recognition_container.addWidget(self.model_linear_attaching)
-            self.speech_recognition_container.addWidget(
-                self.vulkan_enable_linear_attaching
-            )
-            self.speech_recognition_container.addWidget(
-                self.vulkan_force_fp32_linear_attaching
-            )
             self.speech_recognition_container.addWidget(
                 self.expand_funasr_hotwords_linear_attaching
             )
@@ -480,18 +448,12 @@ class ServerConfigPage(SiPage):
     def model_changed(self):
         if self.model.value_label.text() == "Paraformer":
             self.format_punc_linear_attaching.show()
-            self.vulkan_enable_linear_attaching.hide()
-            self.vulkan_force_fp32_linear_attaching.hide()
             self.expand_funasr_hotwords_linear_attaching.hide()
         elif self.model.value_label.text() == "Sensevoice":
             self.format_punc_linear_attaching.hide()
-            self.vulkan_enable_linear_attaching.hide()
-            self.vulkan_force_fp32_linear_attaching.hide()
             self.expand_funasr_hotwords_linear_attaching.hide()
         else:
             self.format_punc_linear_attaching.hide()
-            self.vulkan_enable_linear_attaching.show()
-            self.vulkan_force_fp32_linear_attaching.show()
             self.expand_funasr_hotwords_linear_attaching.show()
 
     def start_offline_translate_server_changed(self):
@@ -509,10 +471,6 @@ class ServerConfigPage(SiPage):
     def save_config(self):
         def get_value_from_gui():
             self.config["server"]["model"] = self.model.value_label.text()
-            self.config["server"]["vulkan_enable"] = self.vulkan_enable.isChecked()
-            self.config["server"]["vulkan_force_fp32"] = (
-                self.vulkan_force_fp32.isChecked()
-            )
             self.config["server"]["expand_funasr_hotwords"] = (
                 self.expand_funasr_hotwords.isChecked()
             )
@@ -553,16 +511,6 @@ class ServerConfigPage(SiPage):
                 "model",
                 clearly_type(self.config["server"]["model"]),
                 str(self.config["server"]["model"]),
-            )
-            table.add_row(
-                "vulkan_enable",
-                clearly_type(self.config["server"]["vulkan_enable"]),
-                str(self.config["server"]["vulkan_enable"]),
-            )
-            table.add_row(
-                "vulkan_force_fp32",
-                clearly_type(self.config["server"]["vulkan_force_fp32"]),
-                str(self.config["server"]["vulkan_force_fp32"]),
             )
             table.add_row(
                 "expand_funasr_hotwords",
