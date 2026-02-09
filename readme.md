@@ -437,7 +437,7 @@ model = "FunASR"
 expand_funasr_hotwords = false
 # 是否启用 Fun-ASR-Nano-GGUF-2026-02-08 模型热词扩展功能
 # 将 .\hot-zh.txt 和 .\hot-en.txt 文件追加到 FunASR 模型热词列表中
-# .\models\Fun-ASR-Nano-GGUF-2026-02-08\hot.txt
+# .\models\Fun-ASR-Nano-GGUF-2026-02-09\hot.txt
 # 不具有强制替换性，仅提供给 LLM 作为提示词
 
 addr = "0.0.0.0"
@@ -1110,22 +1110,22 @@ api = "http://127.0.0.1:1188/translate"
 model_dir = "models"
 # 模型文件目录
 
-funasr_dir = "models/Fun-ASR-Nano-GGUF-2026-02-08"
+funasr_dir = "models/Fun-ASR-Nano-GGUF-2026-02-09"
 # FunASR 路径
 
-funasr_encoder_adaptor_path = "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Encoder-Adaptor.fp16.onnx"
+funasr_encoder_adaptor_path = "models/Fun-ASR-Nano-GGUF-2026-02-09/model/Fun-ASR-Nano-Encoder-Adaptor.int8.onnx"
 # FunASR encoder_adaptor 模型路径
 
-funasr_ctc_path = "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-CTC.fp16.onnx"
+funasr_ctc_path = "models/Fun-ASR-Nano-GGUF-2026-02-09/model/Fun-ASR-Nano-CTC.int8.onnx"
 # CTC 快速预识别
 
-funasr_llm_path = "models/Fun-ASR-Nano-GGUF-2026-02-08/model/Fun-ASR-Nano-Decoder.q8_0.gguf"
+funasr_llm_path = "models/Fun-ASR-Nano-GGUF-2026-02-09/model/Fun-ASR-Nano-Decoder.q8_0.gguf"
 # FunASR llm 模型路径
 
-funasr_tokens_path = "models/Fun-ASR-Nano-GGUF-2026-02-08/model/tokens.txt"
+funasr_tokens_path = "models/Fun-ASR-Nano-GGUF-2026-02-09/model/tokens.txt"
 # FunASR tokens 路径
 
-funasr_hotwords_path = "models/Fun-ASR-Nano-GGUF-2026-02-08/hot.txt"
+funasr_hotwords_path = "models/Fun-ASR-Nano-GGUF-2026-02-09/hot.txt"
 # FunASR 热词文件路径
 
 sensevoice_path = "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx"
@@ -1179,8 +1179,10 @@ similar_threshold = 0.6
 max_hotwords = 20
 # 每次替换的最大热词数
 
-directml_enable = true
+directml_enable = false
 # 是否启用 DirectML 加速 GPU 推理
+# 默认禁用，兼顾 AMD 显卡 用户
+# 建议非 AMD 显卡 用户自行手动启用
 
 vulkan_enable = true
 # 是否启用 Vulkan 加速 GPU 推理

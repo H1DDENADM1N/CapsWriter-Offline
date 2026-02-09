@@ -159,7 +159,8 @@ class FunASRArgsConfigPage(SiPage):
             )
             self.directml_enable_linear_attaching = SiOptionCardLinear(self)
             self.directml_enable_linear_attaching.setTitle(
-                "是否启用 DirectML 加速 GPU 推理"
+                "是否启用 DirectML 加速 GPU 推理",
+                "默认禁用，兼顾 AMD 显卡 用户\n建议非 AMD 显卡 用户自行手动启用",
             )
             self.directml_enable_linear_attaching.load(
                 SiGlobal.siui.iconpack.get("ic_fluent_settings_light")
