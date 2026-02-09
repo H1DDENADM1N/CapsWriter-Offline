@@ -85,6 +85,10 @@ async def recv_result(logger: Optional[Logger] = None):
             is_final = message.get("is_final", True)  # 默认为True以向后兼容
             asr_text = message["text"]
 
+            # 静音
+            if asr_text == r"/sil":
+                asr_text = ""
+
             if not is_final:
                 # 中间结果：根据配置决定是否实时粘贴
                 if paste_interval > 0 and asr_text and asr_text.strip() != "":

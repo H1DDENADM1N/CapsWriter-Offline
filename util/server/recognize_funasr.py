@@ -410,72 +410,6 @@ def _process_simple_merge(
         _logger.warning(f"简单文本拼接失败: {e}")
 
 
-def is_silence(samples, samplerate, energy_threshold=1e-4, max_silence_ms=500):
-    """
-    检测音频是否为静音
-
-    Args:
-        samples: 音频样本
-        samplerate: 采样率
-        energy_threshold: 能量阈值
-        max_silence_ms: 最大允许静音时长（毫秒）
-
-    Returns:
-        bool: 是否为静音
-    """
-    if len(samples) == 0:
-        return True
-
-    # 计算能量
-    energy = np.sqrt(np.mean(samples**2))
-
-    # 如果能量低于阈值
-    if energy < energy_threshold:
-        return True
-
-    return False
-
-
-def validate_audio_samples(
-    samples, task, min_energy_threshold=1e-4, min_duration_ms=100
-):
-    """
-    验证音频样本的有效性，防止传入无效数据给识别器
-
-    Args:
-        samples: 音频样本数组
-        task: 任务对象
-        min_energy_threshold: 最小能量阈值，低于此值视为静音
-        min_duration_ms: 最小有效时长（毫秒）
-
-    Returns:
-        tuple: (is_valid, processed_samples)
-    """
-    # 检查样本是否为空
-    if samples is None or len(samples) == 0:
-        return False, None
-
-    # 计算音频时长（毫秒）
-    duration_ms = len(samples) / task.samplerate * 1000
-    if duration_ms < min_duration_ms:
-        # console.print(f"任务 {task.task_id[:8]} 音频时长过短 ({duration_ms:.1f}ms < {min_duration_ms}ms)，跳过识别")
-        return False, None
-
-    # 计算音频能量（均方根）
-    energy = np.sqrt(np.mean(samples**2))
-
-    # 检查是否是静音
-    if energy < min_energy_threshold:
-        # console.print(f"任务 {task.task_id[:8]} 音频能量过低 ({energy:.6f} < {min_energy_threshold:.6f})，视为静音")
-        return False, None
-
-    # 检查是否全是NaN或Inf
-    if np.any(np.isnan(samples)) or np.any(np.isinf(samples)):
-        return False, None
-
-    return True, samples
-
-
 def recognize(recognizer, task: Task, logger: Optional[Logger] = None) -> Result:
     """
     识别单个音频片段并更新结果
@@ -506,19 +440,6 @@ def recognize(recognizer, task: Task, logger: Optional[Logger] = None) -> Result
         # 2. 解码音频
         samples = np.frombuffer(task.data, dtype=np.float32)
         duration = len(samples) / task.samplerate
-        # 静音检测
-        if is_silence(samples, task.samplerate):
-            _logger.debug(f"任务 {task.task_id[:8]} 检测到静音，跳过识别")
-
-            # 更新时长但不处理文本
-            result.duration += duration - task.overlap
-            if task.is_final:
-                result.duration += task.overlap
-                result = _results.pop(task.task_id)
-                result.is_final = True
-
-            return result
-
         result.duration += duration - task.overlap
         if task.is_final:
             result.duration += task.overlap
@@ -528,21 +449,7 @@ def recognize(recognizer, task: Task, logger: Optional[Logger] = None) -> Result
             f"offset={task.offset:.2f}s, is_final={task.is_final}"
         )
 
-        # 3. 音频样本验证 - 在传递给识别器之前
-        is_valid, processed_samples = validate_audio_samples(samples, task)
-        if not is_valid:
-            # 如果验证失败，返回空结果
-            _logger.debug(f"任务 {task.task_id[:8]} 音频验证失败，返回空结果")
-            # 返回一个带有基本信息的结果对象
-            result.text = ""
-            result.text_accu = ""
-            result.tokens = []
-            result.timestamps = []
-            return result
-        else:
-            samples = processed_samples  # 获取可能经过处理的samples
-
-        # 4. 执行识别
+        # 3. 执行识别
         stream = recognizer.create_stream()
         stream.accept_waveform(task.samplerate, samples)
         recognizer.decode_stream(stream)
@@ -552,10 +459,10 @@ def recognize(recognizer, task: Task, logger: Optional[Logger] = None) -> Result
         result.time_submit = task.time_submit
         result.time_complete = time.time()
 
-        # 5. 简单文本拼接
+        # 4. 简单文本拼接
         _process_simple_merge(result, stream.result.text, logger=_logger)
 
-        # 6. 时间戳拼接（使用 SequenceMatcher 策略）
+        # 5. 时间戳拼接（使用 SequenceMatcher 策略）
         try:
             # 安全处理当前片段的 tokens
             new_tokens = process_tokens_safely(stream.result.tokens)
@@ -578,7 +485,7 @@ def recognize(recognizer, task: Task, logger: Optional[Logger] = None) -> Result
         except (UnicodeDecodeError, UnicodeError) as e:
             console.print(f"\n[red]编码错误: {e}")
 
-        # 7. 生成 text_accu
+        # 6. 生成 text_accu
         result.text_accu = "".join(result.tokens)
 
         # 如果不是最终结果，直接返回
@@ -586,7 +493,7 @@ def recognize(recognizer, task: Task, logger: Optional[Logger] = None) -> Result
             _logger.debug(f"中间结果: {result.text[:30]}...")
             return result
 
-        # 8. 最终处理
+        # 7. 最终处理
         result.text = format_text(result.text)
         result.text_accu = format_text(result.text_accu)
         result = _results.pop(task.task_id)

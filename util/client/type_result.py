@@ -10,6 +10,9 @@ from util.config import ClientConfig as Config
 
 
 async def type_result(text):
+    if text == "":
+        return
+
     # 模拟粘贴
     if Config.paste:
         console.print(f"模拟粘贴：{text}")

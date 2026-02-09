@@ -88,5 +88,7 @@ if __name__ == "__main__":
     更新热词词典(热词文本)
 
     res = 热词替换("这款手机有5000毫安时的大电池")
+    console.print(f"{res}")
 
+    res = 热词替换("第一段回车第二段回车")
     console.print(f"{res}")
