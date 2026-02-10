@@ -23,3 +23,6 @@
 
 # 消除 FunASR 静音标志
 \/sil     =     
+
+# 消除 FunASR 呼吸标志
+\[breath\]  =    
