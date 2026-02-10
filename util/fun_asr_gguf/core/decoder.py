@@ -1,7 +1,7 @@
 import ctypes
 import time
 from typing import Dict, List, Optional, Tuple
-
+import re
 import numpy as np
 from loguru import logger as default_logger
 from loguru._logger import Logger
@@ -110,46 +110,36 @@ class LLMDecoder:
             temperature=temperature, top_k=top_k, top_p=top_p, seed=seed
         ) as smpl:
             for _ in range(n_predict):
-                # 使用面向对象接口采样
+                # 采样
                 token_id = smpl.sample(self.models.ctx, -1)
 
-                # 先提交异步解码任务
+                # 提交异步解码任务
                 if self.models.ctx.decode_token(batch_text, token_id, current_pos) != 0:
                     break
                 current_pos += 1
 
-                # 再检查 token id 和解码
+                # 检查 token id 是否为中止符
                 if token_id == self.models.eos_token or token_id in self.stop_tokens:
                     break
+
+                # 解码 token id
                 asr_decoder.push(token_id)
 
                 # 熔断检查
-                if len(asr_decoder.generated_text) > 15:
-                    if len(set(asr_decoder.generated_text[-15:])) <= 3:
+                if len(asr_decoder.tokens) <= 30:
+                    continue
+
+                # 尾部无限循环，熔断
+                if len(set(asr_decoder.tokens[-30:])) <= 3:
+                    res.is_aborted = True
+                    break
+
+                # 达到30个token时还没生成标点，熔断
+                if len(asr_decoder.tokens) == 30:
+                    if not re.search(
+                        r"[，。？！、；：,\.?!;:]", asr_decoder.generated_text
+                    ):
                         res.is_aborted = True
-                        console.print(
-                            "[bold red]警告: 检测到异常重复输出 (可能由 iGPU 溢出引起)，已熔断。[/bold red]\n",
-                            "[dim]解决方案:[/dim]\n",
-                            "[dim]- 尝试在 config.toml 中禁用 DirectML (directml_enable = false)[/dim]\n",
-                            "[dim]- 尝试在 config.toml 中禁用 Vulkan (vulkan_enable = false)[/dim]\n",
-                            "[dim]- 强制使用 FP32 精度 (vulkan_force_fp32 = true)[/dim]\n",
-                            "[dim]- 调整模型参数或检查硬件资源[/dim]",
-                        )
-                        self.logger.error(
-                            "警告: 检测到异常重复输出 (可能由 iGPU 溢出引起)，已熔断。"
-                        )
-                        self.logger.error("解决方案:")
-                        self.logger.error(
-                            "尝试在 config.toml 中禁用 DirectML (directml_enable = false)"
-                        )
-                        self.logger.error(
-                            "尝试在 config.toml 中禁用 Vulkan (vulkan_enable = false)"
-                        )
-                        self.logger.error(
-                            "强制使用 FP32 精度 (vulkan_force_fp32 = true)"
-                        )
-                        self.logger.error("调整模型参数或检查硬件资源")
-                        show_igpu_overflow_warning()  # # 显示 Windows 弹窗通知
                         break
 
         asr_decoder.flush()
@@ -252,8 +242,8 @@ class StreamDecoder:
                 [p_embd, audio_embd.astype(np.float32), s_embd], axis=0
             )
 
-            # LLM 解码循环：若熔断则加温重试（最多重试 5 次）
-            for _ in range(6):
+            # LLM 解码循环：若熔断则加温重试（最多重试 3 次）
+            for _ in range(4):
                 llm_res = self.llm_decoder.decode(
                     full_embd,
                     full_embd.shape[0],
