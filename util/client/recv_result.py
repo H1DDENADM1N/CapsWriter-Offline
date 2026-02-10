@@ -1,6 +1,4 @@
-import asyncio
 import json
-import time
 import warnings
 from typing import Optional
 
@@ -44,12 +42,6 @@ async def recv_result(logger: Optional[Logger] = None):
         f"   客户端 WebSocket ID: [cyan]{Cosmic.websocket.id}[/cyan]\n", style="yellow"
     )
 
-    # 实时粘贴相关变量
-    last_paste_time = 0
-    paste_interval = Config.realtime_paste_interval  # 从配置读取粘贴间隔
-    realtime_pasted_text = ""  # 记录中途粘贴的文本
-    last_realtime_text = ""  # 记录上次中间结果的文本，用于计算增量
-
     try:
         # 先接收服务端的欢迎消息
         if not await handle_welcome_message():
@@ -81,7 +73,7 @@ async def recv_result(logger: Optional[Logger] = None):
                 _logger.warning(f"消息中缺少 'text' 字段，跳过处理: {message}")
                 continue
 
-            # 检查是否为最终结果
+            # 检查是否为最终结果，如果不是则跳过处理（只显示但不执行其他操作）
             is_final = message.get("is_final", True)  # 默认为True以向后兼容
             asr_text = message["text"]
 
@@ -90,33 +82,13 @@ async def recv_result(logger: Optional[Logger] = None):
                 asr_text = ""
 
             if not is_final:
-                # 中间结果：根据配置决定是否实时粘贴
-                if paste_interval > 0 and asr_text and asr_text.strip() != "":
-                    current_time = time.time()
-                    if current_time - last_paste_time >= paste_interval:
-                        try:
-                            realtime_text = strip_punc(asr_text)
-                            # 计算增量：只粘贴新增的部分
-                            if realtime_text.startswith(last_realtime_text):
-                                incremental_text = realtime_text[
-                                    len(last_realtime_text) :
-                                ]
-                            else:
-                                # 如果不是延续的，使用完整文本
-                                incremental_text = realtime_text
-                            if incremental_text:
-                                console.print(f"    实时粘贴：[cyan]{incremental_text}")
-                                await type_result(incremental_text)
-                                realtime_pasted_text += incremental_text
-
-                            last_realtime_text = realtime_text
-                            last_paste_time = current_time
-                        except Exception as e:
-                            _logger.error(f"实时粘贴出错: {e}")
-                _logger.trace(f"    中间结果：{asr_text}")
+                # 对于非最终结果，可以选择显示调试信息但不执行实际操作
+                asr_text = message["text"]
+                _logger.trace(f"    中间结果（跳过处理）：{asr_text}")
                 continue
 
             # 只处理最终结果
+            asr_text = message["text"]
             if not asr_text or asr_text.strip() == "":
                 # console.print("[bold red]接收到空识别结果，跳过处理[/bold red]")
                 # _logger.debug("接收到空识别结果，跳过处理")
@@ -225,17 +197,6 @@ async def recv_result(logger: Optional[Logger] = None):
             console.line()
 
             # 打字
-            # 先删除中途粘贴的内容
-            if realtime_pasted_text:
-                import keyboard
-
-                delete_count = len(realtime_pasted_text)
-                console.print(f"    删除中途粘贴：[red]-{delete_count}字符")
-                for _ in range(delete_count):
-                    keyboard.send("backspace")
-                    await asyncio.sleep(0.01)
-                realtime_pasted_text = ""
-
             if offline_translate_done:
                 await type_result(offline_translated_text)
                 offline_translate_done = False

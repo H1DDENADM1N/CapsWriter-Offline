@@ -100,7 +100,6 @@ class ClientConfig:
     ]
     mic_seg_duration: int = config["client"]["mic_seg_duration"]
     mic_seg_overlap: int = config["client"]["mic_seg_overlap"]
-    realtime_paste_interval: int = config["client"]["realtime_paste_interval"]
     file_seg_duration: int = config["client"]["file_seg_duration"]
     file_seg_overlap: int = config["client"]["file_seg_overlap"]
     file_save_srt: bool = config["client"]["file_save_srt"]
