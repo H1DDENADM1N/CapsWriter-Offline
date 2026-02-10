@@ -9,7 +9,7 @@ from loguru._logger import Logger
 from .. import llama
 from ..display import DisplayReporter
 from ..nano_ctc import align_timestamps, decode_ctc
-from ..nano_dataclass import DecodeResult, RecognitionStream, Timings
+from ..nano_dataclass import DecodeResult, LLMDecodeResult, RecognitionStream, Timings
 from ..nano_onnx import encode_audio
 from .model_manager import ModelManager
 from .windows_notification import show_igpu_overflow_warning
@@ -79,7 +79,8 @@ class LLMDecoder:
         temperature: float = 0.3,
         top_p: float = 1.0,
         top_k: int = 50,
-    ) -> Tuple[str, int, float, float]:
+    ) -> LLMDecodeResult:
+        res = LLMDecodeResult()
         t_inject_start = time.perf_counter()
 
         # 1. Inject
@@ -93,7 +94,7 @@ class LLMDecoder:
         if ret != 0:
             raise RuntimeError(f"Decode failed (ret={ret})")
 
-        t_inject = time.perf_counter() - t_inject_start
+        res.t_inject = time.perf_counter() - t_inject_start
 
         # 2. Generation Loop
         t_gen_start = time.perf_counter()
@@ -104,8 +105,9 @@ class LLMDecoder:
             self.models.vocab, reporter if stream_output else None
         )
 
+        seed = int(np.random.randint(0, 2**31 - 1))
         with llama.LlamaSampler(
-            temperature=temperature, top_k=top_k, top_p=top_p
+            temperature=temperature, top_k=top_k, top_p=top_p, seed=seed
         ) as smpl:
             for _ in range(n_predict):
                 # 使用面向对象接口采样
@@ -120,8 +122,11 @@ class LLMDecoder:
                 if token_id == self.models.eos_token or token_id in self.stop_tokens:
                     break
                 asr_decoder.push(token_id)
-                if len(asr_decoder.generated_text) > 10:
-                    if len(set(asr_decoder.generated_text[-10:])) == 1:
+
+                # 熔断检查
+                if len(asr_decoder.generated_text) > 15:
+                    if len(set(asr_decoder.generated_text[-15:])) <= 3:
+                        res.is_aborted = True
                         console.print(
                             "[bold red]警告: 检测到异常重复输出 (可能由 iGPU 溢出引起)，已熔断。[/bold red]\n",
                             "[dim]解决方案:[/dim]\n",
@@ -150,9 +155,11 @@ class LLMDecoder:
         asr_decoder.flush()
 
         # batch_text 会由 __del__ 自动释放
-        t_gen = time.perf_counter() - t_gen_start
+        res.text = asr_decoder.generated_text
+        res.n_gen = asr_decoder.tokens_generated
+        res.t_gen = time.perf_counter() - t_gen_start
 
-        return asr_decoder.generated_text, asr_decoder.tokens_generated, t_inject, t_gen
+        return res
 
 
 class StreamDecoder:
@@ -244,26 +251,31 @@ class StreamDecoder:
             full_embd = np.concatenate(
                 [p_embd, audio_embd.astype(np.float32), s_embd], axis=0
             )
-            text, n_gen, t_inj, t_gen = self.llm_decoder.decode(
-                full_embd,
-                full_embd.shape[0],
-                self.models.config.n_predict,
-                stream_output=verbose,
-                reporter=reporter,
-                temperature=temperature,
-                top_p=top_p,
-                top_k=top_k,
-            )
-            text = text.strip()
 
-            if not hasattr(timings, "inject"):
-                timings.inject = 0.0
-            if not hasattr(timings, "llm_generate"):
-                timings.llm_generate = 0.0
-            timings.inject += t_inj
-            timings.llm_generate += t_gen
+            # LLM 解码循环：若熔断则加温重试（最多重试 5 次）
+            for _ in range(6):
+                llm_res = self.llm_decoder.decode(
+                    full_embd,
+                    full_embd.shape[0],
+                    self.models.config.n_predict,
+                    stream_output=verbose,
+                    reporter=reporter,
+                    temperature=temperature,
+                    top_p=top_p,
+                    top_k=top_k,
+                )
+                if not llm_res.is_aborted:
+                    break
+                temperature += 0.3
+                llm_res.text += "====解码有误，强制熔断===="
+                print(f"\n\n[!] 片段触发重试 (温度设为 {temperature:.1f})\n")
 
-            reporter.print("\n" + "=" * 70)
+            text = llm_res.text.strip()
+            timings.inject = llm_res.t_inject
+            timings.llm_generate = llm_res.t_gen
+
+            if reporter:
+                reporter.print("\n" + "=" * 70)
 
             # 已经解码第二遍则跳出
             if attempt == 1 or not (
@@ -328,7 +340,8 @@ class StreamDecoder:
             audio_embd=audio_embd,
             n_prefix=n_p,
             n_suffix=n_s,
-            n_gen=n_gen,
+            n_gen=llm_res.n_gen,
             timings=timings,
             hotwords=hotwords,
+            is_aborted=llm_res.is_aborted,
         )
