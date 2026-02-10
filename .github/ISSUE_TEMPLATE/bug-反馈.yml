@@ -53,6 +53,15 @@ body:
       placeholder: 例如：启动客户端后连接服务端失败，显示"连接超时"...
     validations:
       required: true
+
+  - type: textarea
+    id: bug_description
+    attributes:
+      label: 你修过了哪些 config.toml 配置项吗？默认 config.toml 是否可复现此错误？
+      description: 关闭服务端和客户端，把 config.toml 换到默认，只修改 config.toml 中的 logger_level = "TRACE"，不要其他修改任何配置。重启服务端和客户端，试试能复现此错误吗？如果不能，请压缩 ./logs 文件夹中的所有日志文件为 logs.zip，然后拖拽上传到 错误日志 处。
+      placeholder: 例如：默认 config.toml 无法复现，我修改了 config.toml 中的...
+    validations:
+      required: true
   
   - type: textarea
     id: reproduction_steps
