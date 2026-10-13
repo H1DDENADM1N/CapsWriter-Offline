@@ -47,6 +47,9 @@ unit_mapping = {
     "块": None,
     "次": None,
     "克": "g",
+    # ported from upstream a3bbee8: 斤、两加入单位表
+    "两": None,
+    "斤": None,
     "千克": "kg",
     "米": "米",
     "千米": "千米",
@@ -78,6 +81,8 @@ num_mapper = {
 value_mapper = {
     "零": 0,
     "一": 1,
+    # ported from upstream 7d7fac3: 幺纳入数值映射（更正省略尾随单位提交一并修正）
+    "幺": 1,
     "二": 2,
     "两": 2,
     "三": 3,
@@ -109,6 +114,16 @@ idioms = """
 
 # 模糊表达黑名单（包含"几"的表达不转换）
 fuzzy_regex = re.compile(r"几")
+
+# ported from upstream db3dd8f: 「百/千/万」+单个数字字作费率术语（万三=万分之三）
+# 或词（万一）时不转换；仅当其前无数字或单位字时才视为术语
+_wan_term = re.compile(
+    r"(?<![一二两三四五六七八九零幺十百千万亿])[百千万][一二三四五六七八九]"
+)
+
+# ported from upstream 1015197: 纯单位字组合（如十百千万）不做数值转换所需集合
+_digit_chars = {k for k, v in value_mapper.items() if v <= 9}
+_unit_chars = {k for k, v in value_mapper.items() if v > 9}
 
 
 # ============================================================
@@ -261,26 +276,34 @@ def convert_range_expression(text):
 _unit_suffix_pattern = re.compile(rf"({common_units}|[a-zA-Z]+)$")
 
 # 总模式，筛选出可能需要替换的内容
+# ported from upstream 0fcb423: 主体可选 "[正负]" 前缀并新增正负号分支，识别正数/负数
 pattern = re.compile(rf"""(?ix)
 ([a-z]\s*)?
 (
-  (
-    [几零幺一二两三四五六七八九十百千万点比]
-    |[零一二三四五六七八九十][ ]
-    |(?<=[一二两三四五六七八九十])[年月日号分]
-    |(分之)
-  )+
-  (
-    (?<=[一二两三四五六七八九十])([a-zA-Z年月日号]|{common_units})
-    |(?<=[一二两三四五六七八九十]\s)[a-zA-Z]
-  )?
-  (?(1)
-  |(?(5)
-    |(
-      [零幺一二两三四五六七八九十百千万亿点比]
+  (?:
+    [正负]?
+    (
+      [几零幺一二两三四五六七八九十百千万点比]
+      |[零一二三四五六七八九十][ ]
+      |(?<=[一二两三四五六七八九十])[年月日号分]
       |(分之)
+    )+
+    (
+      (?<=[一二两三四五六七八九十])([a-zA-Z年月日号]|{common_units})
+      |(?<=[一二两三四五六七八九十]\s)[a-zA-Z]
+    )?
+    (?(1)
+    |(?(5)
+      |(
+        [零幺一二两三四五六七八九十百千万亿点比]
+        |(分之)
+      )
+    )+
     )
-  )+
+  )
+  |
+  (?:
+    [正负][零幺一二两三四五六七八九十百千万点]
   )
 )
 """)
@@ -524,54 +547,85 @@ def replace(original):
             num_type = "模糊表达"
             final = original
 
-        # 范围表达式
-        elif is_range_expression(original):
-            num_type = "范围表达式"
-            final = convert_range_expression(original)
+        # ported from upstream db3dd8f: 「万」+单个数字字作费率术语或词（万一/万三）时不转换
+        elif _wan_term.search(original):
+            num_type = "万术语"
+            final = original
 
-        # 时间
-        elif time_value.fullmatch(original):
-            num_type = "时间"
-            final = convert_time_value(original)
+        # ported from upstream 1015197: 完全由单位字组成、不含数字字且长度≥2时跳过转换
+        elif (
+            _unit_chars.issuperset(original)
+            and len(original) >= 2
+            and not any(c in _digit_chars for c in original)
+        ):
+            num_type = "纯单位字"
+            final = original
 
-        # 纯数字
-        elif pure_num.fullmatch(strip_trailing_unit(original)):
-            num_type = "纯数字"
-            final = convert_pure_num(original)
-
-        # 连续数值
-        elif is_consecutive_value(original):
-            num_type = "连续数值"
-            final = split_consecutive_value(original)
-
-        # 数值
-        elif value_num.fullmatch(strip_trailing_unit(original)):
-            num_type = "数值"
-            final = convert_value_num(original)
-
-        # 百分数
-        elif percent_value.fullmatch(original):
-            num_type = "百分之数值"
-            final = convert_percent_value(original)
-
-        # 分数
-        elif fraction_value.fullmatch(original):
-            num_type = "分数"
-            final = convert_fraction_value(original)
-
-        # 比值
-        elif ratio_value.fullmatch(original):
-            num_type = "比值"
-            final = convert_ratio_value(original)
-
-        # 日期
-        elif data_value.fullmatch(original):
-            num_type = "日期"
-            final = convert_date_value(original)
+        # ported from upstream b797a7c: 以"点"开头是动词（点击/点名），不是小数点
+        elif original.startswith("点"):
+            num_type = "动词点"
+            final = original
 
         else:
-            num_type = "未匹配"
-            final = original
+            # ported from upstream 0fcb423: 提取正负号后按原有分支转换
+            sign_prefix = ""
+            parsed = original
+            if original and original[0] in ("正", "负"):
+                sign_prefix = "+" if original[0] == "正" else "-"
+                parsed = original[1:]
+
+            if parsed == "一" and sign_prefix:
+                num_type = "正负数"
+                final = sign_prefix + "1"
+
+            # 范围表达式
+            elif is_range_expression(parsed):
+                num_type = "范围表达式"
+                final = sign_prefix + convert_range_expression(parsed)
+
+            # 时间
+            elif time_value.fullmatch(parsed):
+                num_type = "时间"
+                final = sign_prefix + convert_time_value(parsed)
+
+            # 纯数字
+            elif pure_num.fullmatch(strip_trailing_unit(parsed)):
+                num_type = "纯数字"
+                final = sign_prefix + convert_pure_num(parsed)
+
+            # 连续数值
+            elif is_consecutive_value(parsed):
+                num_type = "连续数值"
+                final = sign_prefix + split_consecutive_value(parsed)
+
+            # 数值
+            elif value_num.fullmatch(strip_trailing_unit(parsed)):
+                num_type = "数值"
+                final = sign_prefix + convert_value_num(parsed)
+
+            # 百分数
+            elif percent_value.fullmatch(parsed):
+                num_type = "百分之数值"
+                final = sign_prefix + convert_percent_value(parsed)
+
+            # 分数
+            elif fraction_value.fullmatch(parsed):
+                num_type = "分数"
+                final = sign_prefix + convert_fraction_value(parsed)
+
+            # 比值
+            elif ratio_value.fullmatch(parsed):
+                num_type = "比值"
+                final = sign_prefix + convert_ratio_value(parsed)
+
+            # 日期
+            elif data_value.fullmatch(parsed):
+                num_type = "日期"
+                final = sign_prefix + convert_date_value(parsed)
+
+            else:
+                num_type = "未匹配"
+                final = original
 
         if head:
             final = head + final
