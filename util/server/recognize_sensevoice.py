@@ -73,15 +73,39 @@ def recognize(recognizer, task: Task, logger: Optional[Logger] = None):
     if task.is_final:
         n = len(stream.result.timestamps)
 
-    # 再细去重，依据：在端点是否有重复的字
-    if result.tokens and result.tokens[-2:] == stream.result.tokens[m:n][:2]:
-        m += 2
-    elif result.tokens and result.tokens[-1:] == stream.result.tokens[m:n][:1]:
-        m += 1
+    # 安全处理 tokens，过滤可能的无效 UTF-8 编码
+    new_tokens = []
+    new_timestamps = []
+    try:
+        # 先获取切片的 tokens 和 timestamps
+        sliced_tokens = stream.result.tokens[m:n]
+        sliced_timestamps = stream.result.timestamps[m:n]
+
+        # 再细去重，依据：在端点是否有重复的字
+        if result.tokens and result.tokens[-2:] == sliced_tokens[:2]:
+            sliced_tokens = sliced_tokens[2:]
+            sliced_timestamps = sliced_timestamps[2:]
+        elif result.tokens and result.tokens[-1:] == sliced_tokens[:1]:
+            sliced_tokens = sliced_tokens[1:]
+            sliced_timestamps = sliced_timestamps[1:]
+
+        # 处理 tokens：bytes 统一按 utf-8 解码
+        for token in sliced_tokens:
+            if isinstance(token, bytes):
+                token = token.decode("utf-8", errors="ignore")
+            new_tokens.append(token)
+
+        # 处理 timestamps
+        new_timestamps = [t + task.offset for t in sliced_timestamps]
+    except (UnicodeDecodeError, UnicodeError) as e:
+        # 出错时使用空列表，避免程序崩溃
+        _logger.error(f"编码错误: {e}")
+        new_tokens = []
+        new_timestamps = []
 
     # 最后与先前的结果合并
-    result.timestamps += [t + task.offset for t in stream.result.timestamps[m:n]]
-    result.tokens += [token for token in stream.result.tokens[m:n]]
+    result.timestamps += new_timestamps
+    result.tokens += new_tokens
 
     # token 合并为文本
     text = "".join(result.tokens)

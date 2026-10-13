@@ -262,56 +262,64 @@ def merge_tokens_by_sequence_matcher(
     match = sm.find_longest_match(0, len(prev_overlap_text), 0, len(new_overlap_text))
 
     if match.size >= 2:  # 至少匹配上 2 个字符
-        # a. 找到 prev 的截断点
-        # match.a 是 prev_overlap_text 中的字符索引
-        # 我们需要将其映射回 prev_overlap_indices
-        char_count = 0
-        prev_cut_local_idx = 0
-        for idx, token in enumerate(prev_overlap_tokens):
-            if char_count >= match.a:
-                prev_cut_local_idx = idx
-                break
-            char_count += len(token)
-        else:
-            prev_cut_local_idx = len(prev_overlap_tokens)
 
-        # 转换为全局索引
-        if prev_overlap_indices and prev_cut_local_idx < len(prev_overlap_indices):
-            prev_cut_global_idx = prev_overlap_indices[prev_cut_local_idx]
-        else:
-            prev_cut_global_idx = len(prev_tokens)
+        def _cut_at_char(
+            tokens: List[str], timestamps: List[float], start_idx: int, char_pos: int
+        ):
+            """在 char_pos 字符位置切开 tokens，返回（前段 tokens, 前段 ts, 后段 tokens, 后段 ts）。
 
-        # b. 找到 new 的起始点
-        # match.b 是 new_overlap_text 中的字符索引
-        char_count = 0
-        new_start_local_idx = 0
-        for idx, token in enumerate(new_overlap_tokens):
-            if char_count >= match.b:
-                new_start_local_idx = idx
-                break
-            char_count += len(token)
-        else:
-            new_start_local_idx = len(new_overlap_tokens)
+            切点可能落在某个 token 内部（不同分片的切分粒度可能不同），
+            此时必须把该 token 按字符拆开：前缀归前段、剩余部分归后段，
+            不能整 token 丢弃，否则会吞掉尾部字符。
+            ported from upstream 84912d5
+            """
+            head_tokens: List[str] = []
+            head_ts: List[float] = []
+            tail_tokens: List[str] = []
+            tail_ts: List[float] = []
+            char_count = 0
+            placed = False
+            for idx in range(start_idx, len(tokens)):
+                token = tokens[idx]
+                token_len = len(token)
+                if not placed and char_count + token_len > char_pos:
+                    # 切点落在此 token 内部：按字符拆开
+                    head_part = token[: char_pos - char_count]
+                    tail_part = token[char_pos - char_count :]
+                    if head_part:
+                        head_tokens.append(head_part)
+                        head_ts.append(timestamps[idx])
+                    if tail_part:
+                        tail_tokens.append(tail_part)
+                        tail_ts.append(timestamps[idx])
+                    placed = True
+                elif not placed:
+                    head_tokens.append(token)
+                    head_ts.append(timestamps[idx])
+                else:
+                    tail_tokens.append(token)
+                    tail_ts.append(timestamps[idx])
+                char_count += token_len
+            return head_tokens, head_ts, tail_tokens, tail_ts
 
-        # 转换为全局索引
-        if new_overlap_indices and new_start_local_idx < len(new_overlap_indices):
-            new_start_global_idx = new_overlap_indices[new_start_local_idx]
-        else:
-            new_start_global_idx = 0
+        # a. 在匹配终点处按字符切开 prev（保留到匹配终点）
+        prev_head, prev_head_ts, _, _ = _cut_at_char(
+            prev_tokens, prev_timestamps, 0, match.a + match.size
+        )
+
+        # b. 在匹配终点处按字符切开 new（从匹配终点之后开始）
+        _, _, new_tail, new_tail_ts = _cut_at_char(
+            new_tokens, new_global_timestamps, 0, match.b + match.size
+        )
 
         # c. 执行拼接
-        result_tokens = (
-            prev_tokens[:prev_cut_global_idx] + new_tokens[new_start_global_idx:]
-        )
-        result_timestamps = (
-            prev_timestamps[:prev_cut_global_idx]
-            + new_global_timestamps[new_start_global_idx:]
-        )
+        result_tokens = prev_head + new_tail
+        result_timestamps = prev_head_ts + new_tail_ts
 
         _logger.debug(
             f"SequenceMatcher 拼接: 匹配长度 {match.size}, "
-            f"prev 截断位置 {prev_cut_global_idx}, "
-            f"new 起始位置 {new_start_global_idx}"
+            f"prev 保留 {len(prev_head)} token, "
+            f"new 追加 {len(new_tail)} token"
         )
 
     else:
