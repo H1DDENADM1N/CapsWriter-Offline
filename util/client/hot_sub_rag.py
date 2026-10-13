@@ -549,22 +549,24 @@ class FastRAG:
         """
         return np.array([self._encode(p) for p in phs], dtype=np.int32)
 
-    def add_hotwords(self, hotwords: Dict[str, List[Phoneme]]):
+    # ported from upstream a18ab1f 热词支持别名：一个目标词对应多条音素序列（目标自身 + 各别名）
+    def add_hotwords(self, hotwords: Dict[str, List[List[Phoneme]]]):
         """
         添加热词到索引中
 
         Args:
-            hotwords: 热词字典，键为热词，值为音素列表
+            hotwords: 热词字典，键为热词，值为音素序列列表
         """
-        for hw, phs in hotwords.items():
-            if not phs:
-                continue
-            codes = self._encode_seq([p.value for p in phs])
-            # 统一索引前两个音素（中文：声母+韵母，英文：前两位容错）
-            indices = list(range(min(len(codes), 2)))
-            for i in indices:
-                self.index[codes[i]].append((hw, codes))
-            self.hotword_count += 1
+        for hw, phoneme_lists in hotwords.items():
+            for phs in phoneme_lists:
+                if not phs:
+                    continue
+                codes = self._encode_seq([p.value for p in phs])
+                # 统一索引前两个音素（中文：声母+韵母，英文：前两位容错）
+                indices = list(range(min(len(codes), 2)))
+                for i in indices:
+                    self.index[codes[i]].append((hw, codes))
+                self.hotword_count += 1
 
     def search(
         self, input_phs: List[Phoneme], top_k: int = 10
@@ -602,14 +604,16 @@ class FastRAG:
                         input_codes_set.add(sim_code)
 
         # 收集候选
+        # ported from upstream a18ab1f 使用 (hw, tuple(codes)) 复合 key 区分同一热词的不同音素序列，支持别名场景
         candidates = []
         seen = set()
         for c in input_codes_set:
             for hw, codes in self.index.get(c, []):
-                if hw in seen:
+                key = (hw, tuple(codes))
+                if key in seen:
                     continue
                 candidates.append((hw, codes))
-                seen.add(hw)
+                seen.add(key)
 
         # 使用完整的输入序列进行搜索
         results = []
@@ -622,7 +626,15 @@ class FastRAG:
             if score >= self.threshold:
                 results.append((hw, round(score, 3)))
         results.sort(key=lambda x: x[1], reverse=True)
-        return results[:top_k]
+        # ported from upstream a18ab1f 同一热词的多条音素序列可能各自命中，按热词去重保留最高分
+        deduped = []
+        final_seen = set()
+        for hw, score in results:
+            if hw in final_seen:
+                continue
+            final_seen.add(hw)
+            deduped.append((hw, score))
+        return deduped[:top_k]
 
     def _python_dist(self, main, sub):
         """
@@ -674,6 +686,81 @@ class CorrectionResult(NamedTuple):
     similars: List[Tuple[str, str, float]]  # 相似列表
 
 
+# ported from upstream bf16001 热词黑名单：黑名单词不做替换。
+# 上游为逐热词「~~~」内联黑名单；本方等价实现为根目录 hot-blacklist.txt（一行一词，# 开头为注释）的全局黑名单。
+BLACKLIST_PATH = Path() / "hot-blacklist.txt"
+_blacklist_cache: Tuple[float, frozenset] = (0.0, frozenset())
+
+
+def get_blacklist_words() -> frozenset:
+    """读取热词黑名单文件，文件变更时自动重载"""
+    global _blacklist_cache
+    try:
+        mtime = BLACKLIST_PATH.stat().st_mtime
+    except OSError:
+        return frozenset()
+    cached_mtime, cached_words = _blacklist_cache
+    if mtime != cached_mtime:
+        try:
+            blacklist_text = BLACKLIST_PATH.read_text(encoding="utf-8")
+        except OSError:
+            return cached_words
+        words = frozenset(
+            w.strip()
+            for w in blacklist_text.splitlines()
+            if w.strip() and not w.strip().startswith("#")
+        )
+        _blacklist_cache = (mtime, frozenset(words))
+    return _blacklist_cache[1]
+
+
+def blacklist_blocks_span(
+    text: str,
+    start: int,
+    end: int,
+    blacklist_words: frozenset,
+    window: int = 5,
+) -> bool:
+    """
+    ported from upstream bf16001 黑名单就近拦截：
+    检查 [start, end) 待替换区间邻近的语义词窗口（左右各扩展 window 个 token）内是否出现黑名单词，
+    出现则该次替换应被跳过（上游：热词行内 ~~~ 逐词黑名单；本方：全局 hot-blacklist.txt，
+    由 RAG corrector 与 zh/en/rule 替换器共用同一判定）。
+    """
+    if not blacklist_words:
+        return False
+
+    # 提取语义词 (CJK 字符、英文单词、数字) 的位置
+    token_pattern = re.compile(r"[\u4e00-\u9fa5]|[a-zA-Z]+|[0-9]+")
+    tokens: List[Tuple[str, int, int]] = [  # [(val, start, end)]
+        (match.group(), match.start(), match.end())
+        for match in token_pattern.finditer(text)
+    ]
+
+    # 寻找与当前待替换区间重叠的所有语义 token
+    matched_token_indices = []
+    for idx, (t_val, t_start, t_end) in enumerate(tokens):
+        if not (t_end <= start or t_start >= end):
+            matched_token_indices.append(idx)
+
+    if matched_token_indices:
+        win_start_token = max(0, min(matched_token_indices) - window)
+        win_end_token = min(len(tokens), max(matched_token_indices) + 1 + window)
+        win_start = tokens[win_start_token][1]
+        win_end = tokens[win_end_token - 1][2]
+    else:
+        # 降级：如果未匹配到任何语义 token，则使用字符窗口
+        win_start = max(0, start - window)
+        win_end = min(len(text), end + window)
+
+    context_lower = text[win_start:win_end].lower()
+
+    for b_word in blacklist_words:
+        if b_word.lower() in context_lower:
+            return True
+    return False
+
+
 class PhonemeCorrector:
     """
     音素纠正器类，用于处理文本中的音素错误
@@ -698,7 +785,8 @@ class PhonemeCorrector:
         self.similar_threshold = (
             similar_threshold if similar_threshold is not None else threshold - 0.2
         )
-        self.hotwords: Dict[str, List[Phoneme]] = {}
+        # ported from upstream a18ab1f 热词支持别名：每个目标词对应多条音素序列
+        self.hotwords: Dict[str, List[List[Phoneme]]] = {}
         self.fast_rag = FastRAG(
             threshold=min(self.threshold, self.similar_threshold) - 0.1
         )
@@ -738,13 +826,22 @@ class PhonemeCorrector:
             for l in text.splitlines()
             if l.strip() and not l.strip().startswith("#")
         ]
-        new_hw = {}
-        for hw in lines:
-            phs = get_phoneme_info(hw)
-            if phs:
-                new_hw[hw] = phs
-            else:
-                self.logger.warning(f"未获取到热词 {hw} 的因素信息")
+        new_hw: Dict[str, List[List[Phoneme]]] = {}
+        # ported from upstream a18ab1f 热词支持别名：按 | 切分出主词与各别名，全部转为音素序列
+        for line in lines:
+            parts = [p.strip() for p in line.split("|") if p.strip()]
+            if not parts:
+                continue
+            target = parts[0]
+            phoneme_lists = []
+            for part in parts:
+                phs = get_phoneme_info(part)
+                if phs:
+                    phoneme_lists.append(phs)
+                else:
+                    self.logger.warning(f"未获取到热词 {part} 的因素信息")
+            if phoneme_lists:
+                new_hw[target] = phoneme_lists
 
         with self._lock:
             if append_mode:
@@ -801,22 +898,31 @@ class PhonemeCorrector:
         """
         matches, similars = [], []
         search_thresh = min(self.threshold, self.similar_threshold) - 0.1
+        # ported from upstream ef333d7 按热词去重 fast_results（本地 为全量输入搜索，位置由受限搜索穷举）
+        seen_hw = set()
         for hw, _ in fast_results:
-            hw_phs = self.hotwords[hw]
-            hw_compare = [p.info[:5] for p in hw_phs]
-            found = fuzzy_substring_search_constrained(
-                hw_compare, input_processed, threshold=search_thresh
-            )
-            for score, s_idx, e_idx in found:
-                char_st, char_ed = (
-                    input_processed[s_idx][5],
-                    input_processed[e_idx - 1][6],
+            if hw in seen_hw:
+                continue
+            seen_hw.add(hw)
+            # ported from upstream a18ab1f 遍历目标词自身的全部音素序列（含别名）；
+            # ported from upstream 358efc7 for score 循环必须位于别名序列循环内层，否则只有最后一个别名可匹配
+            for hw_phs_seq in self.hotwords[hw]:
+                hw_compare = [p.info[:5] for p in hw_phs_seq]
+                # ported from upstream ef333d7 全量输入受限搜索对每个结束位置独立收集结果，
+                # 同一热词在句子中多次出现会被全部找出并全部替换
+                found = fuzzy_substring_search_constrained(
+                    hw_compare, input_processed, threshold=search_thresh
                 )
-                res = MatchResult(char_st, char_ed, score, hw)
-                if score >= self.threshold:
-                    matches.append(res)
-                if score >= self.similar_threshold:
-                    similars.append((text[char_st:char_ed], hw, score))
+                for score, s_idx, e_idx in found:
+                    char_st, char_ed = (
+                        input_processed[s_idx][5],
+                        input_processed[e_idx - 1][6],
+                    )
+                    res = MatchResult(char_st, char_ed, score, hw)
+                    if score >= self.threshold:
+                        matches.append(res)
+                    if score >= self.similar_threshold:
+                        similars.append((text[char_st:char_ed], hw, score))
         similars.sort(key=lambda x: (x[2], len(x[1])), reverse=True)
         final_sims, seen = [], set()
         for o, hw, s in similars:
@@ -825,20 +931,28 @@ class PhonemeCorrector:
                 seen.add(hw)
         return matches, final_sims
 
-    def _resolve_and_replace(self, text, matches):
+    def _resolve_and_replace(self, text, matches, window: int = 5):
         """
         解析并替换匹配项
 
         Args:
             text: 原始文本
             matches: 匹配列表
+            window: 黑名单邻近窗口大小（语义 token 数）
 
         Returns:
             替换后的文本和最终匹配列表
         """
         matches.sort(key=lambda x: (x.score, x.end - x.start), reverse=True)
         final_m, occupied = [], []
+        # ported from upstream bf16001 黑名单就近拦截
+        blacklist_words = get_blacklist_words()
         for m in matches:
+            if blacklist_blocks_span(text, m.start, m.end, blacklist_words, window):
+                self.logger.debug(
+                    f"匹配 '{text[m.start : m.end]}' -> '{m.hotword}' 触发黑名单拦截，跳过替换"
+                )
+                continue
             if any(not (m.end <= rs or m.start >= re) for rs, re in occupied):
                 continue
             if text[m.start : m.end] != m.hotword:
@@ -853,13 +967,14 @@ class PhonemeCorrector:
             for m in sorted(final_m, key=lambda x: x.start)
         ]
 
-    def correct(self, text, k=10):
+    def correct(self, text, k=10, blacklist_window: int = 5):
         """
         对文本进行纠正
 
         Args:
             text: 待纠正的文本
             k: 返回结果数量，默认为10
+            blacklist_window: 邻近黑名单窗口大小（语义 token 数），默认为5
 
         Returns:
             纠正结果对象
@@ -876,7 +991,8 @@ class PhonemeCorrector:
             self.logger.trace(f"处理后的输入：{processed}")
             matches, sims = self._find_matches(text, fast_res, processed)
             self.logger.trace(f"匹配结果：{matches}")
-        nt, fhw = self._resolve_and_replace(text, matches)
+        # ported from upstream bf16001 黑名单邻近窗口
+        nt, fhw = self._resolve_and_replace(text, matches, blacklist_window)
         self.logger.trace(f"纠正后的文本：{nt}")
         return CorrectionResult(nt, fhw, sims[:k])
 

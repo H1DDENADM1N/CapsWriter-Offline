@@ -2,6 +2,9 @@ from time import time
 
 from pypinyin import pinyin
 
+# ported from upstream bf16001 热词黑名单：黑名单词不做替换。
+# RAG 替换器在 corrector 匹配阶段拦截；本模块（拼音热词）在替换循环前共用同一判定。
+
 '''
 热词是每行一个的文本，先更新热词词典，然后再替换句子中的热词。
 使用方法示例：
@@ -45,6 +48,9 @@ def 更新热词词典(热词文本: str):
     将一行一个热词的文本转换为拼音词典
     以 # 开头会被省略
 
+    ported from upstream a18ab1f 热词支持别名：每行可用 | 分隔「主词|别名1|别名2」，
+    任意别名命中都会替换为主词。
+
     heteronym: 是否启用多音字
 
     如果启用了多音字，返回的词典是这样的形式：
@@ -66,30 +72,36 @@ def 更新热词词典(热词文本: str):
     """
     global 热词词典
     热词词典.clear()
-    for 热词 in 热词文本.splitlines():
-        热词 = 热词.strip()  # 给热词去掉多余的空格
-        if not 热词 or 热词.startswith("#"):
+    for 行 in 热词文本.splitlines():
+        行 = 行.strip()  # 给热词去掉多余的空格
+        if not 行 or 行.startswith("#"):
             continue  # 过滤掉注释
-        热词拼音 = pinyin(热词, 风格, 多音字)  # 得到拼音
-
-        if len(热词拼音) != len(热词):
-            print(f"    热词「{热词}」得到的拼音数量与字数不符，抛弃")
+        # ported from upstream a18ab1f 按 | 切分「主词|别名」，全部转拼音，键为主词
+        parts = [p.strip() for p in 行.split("|") if p.strip()]
+        if not parts:
             continue
+        热词 = parts[0]
+        for part in parts:
+            热词拼音 = pinyin(part, 风格, 多音字)  # 得到拼音
 
-        拼音列表 = [
-            [],
-        ]
-        for 多音 in 热词拼音:
-            音数 = len(多音)
-            if 音数 > 1:
-                原始列表, 拼音列表 = 拼音列表, []
-                for 音 in 多音:
-                    拼音列表.extend([x.copy() + [音] for x in 原始列表])
-            else:
-                for x in 拼音列表:
-                    x.append(多音[0])
+            if len(热词拼音) != len(part):
+                print(f"    热词「{part}」得到的拼音数量与字数不符，抛弃")
+                continue
 
-        热词词典[热词] = 拼音列表
+            拼音列表 = [
+                [],
+            ]
+            for 多音 in 热词拼音:
+                音数 = len(多音)
+                if 音数 > 1:
+                    原始列表, 拼音列表 = 拼音列表, []
+                    for 音 in 多音:
+                        拼音列表.extend([x.copy() + [音] for x in 原始列表])
+                else:
+                    for x in 拼音列表:
+                        x.append(多音[0])
+
+            热词词典.setdefault(热词, []).extend(拼音列表)
     return len(热词词典)
 
 
@@ -146,6 +158,10 @@ def 热词替换(句子):
     句子：       被查找和替换的句子
     """
     所有匹配 = 匹配热词(句子)
+    # ported from upstream bf16001 黑名单词不做替换：匹配区间邻近出现黑名单词时跳过该项替换
+    from util.client.hot_sub_rag import blacklist_blocks_span, get_blacklist_words
+
+    blacklist_words = get_blacklist_words()
     for 匹配项 in 所有匹配:
         热词, 拼音序列 = 匹配项  # 从字典中找到可以替换的热词和对应的拼音
 
@@ -161,6 +177,8 @@ def 热词替换(句子):
                 替换区间.append([句子索引表[i]["index"], 句子索引表[i + j]["index"]])
 
         for 区间 in 替换区间:
+            if blacklist_blocks_span(句子, 区间[0], 区间[1] + 1, blacklist_words):
+                continue
             句子 = 句子[: 区间[0]] + 热词 + 句子[区间[1] + 1 :]
 
     return 句子

@@ -39,7 +39,8 @@ def 更新热词词典(热词文本: str):
         key_value = 热词.split(" = ")
         if len(key_value) == 2:
             key = key_value[0].strip()
-            value = key_value[1].strip()
+            # ported from upstream 81fcfaa hot-rule 文本两边的空格会被省略，在替换侧可用 \s 表示空格
+            value = key_value[1].strip().replace(r'\s', ' ')
             模式词典[key] = value
     return len(模式词典)
 
