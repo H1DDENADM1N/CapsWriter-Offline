@@ -34,6 +34,28 @@ def stream_close(signum, frame):
     Cosmic.stream.close()
 
 
+def drain_queue_in(logger: Optional[Logger] = None) -> int:
+    """
+    排空 Cosmic.queue_in 中残留的脏数据（只清 pending，不动正在处理的数据）。
+
+    ported from upstream 4e3505f：取消录音后，本会话 begin 以及阈值前积攒的
+    data 可能还残留在全局 queue_in 中（该队列由所有录音会话共用），若不清理,
+    下一次录音会读到带旧任务语义的脏数据，导致「前文丢失/旧结果混入」的串线问题。
+    """
+    _logger = logger if logger is not None else default_logger
+    drained = 0
+    while True:
+        try:
+            Cosmic.queue_in.get_nowait()
+            Cosmic.queue_in.task_done()
+            drained += 1
+        except asyncio.QueueEmpty:
+            break
+    if drained:
+        _logger.debug(f"已排空 queue_in 残留 {drained} 条")
+    return drained
+
+
 def stream_reopen(logger: Optional[Logger] = None):
     _logger = logger if logger is not None else default_logger
     if not threading.main_thread().is_alive():

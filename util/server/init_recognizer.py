@@ -137,6 +137,8 @@ def init_recognizer(
         # 从优先级队列中获取任务消息
         try:
             task = priority_queue.get(timeout=1)
+        except InterruptedError:
+            continue
         except Exception as e:
             log.error(f"从优先级队列中获取任务消息时出错: {e}", exc_info=True)
             continue

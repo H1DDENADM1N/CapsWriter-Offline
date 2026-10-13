@@ -82,6 +82,8 @@ class ClientConfig:
     restore_clipboard_after_paste: bool = config["client"][
         "restore_clipboard_after_paste"
     ]
+    # ported from upstream e74673f：输出完成后延迟自动回车，命中程序名单时才触发
+    enter_apps: list = config["client"]["enter_apps"]
     save_audio: bool = config["client"]["save_audio"]
     save_markdown: bool = config["client"]["save_markdown"]
     save_non_kwd_markdown: bool = config["client"]["save_non_kwd_markdown"]

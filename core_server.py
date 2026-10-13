@@ -116,7 +116,7 @@ async def main(logger: Optional[Logger] = None):
         empty_current_working_set()
 
     # 负责接收客户端数据的 coroutine
-    recv = websockets.serve(
+    server = await websockets.serve(
         ws_recv,
         Config.addr,
         Config.speech_recognition_port,
@@ -125,8 +125,13 @@ async def main(logger: Optional[Logger] = None):
     )
 
     # 负责发送结果的 coroutine
-    send = ws_send()
-    await asyncio.gather(recv, send)
+    try:
+        send = ws_send()
+        await send
+    finally:
+        # 服务端退出时，主动关闭端口
+        server.close()
+        await server.wait_closed()
 
 
 def init(logger: Optional[Logger] = None):

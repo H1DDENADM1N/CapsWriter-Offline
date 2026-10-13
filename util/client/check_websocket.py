@@ -30,6 +30,7 @@ async def check_websocket() -> bool:
                 f"ws://{Config.addr}:{Config.speech_recognition_port}",
                 subprotocols=["binary"],
                 max_size=None,
+                proxy=None,  # websockets>=16.0 默认走代理，本地连接需显式禁用
             )
             return True
     else:

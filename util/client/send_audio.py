@@ -124,6 +124,19 @@ async def send_audio():
                 task = asyncio.create_task(send_message(message))
                 break
             elif task["type"] == "cancel":
+                # ported from upstream 4e3505f：取消后兜底排空本会话残留的
+                # 脏 data/begin 帧（只清 pending，不动正在处理的数据）
+                drained = 0
+                while True:
+                    try:
+                        Cosmic.queue_in.get_nowait()
+                        Cosmic.queue_in.task_done()
+                        drained += 1
+                    except asyncio.QueueEmpty:
+                        break
+                if drained:
+                    logger.debug(f"录音已取消，排空队列残留 {drained} 条")
+
                 # 告诉服务端任务已取消
                 message = {
                     "task_id": task_id,

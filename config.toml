@@ -143,6 +143,12 @@ paste = true
 restore_clipboard_after_paste = true
 # 模拟粘贴后是否恢复剪贴板
 
+# ported from upstream e74673f：输出完成后延迟自动回车
+# 用于在同花顺等软件中输入股票名字，等软件响应后自动回车切换
+# 格式：[["<进程名>", <延迟秒数>], ...] 进程名小写
+# 仅当输出时焦点程序命中名单才触发；留空数组则不启用
+enter_apps = [["happ.exe", 0.5], ["hexin.exe", 0.5]]
+
 save_audio = true
 # 是否保存录音文件
 

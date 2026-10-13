@@ -21,7 +21,7 @@ from util.client.send_audio import send_audio
 from util.client.send_signal_to_hint_while_recording import (
     send_signal_to_hint_while_recording,
 )
-from util.client.stream import stream_reopen
+from util.client.stream import drain_queue_in, stream_reopen
 from util.config import ClientConfig as Config
 from util.my_status import Status
 
@@ -344,6 +344,10 @@ def cancel_task():
     # 通知停止录音，关掉滚动条
     Cosmic.on = False
     status.stop()
+
+    # ported from upstream 4e3505f：取消时排空队列残留脏数据，防止串线。
+    # 此处 cancel 标记尚未入队，排空是安全的（正被 send_audio 处理的数据不受影响）。
+    drain_queue_in()
 
     # 发送取消任务的消息到队列
     asyncio.run_coroutine_threadsafe(

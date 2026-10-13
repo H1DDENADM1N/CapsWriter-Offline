@@ -16,7 +16,8 @@ async def translate_text(
     json_data = json.dumps(data)
 
     # 异步函数发送WebSocket请求并接收响应
-    async with websockets.connect(url) as ws:
+    # ported from upstream 1f678ba：websockets>=16.0 默认走代理，本地连接需显式禁用
+    async with websockets.connect(url, proxy=None) as ws:
         await ws.send(json_data)
         response = await ws.recv()
         # 假设响应是JSON格式的字符串，将其转换回Python字典
