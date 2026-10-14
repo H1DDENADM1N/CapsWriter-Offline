@@ -1,4 +1,4 @@
-python313.zip
+python314.zip
 .
 ../site-packages
 ..
@@ -11,3 +11,4 @@ python313.zip
 ../site-packages/win32ctypes
 
 ../util/fun_asr_gguf/bin
+

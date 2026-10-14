@@ -1351,7 +1351,7 @@ debug = false
 本机 Python 执行（与runtime目录嵌入式Python版本保持一致）
 
 ```
-pip install  --target .\site-packages pywin32
+uv pip install --index-url https://mirrors.aliyun.com/pypi/simple/ --target .\site-packages pywin32
 ```
 
 编辑 `.\runtime\python3**._pth` 增加
