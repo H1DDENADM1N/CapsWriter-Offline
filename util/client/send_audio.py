@@ -55,6 +55,10 @@ async def send_audio():
         # 音频数据临时存放处
         cache = []
         duration = 0
+        # 本任务是否已向服务端发送过音频帧。
+        # 短于 threshold 的录音（误触短按 / 双击翻转）从未发出任何 data 帧，
+        # finish/cancel 时不应再上传空片段：空片段会被服务端解码器熔斷成垃圾文本。
+        has_sent_data = False
 
         # 保存音频文件
         file_path, file = "", None
@@ -101,6 +105,7 @@ async def send_audio():
                         np.mean(data[::3], axis=1).tobytes()
                     ).decode("utf-8"),
                 }
+                has_sent_data = True
                 task = asyncio.create_task(send_message(message))
             elif task["type"] == "finish":
                 # 完成写入本地文件
@@ -109,6 +114,12 @@ async def send_audio():
 
                 console.print(f"任务标识：{task_id}")
                 console.print(f"    录音时长：{duration:.2f}s")
+
+                # 从未发送过音频帧（短于 threshold 的录音/双击翻转）：服务端没有已开始
+                # 的片段，无需也不应上传空 final——空片段会被解码器熔斷成垃圾文本。
+                if not has_sent_data:
+                    console.print("    录音过短，未上传音频\n")
+                    break
 
                 # 告诉服务端音频片段结束了
                 message = {
@@ -136,6 +147,11 @@ async def send_audio():
                         break
                 if drained:
                     logger.debug(f"录音已取消，排空队列残留 {drained} 条")
+
+                # 从未发送过音频帧（短于 threshold 的录音/双击翻转）：服务端没有已开始
+                # 的片段，无需也不应上传空 final——空片段会被解码器熔斷成垃圾文本。
+                if not has_sent_data:
+                    break
 
                 # 告诉服务端任务已取消
                 message = {

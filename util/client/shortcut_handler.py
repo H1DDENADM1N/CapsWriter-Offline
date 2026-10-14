@@ -655,7 +655,10 @@ def hold_mode(e: keyboard.KeyboardEvent):
                 Config.hold_mode,
                 Config.convert_to_traditional_chinese_main,
             )
-            # 启动录音任务
+            # 启动录音任务。
+            # 注意：双击的第二下（is_short_duration）也可能就是用户「按住说话」的真语音
+            # （tap→hold 交互），因此这里必须无条件启动；短击（< threshold）产生的
+            # 空片段由 send_audio 的守卫 + up 分支的静默取消共同兜底，翻转本身不会上传音频。
             launch_task()
             if not is_short_duration:
                 saved_result_for_offline_translate_needed = (
@@ -697,6 +700,14 @@ def hold_mode(e: keyboard.KeyboardEvent):
                 if Config.suppress:
                     keyboard.send(Config.speech_recognition_shortcut)
 
+            elif is_short_press and double_clicked:
+                # 双击翻转完成（第二下快击抬起）：翻转本身不发任何音频。
+                # 按下时启动的录音（< threshold，无数据帧）在此静默取消；
+                # send_audio 的空片段守卫保证不上传空 final，避免被解码器熔斷成垃圾文本。
+                hold_mode_first_time_cancel_task = True
+                cancel_task()
+                last_time_released = 0  # 防止随后按住说话被误判为第三次双击
+                double_clicked = False
             else:
                 finish_task()
 
