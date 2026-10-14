@@ -361,8 +361,8 @@ api_key = ""
 # 不要泄露给任何人
 # 获取 API Key https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys
 
-model = "glm-4.5-flash"
-# 模型名称 默认免费模型 glm-4.5-flash
+model = "glm-4-flash-250414"
+# 模型名称 默认免费模型 glm-4-flash-250414
 # 了解更多 https://open.bigmodel.cn/
 
 
@@ -372,7 +372,7 @@ api_key = ""
 # 请填写您自己的 API Key
 # 不要泄露给任何人
 base_url = "https://api.siliconflow.cn/v1"
-model = "Qwen/Qwen2.5-14B-Instruct"
+model = "tencent/Hunyuan-MT-7B"
 # 硅基流动 注册邀请码：WDsBZwpv
 # https://cloud.siliconflow.cn/i/WDsBZwpv
 # SiliconFlow 邀请奖励持续进行，2000 万 Tokens 送不停！

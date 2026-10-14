@@ -81,7 +81,8 @@ def zhipuai_optimize_language_expression(text, prompt):
                 {"role": "user", "content": text},
             ],
             thinking={
-                "type": "disabled",  # 不启用深度思考模式
+                "type": "enabled",
+                "budget_tokens": 1024,  # 思考阶段最多消耗的 tokens
             },
             stream=False,  # 不启用流式输出
             max_tokens=4096,  # 最大输出 tokens
