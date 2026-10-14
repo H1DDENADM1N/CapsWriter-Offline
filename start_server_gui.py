@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from util.check_process import check_process
 from util.config import DebugConfig
 from util.config import ServerConfig as Config
@@ -318,6 +319,10 @@ if __name__ == "__main__":
             )
 
     app = QApplication([])
+    # 托盘应用：禁止「最后一个窗口关闭即退出」。
+    # 否则非模态对话框（如 🔑 修改 API Key）作为唯一可见窗口关闭时，
+    # quitOnLastWindowClosed 默认 True 会让整个客户端与托盘图标退出。
+    app.setQuitOnLastWindowClosed(False)
     _apply_custom_theme(app, logger=default_logger)
     gui = GUI(logger=default_logger)
     if not Config.shrink_automatically_to_tray:

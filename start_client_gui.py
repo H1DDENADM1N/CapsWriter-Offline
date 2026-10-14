@@ -2322,6 +2322,10 @@ def start_client_gui(logger: Optional[Logger] = None):
                 ["hint_while_recording.exe"], creationflags=subprocess.CREATE_NO_WINDOW
             )
     app = QApplication(sys.argv)
+    # 托盘应用：禁止「最后一个窗口关闭即退出」。
+    # 否则非模态对话框（如 🔑 修改 API Key）作为唯一可见窗口关闭时，
+    # quitOnLastWindowClosed 默认 True 会让整个客户端与托盘图标退出。
+    app.setQuitOnLastWindowClosed(False)
     _apply_custom_theme(app, logger=_logger)
     if Config.hint_while_recording_at_cursor_position:
         tooltip = Hint_While_Recording_At_Cursor_Position()
