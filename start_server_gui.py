@@ -2,6 +2,7 @@ import multiprocessing as mul
 import subprocess
 import sys
 import threading
+from pathlib import Path
 from queue import Queue
 from typing import Optional
 
@@ -25,6 +26,23 @@ from util.config import ServerConfig as Config
 from util.safe_logger import SafeLogger
 from util.server.check_model import check_model_gui
 from util.server.check_port import check_port_server
+
+
+def _apply_custom_theme(app: QApplication, logger: Optional[Logger] = None):
+    """应用自定义 GUI 主题样式 util/server/gui_theme_custom.css。
+
+    样式表为纯 PySide6 兼容的 Qt 样式表（重现 dark_amber 主题外观：
+    amber 主色 #FFC107 与 Segoe MDL2 Assets 图标字体），直接整体应用。
+    """
+    _logger = logger if logger is not None else default_logger
+    css_path = Path("util") / "server" / "gui_theme_custom.css"
+    try:
+        css = css_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        _logger.warning(f"自定义主题样式文件不存在，已跳过: {css_path}")
+        return
+    app.setStyleSheet(css)
+    _logger.debug("已应用自定义主题样式 util/server/gui_theme_custom.css")
 
 
 class GUI(QMainWindow):
@@ -300,6 +318,7 @@ if __name__ == "__main__":
             )
 
     app = QApplication([])
+    _apply_custom_theme(app, logger=default_logger)
     gui = GUI(logger=default_logger)
     if not Config.shrink_automatically_to_tray:
         gui.show()

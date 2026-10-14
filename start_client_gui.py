@@ -471,7 +471,7 @@ class CustomTextEdit(QTextEdit):
             # 更新字体大小
             self.setStyleSheet(f"""
                 font-size: {self.font_size}pt;
-                background-color: rgba(35, 38, 41, 255);
+                background-color: rgba(46, 50, 54, 255);
             """)
         else:
             super().wheelEvent(event)
@@ -1694,8 +1694,8 @@ class GUI(QMainWindow):
             self.time_label.stop_timer()
             self.time_label.hide()  # 隐藏时间标签
         self.resize(425, 425)
-        self.text_box_client.setStyleSheet("background-color: rgba(35, 38, 41, 255);")
-        self.setStyleSheet("background-color: rgba(49, 54, 59, 255);")
+        self.text_box_client.setStyleSheet("background-color: rgba(46, 50, 54, 255);")
+        self.setStyleSheet("background-color: rgba(35, 38, 41, 255);")
         self.text_box_client.setVisible(True)  # 显示文本框
         for i in range(self.title_bar.count()):  # 显示标题栏
             widget = self.title_bar.itemAt(i).widget()
@@ -1928,11 +1928,11 @@ class GUI(QMainWindow):
             self.time_label.stop_timer()  # 停止定时器
             self.text_box_client.setVisible(True)
             self.text_box_client.setStyleSheet(
-                "background-color: rgba(35, 38, 41, 255);"
+                "background-color: rgba(46, 50, 54, 255);"
             )
             self.time_label.setVisible(False)
             self.adjust_time_label_position()
-            self.setStyleSheet("background-color: rgba(49, 54, 59, 255);")
+            self.setStyleSheet("background-color: rgba(35, 38, 41, 255);")
         # 添加诊断日志：记录resize前的窗口大小
         geometry_before = self.geometry()
         self.logger.trace(
@@ -1989,10 +1989,10 @@ class GUI(QMainWindow):
             self.create_time_label()  # 确保时间标签存在
             self.time_label.start_timer()  # 启动定时器
             self.text_box_client.setVisible(False)
-            self.text_box_client.setStyleSheet("background-color: rgba(35, 38, 41, 0);")
+            self.text_box_client.setStyleSheet("background-color: rgba(46, 50, 54, 0);")
             self.time_label.setVisible(True)
             self.adjust_time_label_position()
-            self.setStyleSheet("background-color: rgba(49, 54, 59, 0);")
+            self.setStyleSheet("background-color: rgba(35, 38, 41, 0);")
         # 添加诊断日志：记录resize前的窗口大小
         geometry_before = self.geometry()
         self.logger.trace(
@@ -2281,6 +2281,23 @@ class GUI(QMainWindow):
         return False
 
 
+def _apply_custom_theme(app: QApplication, logger: Optional[Logger] = None):
+    """应用自定义 GUI 主题样式 util/client/gui_theme_custom.css。
+
+    样式表为纯 PySide6 兼容的 Qt 样式表（重现原 dark_teal 主题外观：
+    teal 主色 #00B294 与 Segoe MDL2 Assets 图标字体），直接整体应用。
+    """
+    _logger = logger if logger is not None else default_logger
+    css_path = Path("util") / "client" / "gui_theme_custom.css"
+    try:
+        css = css_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        _logger.warning(f"自定义主题样式文件不存在，已跳过: {css_path}")
+        return
+    app.setStyleSheet(css)
+    _logger.debug("已应用自定义主题样式 util/client/gui_theme_custom.css")
+
+
 def start_client_gui(logger: Optional[Logger] = None):
     _logger = logger if logger is not None else default_logger
     Print_Screen_Scale(logger=_logger)
@@ -2305,6 +2322,7 @@ def start_client_gui(logger: Optional[Logger] = None):
                 ["hint_while_recording.exe"], creationflags=subprocess.CREATE_NO_WINDOW
             )
     app = QApplication(sys.argv)
+    _apply_custom_theme(app, logger=_logger)
     if Config.hint_while_recording_at_cursor_position:
         tooltip = Hint_While_Recording_At_Cursor_Position()
         tooltip.show()

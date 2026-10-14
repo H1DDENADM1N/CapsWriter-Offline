@@ -1,0 +1,161 @@
+/* 纯 PySide6 Qt 样式表：复现 qt_material dark_amber 主题外观。
+   调色板取自 dark_amber：背景 #232629 / 卡片 #2e3236 / 次级面 #263538、
+   主色 #ffc107 / 主色亮 #ffd54f、正文 #fff3d6 / 次级文本 #b5975a。 */
+
+QWidget {
+    background-color: #232629;
+    color: #fff3d6;
+    selection-background-color: #ffc107;
+    selection-color: #2a2a2a;
+}
+
+QToolTip {
+    color: #ffd54f;
+    background-color: #263538;
+    border: 1px solid #2e3236;
+    padding: 4px 6px;
+}
+
+QPushButton {
+    font-family: "Segoe MDL2 Assets";
+    background-color: transparent;
+    color: #ffc107;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+}
+QPushButton:hover {
+    background-color: rgba(255, 193, 7, 0.15);
+}
+QPushButton:pressed {
+    background-color: rgba(255, 193, 7, 0.3);
+}
+QPushButton:disabled {
+    color: rgba(255, 243, 214, 0.3);
+}
+
+QCheckBox {
+    color: #fff3d6;
+    spacing: 8px;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #b5975a;
+    border-radius: 3px;
+    background: transparent;
+}
+QCheckBox::indicator:hover {
+    border-color: #ffd54f;
+}
+QCheckBox::indicator:checked {
+    background-color: #ffc107;
+    border-color: #ffc107;
+}
+QCheckBox::indicator:disabled {
+    border-color: rgba(255, 243, 214, 0.3);
+}
+QCheckBox::indicator:checked:disabled {
+    background-color: rgba(255, 193, 7, 0.3);
+    border-color: rgba(255, 193, 7, 0.3);
+}
+
+QLineEdit {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid #263538;
+    color: #fff3d6;
+    padding: 4px 2px;
+    selection-background-color: #ffc107;
+    selection-color: #2a2a2a;
+}
+QLineEdit:focus {
+    border-bottom-color: #ffc107;
+}
+QLineEdit:disabled {
+    color: rgba(255, 243, 214, 0.4);
+}
+
+QTextEdit {
+    background-color: #2e3236;
+    border: none;
+    color: #fff3d6;
+    padding: 4px;
+    selection-background-color: #ffc107;
+    selection-color: #2a2a2a;
+}
+
+QLabel {
+    font-family: "Segoe MDL2 Assets";
+    color: #fff3d6;
+    background: transparent;
+    font-size: 14px;
+}
+QLabel:disabled {
+    color: rgba(255, 243, 214, 0.4);
+}
+
+QMenu {
+    background-color: #2e3236;
+    border: 1px solid #263538;
+    font-size: 16px;
+}
+QMenu::item {
+    padding: 12px 24px;
+    color: #fff3d6;
+    background: transparent;
+}
+QMenu::item:selected {
+    background-color: #ffc107;
+    color: #2a2a2a;
+}
+QMenu::item:disabled {
+    color: rgba(255, 243, 214, 0.3);
+}
+QMenu::separator {
+    height: 1px;
+    background: #263538;
+    margin: 4px 8px;
+}
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #263538;
+    border-radius: 5px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #ffd54f;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background: #263538;
+    border-radius: 5px;
+    min-width: 30px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #ffd54f;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: transparent;
+}
