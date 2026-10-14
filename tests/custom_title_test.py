@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qt_material import apply_stylesheet
 
 
 class MainWindow(QMainWindow):
@@ -231,8 +230,5 @@ class MainWindow(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
-    apply_stylesheet(
-        app, theme="dark_pink.xml", css_file="util\\client\\gui_theme_custom.css"
-    )
     window.show()
     sys.exit(app.exec())

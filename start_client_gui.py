@@ -47,7 +47,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qt_material import apply_stylesheet
 from tomlkit import dumps, parse
 
 from util.check_process import check_process
@@ -2309,9 +2308,6 @@ def start_client_gui(logger: Optional[Logger] = None):
     if Config.hint_while_recording_at_cursor_position:
         tooltip = Hint_While_Recording_At_Cursor_Position()
         tooltip.show()
-    apply_stylesheet(
-        app, theme="dark_teal.xml", css_file="util\\client\\gui_theme_custom.css"
-    )
     global gui
     gui = GUI(logger=_logger)
     if not Config.shrink_automatically_to_tray:

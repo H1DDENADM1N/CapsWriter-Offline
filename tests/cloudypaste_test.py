@@ -12,8 +12,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qt_material import apply_stylesheet
-
 from util.client.cloud_clipboard_show_qrcode import CloudClipboardShowQRCode
 
 
@@ -93,9 +91,6 @@ class MainWindow(QMainWindow):
 
 def test_gui():
     app = QApplication([])
-    apply_stylesheet(
-        app, theme="dark_teal.xml", css_file="util\\client\\gui_theme_custom.css"
-    )
     window = MainWindow()
     window.show()
     sys.exit(app.exec())

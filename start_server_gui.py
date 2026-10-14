@@ -19,8 +19,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qt_material import apply_stylesheet
-
 from util.check_process import check_process
 from util.config import DebugConfig
 from util.config import ServerConfig as Config
@@ -302,7 +300,6 @@ if __name__ == "__main__":
             )
 
     app = QApplication([])
-    apply_stylesheet(app, theme="dark_amber.xml")
     gui = GUI(logger=default_logger)
     if not Config.shrink_automatically_to_tray:
         gui.show()

@@ -18,8 +18,6 @@ from PySide6.QtWidgets import (
     QTextBrowser,
     QVBoxLayout,
 )
-from qt_material import apply_stylesheet
-
 from util.client.restart import stop_client
 from util.config import DebugConfig
 from util.explorer_token_downgrade import downgraded_via_explorer_token
@@ -238,9 +236,6 @@ if __name__ == "__main__":
     )
     default_logger.info("Starting config selector...")
     app = QApplication(sys.argv)
-    apply_stylesheet(
-        app, theme="dark_blue.xml", css_file="util\\client\\gui_theme_custom.css"
-    )
 
     dialog = ConfigSelector(logger=default_logger)
     dialog.show()
