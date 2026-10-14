@@ -1,4 +1,14 @@
 import time
+import warnings
+
+# zai-sdk 0.2.3 imports `pydantic.v1` for Pydantic V1 兼容层。Pydantic 2.12 在
+# Python >= 3.14 下会对该模块发出 UserWarning，但实测 V1 的 parse_date /
+# parse_datetime 等函数在 3.14 下仍返回正确结果（仅警告、非致命）。在导入
+# zai 之前过滤这条已知无害的警告，避免每次 `uv run core_client.py` 都刷屏。
+warnings.filterwarnings(
+    "ignore",
+    message=r"Core Pydantic V1 functionality isn't compatible with Python .*",
+)
 
 from loguru import logger
 from openai import OpenAI
