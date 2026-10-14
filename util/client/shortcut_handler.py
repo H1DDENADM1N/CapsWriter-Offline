@@ -33,7 +33,12 @@ if shutil.which("ffplay") and Config.play_start_music:
 config_toml_path = Path("config.toml")
 
 
-task = asyncio.Future()
+# 仅为占位; launch_task() 会把它重写为 run_coroutine_threadsafe(send_audio(), Cosmic.loop)。
+# 之所以不能再写成 asyncio.Future(): 本模块在 core_client.py 顶部(事件循环建立前)被导入,
+# Python 3.10+ 对无当前事件循环的 asyncio.Future() 报警, 3.12+/3.14 直接抛 RuntimeError,
+# 导致 uv run core_client.py 在导入阶段就崩溃("There is no current event loop")。
+# task 在 launch_task() 之外从不被读取, 因此用 None 占位是安全的。
+task = None
 status = Status("开始录音", spinner="point")
 pool = ThreadPoolExecutor()
 pressed = False
