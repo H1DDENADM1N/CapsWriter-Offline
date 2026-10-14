@@ -301,6 +301,10 @@
     10.5 欢迎将位置错乱的exe程序名反馈给我
 12. 整合包不支持增量更新，请删除 `./configs/` 目录下你的自定义配置例如 `my config.toml`，重新将修改后的自定义配置 `config.toml` 复制到 `./configs/` 目录下，重命名为例如 `my config.toml`。
 
+13. 如果把本项目放在 **DSH 等“受代理工作区保护”的目录**（工作区登记表里的 workspace 路径，例如 `Documents\CapsWriter-Offline`）里直接运行，客户端会出现“程序正常启动、无任何报错，但托盘图标不显示”的现象。原因：这类目录被宿主统一打了 **Low 完整性沙箱标签**（目录 ACL 含 Low 标签 + 每目录独立的 S-1-4 沙箱标识 + Everyone 禁止删除子目录），从该目录启动的进程会继承 Low 完整性，它向任务栏 explorer（Medium 完整性）注册托盘图标时会被 UIPI 静默拦截。使用管理员权限（如 `gsudo`）启动可以把进程提到 High 完整性从而“绕过”这一个拦截，但代价是客户端整体以管理员权限运行，会带来与第 8 条相反的输入/UIPI 副作用，不推荐作为日常用法。正确做法：把本项目复制到受保护工作区**之外的普通目录**（例如 `C:\CapsWriter-Offline`）后运行，用普通权限即可正常显示托盘图标。开发、调试脚本请留在工作区内；日常运行 GUI 请在普通目录中进行。
+
+    13.1 如果在 DSH 中删除了工作区，**不会自动恢复目录 ACL**——DSH 的登记表（`workspaces.json`）只记录 `id / path / sessionIds`，不保存加沙箱前的 ACL 快照，取消登记后 Low 标签、S-1-4 沙箱标识、Everyone 禁止删除子目录这三条 ACL 仍原样留在磁盘上。如需还原，请在管理员终端执行：`icacls "<目录>" /setintegritylevel M` 把完整性标签改回 Medium，再 `icacls "<目录>" /reset /t /c` 把 DACL 重置为从父目录继承的默认值，从而清掉 S-1-4 沙箱标识和 Everyone 禁止删除。注意：这是破坏性修改，等于亲手拆掉该目录的隔离，仅在确认目录已不再作为 DSH 工作区使用、且不会再被重新登记之后才执行。
+
 # 🤓 源码运行
 
 <details>
@@ -406,7 +410,7 @@ uv run dev\check_site_packages_update.py
 ```toml
 # 调试
 [debug]
-logger_level = "ERROR" # 调试日志级别
+logger_level = "DEBUG" # 调试日志级别
 # 级别名称
 # TRACE           5
 # DEBUG           10
@@ -548,6 +552,12 @@ paste = true
 
 restore_clipboard_after_paste = true
 # 模拟粘贴后是否恢复剪贴板
+
+# ported from upstream e74673f：输出完成后延迟自动回车
+# 用于在同花顺等软件中输入股票名字，等软件响应后自动回车切换
+# 格式：[["<进程名>", <延迟秒数>], ...] 进程名小写
+# 仅当输出时焦点程序命中名单才触发；留空数组则不启用
+enter_apps = [["happ.exe", 0.5], ["hexin.exe", 0.5]]
 
 save_audio = true
 # 是否保存录音文件
