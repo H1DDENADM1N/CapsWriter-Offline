@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -18,6 +19,39 @@ def get_outdated_packages():
         list[dict]: 包信息列表  例如：{'name': 'loguru', 'current': '0.7.0', 'latest': '0.7.3', 'type': 'wheel'}
 
     """
+    def run_outdated(no_cache: bool) -> "subprocess.CompletedProcess[str]":
+        """执行 uv pip list --outdated；no_cache=True 时追加 --no-cache 绕过缓存。
+
+        将 uv 的临时目录与缓存目录重定向到工作区内（.uv_tmp / .uv_cache），
+        使脚本在受限/沙箱环境中也能运行——不依赖系统 %TEMP% 与
+        AppData\\Local\\uv\\cache 的写入权限（这些路径常被沙箱/防护拦截，导致
+        os error 5 拒绝访问）。
+        """
+        base = Path.cwd().resolve()
+        tmp_dir = base / ".uv_tmp"
+        cache_dir = base / ".uv_cache"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        env = os.environ.copy()
+        env["TMP"] = str(tmp_dir)
+        env["TEMP"] = str(tmp_dir)
+        env["TMPDIR"] = str(tmp_dir)
+        env["UV_CACHE_DIR"] = str(cache_dir)
+
+        cmd = ["uv", "pip", "list", "--outdated", "--format=columns"]
+        if no_cache:
+            cmd.insert(1, "--no-cache")
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            check=True,
+        )
+
     try:
         # 使用 rich 的进度条显示加载状态
         with Progress(
@@ -27,18 +61,32 @@ def get_outdated_packages():
         ) as progress:
             task = progress.add_task("🔍 检查可更新的包...", total=None)
 
-            result = subprocess.run(
-                ["uv", "pip", "list", "--outdated", "--format=columns"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
+            try:
+                result = run_outdated(no_cache=False)
+            except subprocess.CalledProcessError:
+                # uv 缓存被占用/不可写时（例如 sdists-v9\.git 被其它进程锁住），
+                # 自动改用 --no-cache 绕过缓存重新查询。
+                result = run_outdated(no_cache=True)
+                rprint(
+                    "[yellow]⚠ 标准模式受 uv 缓存影响，已自动改用 --no-cache 完成检查。[/yellow]"
+                )
 
             progress.update(task, description="✅ 检查完成")
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except FileNotFoundError:
         rprint(
-            "[red]❌ 无法执行 'uv pip list --outdated --format=columns'。请确保 uv 已安装并在 PATH 中。[/red]"
+            "[red]❌ 未找到 'uv' 可执行文件。请确保 uv 已安装并在 PATH 中。[/red]"
         )
+        return []
+    except subprocess.CalledProcessError as e:
+        rprint(
+            "[red]❌ 标准检查和 --no-cache 回退均失败（退出码 "
+            + str(e.returncode)
+            + "）。\n[/red]"
+        )
+        if e.stderr:
+            rprint(
+                "[red]错误详情：[/red]\n[yellow]" + e.stderr.strip() + "[/yellow]"
+            )
         return []
 
     outdated_packages = []
