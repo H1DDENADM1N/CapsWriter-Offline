@@ -105,7 +105,7 @@ def CloudClipboardShowQRCode(text):
 
 if __name__ == "__main__":
     args = sys.argv
-    text = str(args[1:])[2:-2]
+    text = " ".join(args[1:])
     app = QApplication([])
     CloudClipboardShowQRCode(text)
     sys.exit(app.exec())

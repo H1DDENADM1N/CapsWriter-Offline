@@ -1508,7 +1508,7 @@ class GUI(QMainWindow):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            shell=True,
+            shell=False,
             encoding="utf-8",
         )
 
