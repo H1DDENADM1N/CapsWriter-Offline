@@ -562,8 +562,13 @@ class FastRAG:
                 if not phs:
                     continue
                 codes = self._encode_seq([p.value for p in phs])
-                # 统一索引前两个音素（中文：声母+韵母，英文：前两位容错）
+                # 索引前两个音素（中文：声母+韵母，英文：前两位容错）
                 indices = list(range(min(len(codes), 2)))
+                # head2tail（基准 2026-10-16，variant.py）：额外锚定尾音素，
+                # 让丢首字/单字缺失的查询仍共享索引键（丢首字召回 0/4→4/4，正式召回→12/12，
+                # 检索延迟 +1.9× 至 ~15.6ms/查询，实时可接受；anchor 全位置 5.7× 不值）
+                if len(codes) >= 3:
+                    indices.append(len(codes) - 1)
                 for i in indices:
                     self.index[codes[i]].append((hw, codes))
                 self.hotword_count += 1
