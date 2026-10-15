@@ -101,7 +101,7 @@ QMenu {
     font-size: 16px;
 }
 QMenu::item {
-    padding: 12px 24px;
+    padding: 12px 14px;
     color: #dcf4f0;
     background: transparent;
 }
@@ -111,6 +111,22 @@ QMenu::item:selected {
 }
 QMenu::item:disabled {
     color: rgba(220, 244, 240, 0.3);
+}
+QMenu::indicator {
+    width: 18px;
+    height: 18px;
+    margin-left: 20px;
+    margin-right: 0px;
+    image: url("util/client/menu_radio_unchecked.svg");
+}
+QMenu::indicator:selected {
+    image: url("util/client/menu_radio_unchecked_selected.svg");
+}
+QMenu::indicator:checked {
+    image: url("util/client/menu_radio_checked.svg");
+}
+QMenu::indicator:checked:selected {
+    image: url("util/client/menu_radio_checked_selected.svg");
 }
 QMenu::separator {
     height: 1px;
