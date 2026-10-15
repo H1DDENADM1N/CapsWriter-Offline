@@ -191,6 +191,115 @@ def merge_by_text(
     return prev_text + new_text
 
 
+def _find_best_token_overlap(
+    prev_tail: str, new_head: str
+) -> Optional[Tuple[int, int, int]]:
+    """
+    在 prev_tail 和 new_head 之间找最佳对齐（与上游 17706f9 token_merger 相同策略）。
+
+    位置约束：匹配终点在 prev_tail 后半段，匹配起点在 new_head 前半段。
+    用 get_matching_blocks 枚举所有公共子串，再加位置约束过滤、按分值取最优，
+    避免 find_longest_match 在重叠区长度估算错误时匹配点塌缩到开头。
+
+    Args:
+        prev_tail: prev 末尾文本
+        new_head: new 开头文本
+
+    Returns:
+        (match_pos_prev, match_pos_new, match_len)，找不到则返回 None
+    """
+    import difflib
+
+    min_match = 2
+    sm = difflib.SequenceMatcher(
+        None, prev_tail, new_head, autojunk=False
+    )
+    matches = sm.get_matching_blocks()
+
+    tail_end_threshold = len(prev_tail) // 4 * 3
+    head_start_threshold = len(new_head) // 4
+
+    candidates = [
+        (a, b, size)
+        for a, b, size in matches
+        if size >= min_match
+        and a + size > tail_end_threshold
+        and b <= head_start_threshold
+    ]
+    if not candidates:
+        return None
+
+    def score(item):
+        a, b, size = item
+        return size * size + a - b
+
+    return max(candidates, key=score)
+
+
+def _char_pos_to_token_idx(
+    tokens: List[str], base_offset: int, char_pos: int
+) -> int:
+    """
+    将字符位置映射回 token 索引（全局，绝对索引）。
+
+    从 base_offset 开始累计字符数，找到第一个 >= char_pos 的 token 边界。
+    返回的是原列表的全局索引，可直接用于 prev_tokens[:idx] 切片，保留 idx 之前所有 token。
+    """
+    char_count = 0
+    for i in range(base_offset, len(tokens)):
+        if char_count >= char_pos:
+            return i
+        char_count += len(tokens[i])
+    return len(tokens)
+
+
+def _fallback_merge(
+    prev_tokens: List[str],
+    prev_timestamps: List[float],
+    new_tokens: List[str],
+    new_global_timestamps: List[float],
+    offset: float,
+    logger: Optional[Logger] = None,
+) -> Tuple[List[str], List[float]]:
+    """
+    兜底：基于时间戳硬拼接。
+
+    只在 prev 末尾时间戳之后的 new token 才接入，避免重复追加。
+    """
+    _logger = logger if logger is not None else default_logger
+    last_time = prev_timestamps[-1] if prev_timestamps else offset
+    new_start_idx = 0
+    for i, t in enumerate(new_global_timestamps):
+        if t > last_time + 0.1:
+            new_start_idx = i
+            break
+    else:
+        new_start_idx = len(new_tokens)
+
+    result_tokens = prev_tokens + new_tokens[new_start_idx:]
+    result_timestamps = prev_timestamps + new_global_timestamps[new_start_idx:]
+
+    _logger.debug(f"时间戳兜底拼接: 从 new[{new_start_idx}] 开始")
+    return result_tokens, result_timestamps
+
+
+def _clean_repeated_punct(
+    tokens: List[str], timestamps: List[float]
+) -> Tuple[List[str], List[float]]:
+    """清理连续重复标点"""
+    from util.constants import Punctuation
+
+    puncs = set(Punctuation.ALL + " ")
+    clean_tokens = []
+    clean_timestamps = []
+    for token, ts in zip(tokens, timestamps):
+        if clean_tokens and token in puncs and clean_tokens[-1] == token:
+            continue
+        clean_tokens.append(token)
+        clean_timestamps.append(ts)
+    return clean_tokens, clean_timestamps
+
+
 def merge_tokens_by_sequence_matcher(
     prev_tokens: List[str],
     prev_timestamps: List[float],
@@ -204,10 +313,15 @@ def merge_tokens_by_sequence_matcher(
     """
     使用 SequenceMatcher 进行精确的 token 级别拼接
 
-    算法：
-    1. 提取 prev 和 new 在重叠区域的 tokens
-    2. 使用 SequenceMatcher 找到最长公共子序列
-    3. 在匹配点截断 prev，拼接 new 从匹配点开始的部分
+    算法（移植上游 17706f9 token_merger 修复）：
+    1. 基于 overlap 秒数估算重叠区字符数（overlap * 约5字/秒），
+       取 prev 尾部、new 头部文本，不再用时间戳过滤重叠区。
+       （旧实现混用 prev 全局时间戳与 new 相对时间戳，导致重叠区
+       提取错误：prev 被切、new 几乎全留 → 重复文本 + 塌缩时间戳）
+    2. 用 get_matching_blocks + 位置约束选最佳对齐
+    3. 用字符位置→全局 token 索引的映射，在匹配终点处切 prev / new。
+       关键：prev 用绝对索引切片 prev_tokens[:prev_cut]，
+       完整保留匹配点之前的所有已累积 token（修复多段累积丢文本回归）。
 
     Args:
         prev_tokens: 之前累积的 tokens
@@ -221,8 +335,6 @@ def merge_tokens_by_sequence_matcher(
     Returns:
         (合并后的 tokens, 合并后的时间戳)
     """
-    import difflib
-
     _logger = logger if logger is not None else default_logger
 
     # 转换新片段时间戳为全局时间
@@ -235,119 +347,56 @@ def merge_tokens_by_sequence_matcher(
     if not new_tokens:
         return prev_tokens, prev_timestamps
 
-    # 标点集合，用于后处理
-    from util.constants import Punctuation
+    # 1. 提取 prev 尾部和 new 头部的文本（基于 overlap 动态确定范围）
+    #    重叠区域的字符数估计：overlap 秒 × 约 5 字/秒
+    overlap_char_estimate = max(int(overlap * 5), 20)
+    prev_tail_len = min(len(prev_tokens), overlap_char_estimate * 3)
+    new_head_len = min(len(new_tokens), overlap_char_estimate * 3)
 
-    puncs = set(Punctuation.ALL + " ")
+    prev_tail_text = "".join(prev_tokens[-prev_tail_len:])
+    new_head_text = "".join(new_tokens[:new_head_len])
 
-    # 1. 提取重叠区域
-    # prev 的重叠区：时间戳 >= offset - 1.0 的部分
-    overlap_start_time = offset - 1.0
-    prev_overlap_indices = [
-        i for i, t in enumerate(prev_timestamps) if t >= overlap_start_time
-    ]
-    prev_overlap_tokens = [prev_tokens[i] for i in prev_overlap_indices]
-    prev_overlap_text = "".join(prev_overlap_tokens)
+    # 2. 寻找最佳对齐（带位置约束）
+    best = _find_best_token_overlap(prev_tail_text, new_head_text)
 
-    # new 的重叠区：时间戳 <= overlap + 1.0 的部分
-    overlap_end_time = overlap + 1.0
-    new_overlap_indices = [
-        i for i, t in enumerate(new_timestamps) if t <= overlap_end_time
-    ]
-    new_overlap_tokens = [new_tokens[i] for i in new_overlap_indices]
-    new_overlap_text = "".join(new_overlap_tokens)
-
-    # 2. 使用 SequenceMatcher 寻找最佳对齐
-    sm = difflib.SequenceMatcher(None, prev_overlap_text, new_overlap_text)
-    match = sm.find_longest_match(0, len(prev_overlap_text), 0, len(new_overlap_text))
-
-    if match.size >= 2:  # 至少匹配上 2 个字符
-
-        def _cut_at_char(
-            tokens: List[str], timestamps: List[float], start_idx: int, char_pos: int
-        ):
-            """在 char_pos 字符位置切开 tokens，返回（前段 tokens, 前段 ts, 后段 tokens, 后段 ts）。
-
-            切点可能落在某个 token 内部（不同分片的切分粒度可能不同），
-            此时必须把该 token 按字符拆开：前缀归前段、剩余部分归后段，
-            不能整 token 丢弃，否则会吞掉尾部字符。
-            ported from upstream 84912d5
-            """
-            head_tokens: List[str] = []
-            head_ts: List[float] = []
-            tail_tokens: List[str] = []
-            tail_ts: List[float] = []
-            char_count = 0
-            placed = False
-            for idx in range(start_idx, len(tokens)):
-                token = tokens[idx]
-                token_len = len(token)
-                if not placed and char_count + token_len > char_pos:
-                    # 切点落在此 token 内部：按字符拆开
-                    head_part = token[: char_pos - char_count]
-                    tail_part = token[char_pos - char_count :]
-                    if head_part:
-                        head_tokens.append(head_part)
-                        head_ts.append(timestamps[idx])
-                    if tail_part:
-                        tail_tokens.append(tail_part)
-                        tail_ts.append(timestamps[idx])
-                    placed = True
-                elif not placed:
-                    head_tokens.append(token)
-                    head_ts.append(timestamps[idx])
-                else:
-                    tail_tokens.append(token)
-                    tail_ts.append(timestamps[idx])
-                char_count += token_len
-            return head_tokens, head_ts, tail_tokens, tail_ts
-
-        # a. 在匹配终点处按字符切开 prev（保留到匹配终点）
-        prev_head, prev_head_ts, _, _ = _cut_at_char(
-            prev_tokens, prev_timestamps, 0, match.a + match.size
+    if best is None:
+        _logger.debug("Token 拼接: 未找到重叠，直接拼接")
+        return _fallback_merge(
+            prev_tokens,
+            prev_timestamps,
+            new_tokens,
+            new_global_timestamps,
+            offset,
+            logger,
         )
 
-        # b. 在匹配终点处按字符切开 new（从匹配终点之后开始）
-        _, _, new_tail, new_tail_ts = _cut_at_char(
-            new_tokens, new_global_timestamps, 0, match.b + match.size
-        )
+    match_pos_prev, match_pos_new, match_len = best
 
-        # c. 执行拼接
-        result_tokens = prev_head + new_tail
-        result_timestamps = prev_head_ts + new_tail_ts
+    # 3. 将字符位置映射回【全局 token 索引】，执行拼接
+    #    prev 保留到匹配终点（match_pos_prev + match_len）
+    #    new 从匹配终点（match_pos_new + match_len）之后开始
+    #    prev_cut / new_start 是原列表的绝对索引：
+    #    prev_tokens[:prev_cut] 保留包括匹配终点在内的全部前缀，
+    #    不会丢弃匹配之前的累积文本。
+    prev_cut = _char_pos_to_token_idx(
+        prev_tokens,
+        len(prev_tokens) - prev_tail_len,
+        match_pos_prev + match_len,
+    )
+    new_start = _char_pos_to_token_idx(
+        new_tokens, 0, match_pos_new + match_len
+    )
 
-        _logger.debug(
-            f"SequenceMatcher 拼接: 匹配长度 {match.size}, "
-            f"prev 保留 {len(prev_head)} token, "
-            f"new 追加 {len(new_tail)} token"
-        )
+    result_tokens = prev_tokens[:prev_cut] + new_tokens[new_start:]
+    result_timestamps = prev_timestamps[:prev_cut] + new_global_timestamps[new_start:]
 
-    else:
-        # 兜底：基于时间戳硬拼接
-        last_time = prev_timestamps[-1] if prev_timestamps else offset
-        new_start_idx = 0
-        for i, t in enumerate(new_global_timestamps):
-            if t > last_time + 0.1:
-                new_start_idx = i
-                break
-        else:
-            new_start_idx = len(new_tokens)
+    _logger.debug(
+        f"Token 拼接: 匹配长度 {match_len}, "
+        f"prev 截断 token[{prev_cut}], new 起始 token[{new_start}]"
+    )
 
-        result_tokens = prev_tokens + new_tokens[new_start_idx:]
-        result_timestamps = prev_timestamps + new_global_timestamps[new_start_idx:]
-
-        _logger.debug(f"时间戳兜底拼接: 从 new[{new_start_idx}] 开始")
-
-    # 3. 后处理：清理连续重复标点
-    clean_tokens = []
-    clean_timestamps = []
-    for token, ts in zip(result_tokens, result_timestamps):
-        if clean_tokens and token in puncs and clean_tokens[-1] == token:
-            continue
-        clean_tokens.append(token)
-        clean_timestamps.append(ts)
-
-    return clean_tokens, clean_timestamps
+    # 4. 后处理：清理连续重复标点
+    return _clean_repeated_punct(result_tokens, result_timestamps)
 
 
 def process_tokens_safely(tokens: List) -> List[str]:
