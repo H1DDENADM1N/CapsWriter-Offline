@@ -29,9 +29,13 @@ def lines_match_words(text_lines: List[str], words: List) -> List[srt.Subtitle]:
     """
     使用 SequenceMatcher 将分行文本与字级时间戳进行最优对齐
 
+    词只有 start（模型原始信息）；句末时间在组句时生成：
+    句末 end = min(下一行首词 start - 0.1s 间隙, 末词 start + 1s 上限)，
+    最后一行用时长模型兜底（中文按字 0.2s、英文按词 0.35s）。
+
     Args:
         text_lines: 用户修改并分行后的文本列表
-        words: 原始字级时间戳列表 [{'word': '字', 'start': 0.0, 'end': 0.1}, ...]
+        words: 原始字级时间戳列表 [{'word': '字', 'start': 0.0}, ...]
 
     Returns:
         对齐后的 srt.Subtitle 列表
@@ -65,12 +69,12 @@ def lines_match_words(text_lines: List[str], words: List) -> List[srt.Subtitle]:
         for i in range(match.size):
             char_to_word_map[match.b + i] = token_indices[match.a + i]
 
-    # 映射行到时间戳
-    subtitle_list = []
+    # 第一遍：每行映射到词索引范围
+    line_word_ranges = []  # [(start_word_idx, end_word_idx, line_text), ...]
     current_char_offset = 0
     last_word_idx = 0
 
-    for index, line in enumerate(text_lines):
+    for line in text_lines:
         line_clean = punc_pattern.sub("", line.lower())
         if not line_clean:
             continue
@@ -85,21 +89,38 @@ def lines_match_words(text_lines: List[str], words: List) -> List[srt.Subtitle]:
         if found_word_indices:
             start_word_idx = min(found_word_indices)
             end_word_idx = max(found_word_indices)
-            t1 = words[start_word_idx]["start"]
-            t2 = words[end_word_idx]["end"]
             last_word_idx = end_word_idx
         else:
-            t1 = words[min(last_word_idx + 1, len(words) - 1)]["start"]
-            t2 = t1 + 0.5
-
-        subtitle = srt.Subtitle(
-            index=len(subtitle_list) + 1,
-            content=line.strip(),
-            start=timedelta(seconds=t1),
-            end=timedelta(seconds=t2),
-        )
-        subtitle_list.append(subtitle)
+            start_word_idx = min(last_word_idx + 1, len(words) - 1)
+            end_word_idx = start_word_idx
+        line_word_ranges.append((start_word_idx, end_word_idx, line.strip()))
         current_char_offset += line_len
+
+    # 第二遍：由行间关系生成句末时间
+    subtitle_list = []
+    for k, (start_idx, end_idx, line_text) in enumerate(line_word_ranges):
+        t1 = words[start_idx]["start"]
+        last_start = words[end_idx]["start"]
+        if k + 1 < len(line_word_ranges):
+            next_start = words[line_word_ranges[k + 1][0]]["start"]
+            t2 = min(next_start - 0.1, last_start + 1.0)
+        else:
+            # 最后一行：时长模型兜底（中文按字 0.2s、英文按词 0.35s）
+            text = punc_pattern.sub("", line_text)
+            cjk = sum(1 for ch in text if "一" <= ch <= "鿿")
+            en_words = len(
+                [w for w in text.split() if w and not all("一" <= c <= "鿿" for c in w)]
+            )
+            t2 = last_start + max(cjk * 0.2 + en_words * 0.35, 0.1)
+        t2 = max(t2, t1 + 0.1)  # 保证 end > start
+        subtitle_list.append(
+            srt.Subtitle(
+                index=len(subtitle_list) + 1,
+                content=line_text,
+                start=timedelta(seconds=t1),
+                end=timedelta(seconds=t2),
+            )
+        )
 
     return subtitle_list
 
@@ -109,13 +130,11 @@ def get_words(json_file: Path) -> list:
     with open(json_file, "r", encoding="utf-8") as f:
         json_info = json.load(f)
 
-    # 获取带有时间戳的分词列表
+    # 获取带有时间戳的分词列表（词只有 start，结束时刻在组句时生成）
     words = [
-        {"word": token.replace("@", ""), "start": timestamp, "end": timestamp + 0.2}
+        {"word": token.replace("@", ""), "start": timestamp}
         for (timestamp, token) in zip(json_info["timestamps"], json_info["tokens"])
     ]
-    for i in range(len(words) - 1):
-        words[i]["end"] = min(words[i]["end"], words[i + 1]["start"])
 
     return words
 
@@ -129,6 +148,7 @@ def get_lines(txt_file: Path) -> List[str]:
 
 def generate_srt_file(words: list, text_lines: List[str], srt_file: Path):
     """根据提供的 words 和 text_lines 生成 srt 文件"""
+    text_lines = [line.rstrip("，。？！,.?!\r\n ") for line in text_lines]
     subtitle_list = lines_match_words(text_lines, words)
     with open(srt_file, "w", encoding="utf-8") as f:
         f.write(srt.compose(subtitle_list))
