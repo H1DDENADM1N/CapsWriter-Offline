@@ -101,10 +101,6 @@
 >
 > hot-en.txt 和 hot-zh.txt 文件仍然有效
 
-## 新版客户端托盘图标右键菜单
-
-> ![alt text](assets/readme/客户端托盘图标右键菜单.png)
-
 ## 新增 配置项 禁用程序列表
 >
 > disable_exe_list_on_focus：在这些程序为焦点时，不启用客户端功能:语音输入
