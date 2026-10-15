@@ -7,7 +7,7 @@
 > [!IMPORTANT]
 > 图形化配置界面 `edit_config_gui.exe`，可方便修改大部分配置，更多自定义配置仍需手动修改 `config.toml` 文件
 
-## 😎 十二个功能：
+## 😎 十二个功能
 
 1. 按下键盘上的大写锁定键 `CapsLock` ，录音开始，当松开大写锁定键时，就会识别你的录音，并将识别结果立刻输入
 2. 按下键盘上的 `Left Shift` 再按 `CapsLock` 可以将识别结果离线翻译为英文，当松开大写锁定键时，将翻译结果立刻输入
@@ -15,9 +15,9 @@
 4. 将音视频文件拖动到客户端 `start_client_gui.exe` 打开，即可转录生成 srt 字幕
 5. 按下客户端主界面的 <img src="assets/readme/云贴按钮.png" alt="alt text"  /> 按钮，即可将客户端文本框中内容发布到 [云剪贴板](https://share.lanol.cn) ，并生成获取链接和二维码
 6. 快速双击 `CapsLock` ，可语音输入繁体。还可通过托盘图标右键菜单快速切换简/繁体配置
-7.  可通过 `edit_config_gui.exe` 图形化配置界面安全地修改客户端/服务端配置，也可手动修改 `config.toml` 文件
+7. 可通过 `edit_config_gui.exe` 图形化配置界面安全地修改客户端/服务端配置，也可手动修改 `config.toml` 文件
 8. 可通过客户端托盘菜单 热切换 是否启用 AI 优化语言表达 以及 AI 服务商、修改 API Key 和 AI 优化风格
-9.  可快捷键切换 AI优化语言表达 提示风格
+9. 可快捷键切换 AI优化语言表达 提示风格
 10. 可在鼠标离开客户端界面时 变为数字时钟
 11. 可录音时自动 `静音` 或 `暂停` 其他音频播放（暂停主要由模拟播放软件全局快捷键实现）
 12. 可通过 `config_selector.exe` 选择配置文件
@@ -27,7 +27,7 @@
 - [❗ 注意事项](#-注意事项)
 - [🤓 源码运行](#-源码运行)
 - [🔧 修改配置](#-修改配置)
-- [🪳 提交 Bug ](https://github.com/H1DDENADM1N/CapsWriter-Offline/issues)
+- [🪳 提交 Bug](https://github.com/H1DDENADM1N/CapsWriter-Offline/issues)
 
 # 👀 最新更新
 
@@ -35,21 +35,25 @@
 <summary><h1">展开最近更新</h1></summary>
 
 ## 新增 可选项 是否在启动服务端之前，先检查所需端口占用情况
+>
 > 如果启用，服务端启动时间增加约 25 秒
 
 ## 新增 优先级队列，转录文件同时语音输入，优先处理语音输入
 
 # 新增 可选项 转录文件时，是否进行热词替换
+>
 > config.toml  use_hot_sub_when_transcribe_file
 
 ## 新增 可选模型 [Fun-ASR-Nano-2512-GGUF](https://www.modelscope.cn/models/HaujetZhao/Fun-ASR-Nano-2512-GGUF)
-> https://github.com/HaujetZhao/Fun-ASR-GGUF
-> 
+>
+> <https://github.com/HaujetZhao/Fun-ASR-GGUF>
+>
 > 将 [Fun-ASR-Nano](https://www.modelscope.cn/models/FunAudioLLM/Fun-ASR-Nano-2512) 模型转换为可以在本地高效运行的格式，实现**准确、快速的离线语音识别**，可直接转录长音频生成 SRT。主要依赖了 [llama.cpp](https://github.com/ggml-org/llama.cpp) 对 LLM Decoder 的加速推理。
 
 ## 新增 配置选择器 `config_selector.exe`
+>
 > 该工具用于选择 `./configs` 文件夹中的.toml配置文件
-> 
+>
 > 并将其复制为当前使用的config.toml文件。界面包含确认和取消按钮
 >
 > 请在切换配置前，**手动关闭** 服务端和客户端！
@@ -59,88 +63,95 @@
 ## 新增 双击客户端托盘图标 切换 客户端窗口 居中显示 或 隐藏
 
 ## 新增 可选项 显示数字时钟
+>
 > 在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面
 > 启用后不再进行靠边停靠，改善多显示屏用户体验
 
 ## 新增 配置项 快捷键切换 AI优化语言表达 提示风格
+>
 > 切换后会有两秒右下角系统通知提示
-> 
+>
 > 修改 `config.toml` 注意避免快捷键冲突
-> 
+>
 > 默认配置如下：
-> 
+>
 > `ctrl + alt + shift + f1` -> `正式公文`
-> 
+>
 > `ctrl + alt + shift + f2` -> `甜言蜜语`
-> 
+>
 > `ctrl + alt + shift + f3` -> `社媒文案`
-> 
+>
 > `ctrl + alt + shift + f4` -> `赋诗一首`
-> 
+>
 > `ctrl + alt + shift + f5` -> `英语大师`
-> 
+>
 > `ctrl + alt + shift + f6` -> `学术论文`
-> 
+>
 > `ctrl + alt + shift + f7` -> `客户服务`
-> 
+>
 > `ctrl + alt + shift + f8` -> `创意写作`
 
-
 ## 新增 配置项 hot_rag
+>
 > 新版 独立热词与纠错系统，整合了音素处理、相似度算法、FastRAG 加速检索
-> 
+>
 > `config.toml` 已经默认不启用 旧版 hot_zh、hot_en ，不建议与 旧版 hot_zh、hot_en  一起使用
-> 
+>
 > 不用增加 hot-rag.txt 文件
-> 
+>
 > hot-en.txt 和 hot-zh.txt 文件仍然有效
 
-## 新版客户端托盘图标右键菜单：
+## 新版客户端托盘图标右键菜单
 
 > ![alt text](assets/readme/客户端托盘图标右键菜单.png)
 
-
 ## 新增 配置项 禁用程序列表
+>
 > disable_exe_list_on_focus：在这些程序为焦点时，不启用客户端功能:语音输入
-> 
+>
 > disable_exe_list：在运行这些程序时(包括在背景运行)，不启用客户端功能:语音输入
-> 
+>
 > 需要添加更多程序时的格式: ["forhonor.exe", "abc.exe", "efg.exe"]
 
 ## 新增 客户端托盘菜单 热切换 AI 服务商
+>
 > OpenAI（兼容） / 智谱AI
 
 ## 新增 客户端托盘菜单 热切换 AI 优化风格
+>
 > 正式公文 / 甜言蜜语 / 社媒文案 / 赋诗一首 / 英语大师 / 学术论文 / 客户服务 / 创意写作
 
 ## 新增 可通过客户端托盘菜单 热切换 是否启用 AI 优化语言表达
+>
 > 启用后预计增加 5s 时间延长
-> 
+>
 > 先在 config.toml 中配置 api_key （智谱AI API密钥）
 
-
 ## 新增 客户端托盘菜单 热切换 保存音频 保存日记 保存非关键词日记
+>
 > 是否记录非关键词日记内容到 Markdown 文件
-> 
+>
 > 在 保存日记 save_markdown 启用的情况下有效
 
 ## 通过 常用播放器内设置的 播放/暂停快捷键 控制 录音时暂停音频播放
+>
 > QQ音乐、网易云音乐、PotPlayer、foobar2000 可通过 edit_config_gui.exe 配置 用于 播放/暂停 的快捷键
-> 
+>
 > 如果还有其他特殊应用 请配置 config.toml [client.additional_special_apps]
-> 
+>
 > "<进程名>" = { hotkey = "<对应程序设置的全局快捷键>", name = "<用于输出日志的对应程序名称>" }
-> 
+>
 > 如果N个特殊应用在播放，支持全部暂停
-> 
+>
 > 如果一个非特殊应用在播放，通过 媒体键 暂停
-> 
+>
 > 如果N个非特殊应用在播放，不暂停
-> 
+>
 > 如果一个特殊应用和N个非特殊应用在播放，只暂停特殊应用
-> 
-> 
+>
+>
 > 默认配置如下：
+>
 > | 播放器           | 快捷键          | 备注                               |
 > | ---------------- | --------------- | ---------------------------------- |
 > | QQ音乐           | Ctrl + Alt + F5 | 需在QQ音乐中设置全局快捷键         |
@@ -152,59 +163,62 @@
 > [常用播放器 如何配置 全局播放/暂停 快捷键？](https://github.com/H1DDENADM1N/CapsWriter-Offline/issues/128#issuecomment-3616392251)
 
 ## 新增 优先使用 LibreTranslate 在线翻译服务
+>
 > 服务端启动时，会自动检查 config.toml 中 LibreTranslate api 地址是否可用
-> 
+>
 > 如果可用，则优先使用 LibreTranslate 在线翻译服务；
-> 
+>
 > 如果不可用，则会自动切换到 DeepLX 在线翻译服务
 
 ## 新增 可选项 开始和结束任务时播放提示音
+>
 > 可在 `config.toml` 设置是否启用，以及音频文件路径和音量。需要ffplay.exe
-> 
-> ffplay.exe 来自 https://www.gyan.dev/ffmpeg/builds/
-> 
-> start.mp3 和 stop.mp3 音频文件来自 https://pixabay.com
+>
+> ffplay.exe 来自 <https://www.gyan.dev/ffmpeg/builds/>
+>
+> start.mp3 和 stop.mp3 音频文件来自 <https://pixabay.com>
 
 ## 新增 可选项 切换模型 `Sensevoice` 或 `Paraformer`
 
 > Sensevoice模型虽然多了粤英日韩多语种，但是，中文识别效果大不如Paraformer模型
-> 
+>
 > 比如转录字幕不完整，识别结果不准确、丢失标点等
-> 
+>
 > 如果你只说中文普通话，建议使用 'Paraformer' 模型
-> 
+>
 > 不影响简繁转换和翻译
 
 ## 新增 可选项 通过注册表/按键判断是否语音输入中
 
 ## 新增 可选项 是否启用离在线翻译和状态提示
+>
 > start_online_translate_server = True # 启用在线翻译服务
-> 
+>
 > start_offline_translate_server = True # 启用离线翻译服务
-> 
+>
 > use_offline_translate_function = True # 启用离线翻译相关快捷键
-> 
+>
 > use_online_translate_function = True # 启用在线翻译相关快捷键
-> 
+>
 > hint_while_recording_at_edit_position_powered_by_ahk = True  # 是否启用 基于AHK的 输入光标位置的输入状态提示功能
 
-
 ## 重写hint_while_recording.exe，实现更加精准的输入光标位置提示
+>
 > 不再是监测按键的伪状态，而是由Python(win32gui.PostMessage)将语音输入状态传递给AHK(hwnd)
 
 ## 双击`录音键`临时转换 `简/繁` 体中文输出，可在 `config.toml` 设置 `简/繁` 中文作为主要输出 (@JoanthanWu)
 
 ## 更美观的“语音输入中”提示，可在 `hint_while_recording.ini` 设置文本内容、颜色、排除列表等 (@JoanthanWu)
+>
 > ![alt text](assets/readme/PixPin_2024-11-27_10-44-39.png)
-> 
+>
 > ![alt text](assets/readme/PixPin_2024-11-27_10-44-46.png)
-
 
 ## 跟随鼠标光标位置的新版输入状态提示功能可在 `config.toml` 设置禁用
 
 > ![alt text](assets/readme/跟随鼠标光标位置的新版输入状态提示功能.gif)
 
-## 新版客户端界面：
+## 新版客户端界面
 
 > - 透明；极简
 > - `Ctrl+鼠标滚轮` 可调整字体大小
@@ -251,7 +265,7 @@
 17. 启动后自动缩小至托盘功能：默认 服务端 `start_server_gui.exe` 启动后不显示主窗口，自动缩小至托盘；客户端 `start_client_gui.exe` 显示主窗口。通过 `config.toml` 中 `shrink_automatically_to_tray` 配置
 18. 禁止多开功能：默认禁止多开，通过 `config.toml` 中 `only_run_once` 配置
 19. 一键启动功能：默认服务端 `start_server_gui.exe` 启动后，自动 **🛡️ 以管理员权限** 启动客户端 `start_client_gui_admin.exe`，通过 `config.toml` 中 `in_the_meantime_start_the_client_and_run_as_admin` 和 `In_the_meantime_start_the_client_as_admin` 配置
-20. 将文本上传至云剪切板，方便向 ios 设备分享。基于 https://share.lanol.cn (https://github.com/vastsa/FileCodeBox)，一个无依赖即用即走的剪切板。
+20. 将文本上传至云剪切板，方便向 ios 设备分享。基于 <https://share.lanol.cn> (<https://github.com/vastsa/FileCodeBox)，一个无依赖即用即走的剪切板。>
 21. 默认启用双击`录音键`临时转换 `简/繁` 体中文输出的功能，通过 `config.toml` 中 `enable_double_click_opposite_state` 配置
 22. 默认使用简体中文作为主要输出，快速双击输出繁体中文。设置 `config.toml` 中 `convert_to_traditional_chinese_main = '繁'` 可以默认使用繁体中文，双击输出简体中文
 23. 修改 AI 服务商 后，点击 客户端托盘菜单 `🔑 修改 API Key` 会弹出对应的API Key 输入框
@@ -259,7 +273,7 @@
 
 # ⬇️ 下载地址
 
-- 123 盘：https://www.123pan.com/s/qBxUVv-H4Zq3.html 提取码:h8vb
+- 123 盘：<https://www.123pan.com/s/qBxUVv-H4Zq3.html> 提取码:h8vb
 - GitHub Release: [Releases · H1DDENADM1N/CapsWriter-Offline](https://github.com/H1DDENADM1N/CapsWriter-Offline/releases)
 
 ![files](assets/readme/files.png)
@@ -288,7 +302,7 @@
 
    9.4 如果你更改了默认配置（ `In_the_meantime_start_the_client = False` ），新建 `start_client_gui_admin.exe` 的快捷方式，将客户端的快捷方式放到 `shell:startup` 目录下只会在开机时自动以管理员权限启动客户端。服务端不会被启动。不要再添加客户端 `start_client_gui.exe` 的快捷方式。
 
-10. `🤓 Open Home Folder With VSCode ` 使用前需在 `config.toml` 配置 `vscode_exe_path`
+10. `🤓 Open Home Folder With VSCode` 使用前需在 `config.toml` 配置 `vscode_exe_path`
 11. 输入状态指示位置错乱如何解决？
     10.1 通过 `config.toml` 中 `hint_while_recording_at_cursor_position` 配置禁用跟随鼠标光标位置的麦克风形状的输入状态提示；通过 `config.toml` 中 `hint_while_recording_at_edit_position_powered_by_ahk` 配置禁用输入光标位置的“✦语音输入中‧‧‧”文字状态提示
 
@@ -311,6 +325,7 @@
 <summary><h1">源码运行</h1></summary>
 
 ## 在 整合包 使用 嵌入式python 简单调试
+
 1. 运行 `.\runtime\python.exe .\core_server.py` 脚本 在终端启动服务端，会载入 SenseVoice 模型识别模型 或Paraformer 模型和标点模型（通过`config.toml` `model = 'Sensevoice' # 'Sensevoice' 或 'Paraformer'` 配置。这会占用 2GB 的内存，载入时长约 50 秒）
 2. 运行 `.\runtime\python.exe .\core_client.py` 脚本 在终端启动客户端，会载入中译英模型，打开系统默认麦克风，开始监听按键（这会占用 400MB 的内存，载入时长约 20 秒）
 3. 按住 `CapsLock` 键，录音开始，松开 `CapsLock` 键，录音结束，识别结果立马被输入（录音时长短于 0.3 秒不算）
@@ -359,7 +374,6 @@ uv run core_client.py
 
 #### 3.2 启动服务端、客户端和配置编辑器 GUI
 
-
 启动服务端GUI
 
 ```powershell
@@ -373,6 +387,7 @@ uv run start_client_gui.py
 ```
 
 启动配置编辑器GUI
+
 ```powershell
 uv run edit_config_gui.py
 ```
@@ -1326,7 +1341,6 @@ debug = false
 
 - [opus-2020-07-17.zip](https://object.pouta.csc.fi/Tatoeba-MT-models/zho-eng/opus-2020-07-17.zip)
 
-
 # 🤩 都看到这儿了，给个星星好不好？ ⭐
 
 ## Star History
@@ -1337,7 +1351,6 @@ debug = false
 
 > [!TIP]
 > 对话 此项目 [DeepWiki](https://deepwiki.com/H1DDENADM1N/CapsWriter-Offline)
-
 
 <details>
 <summary><h1">了解更多</h1></summary>
@@ -1352,7 +1365,7 @@ debug = false
 
 ## 🪙 打赏图形界面版 [CapsWriter-Offline](https://github.com/H1DDENADM1N/CapsWriter-Offline)
 
-## 感谢你的好意 💖，不过，暂时不必。点个Star⭐，提点🪳Issues，让我知道有人在用，这比金钱更能使我高兴。
+## 感谢你的好意 💖，不过，暂时不必。点个Star⭐，提点🪳Issues，让我知道有人在用，这比金钱更能使我高兴
 
 ---
 
@@ -1376,6 +1389,7 @@ uv pip install --index-url https://mirrors.aliyun.com/pypi/simple/ --target .\si
 复制 `.\site-packages\pywin32_system32\` 中的 `*.dll` 到 `.\runtime\`
 
 # siui
+
 ## [PySide6-SiliconUI](https://github.com/H1DDENADM1N/PySide6-SiliconUI)
 
 ## [PyQt-SiliconUI](https://github.com/ChinaIceF/PyQt-SiliconUI)
@@ -1383,29 +1397,32 @@ uv pip install --index-url https://mirrors.aliyun.com/pypi/simple/ --target .\si
 # FFmpeg & FFplay
 
 ## 参考
+
 [Windows 平台下使用 MSYS 2 编译 FFmpeg](https://www.scott-sloan.cn/archives/449/)
 
 ## 准备
+
 ### 下载
 
-https://www.msys2.org/
+<https://www.msys2.org/>
 
-https://ffmpeg.org/download.html -> C:\Users\user0\Documents\FFmpeg\
-https://github.com/libsdl-org/SDL/releases -> C:\Users\user0\Documents\FFmpeg\SDL2\
-https://sourceforge.net/projects/lame/files/lame/ -> C:\Users\user0\Documents\FFmpeg\lame\
+<https://ffmpeg.org/download.html> -> C:\Users\user0\Documents\FFmpeg\
+<https://github.com/libsdl-org/SDL/releases> -> C:\Users\user0\Documents\FFmpeg\SDL2\
+<https://sourceforge.net/projects/lame/files/lame/> -> C:\Users\user0\Documents\FFmpeg\lame\
 
 ### 装包
+
 ```sh
 pacman -S mingw-w64-ucrt-x86_64-gcc
 ```
 
 ```sh
-pacman -S make pkg-config mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-diffutils
+pacman -S make pkg-config mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-diffutils mingw-w64-ucrt-x86_64-mpg123
 ```
 
 ## lame
 
-###  编译 & 安装
+### 编译 & 安装
 
 ```sh
 cd "/c/Users/user0/Documents/FFmpeg"
@@ -1416,11 +1433,15 @@ cd ./lame
 ```
 
 ```sh
-./configure --help
+./configure --prefix=/ucrt64
 ```
 
 ```sh
-make distclean
+make -j$(nproc)
+```
+
+```sh
+make -C libmp3lame install
 ```
 
 ```sh
@@ -1457,10 +1478,39 @@ make install
 ### 测试
 
 ```sh
+cat > test_lame.c << 'EOF'
+#include <stdio.h>
+#include <lame/lame.h>
+
+int main(void) {
+    printf("LAME version: %s\n", get_lame_version());
+    lame_t gfp = lame_init();
+    if (gfp == NULL) {
+        printf("lame_init failed\n");
+        return 1;
+    }
+    lame_set_num_channels(gfp, 2);
+    lame_set_in_samplerate(gfp, 44100);
+    lame_set_brate(gfp, 128);
+    lame_set_quality(gfp, 2);
+    if (lame_init_params(gfp) < 0) {
+        printf("lame_init_params failed\n");
+        return 1;
+    }
+    printf("LAME encoder initialized successfully!\n");
+    lame_close(gfp);
+    return 0;
+}
+EOF
+```
+
+```sh
 x86_64-w64-mingw32-gcc test_lame.c \
     -I/c/Users/user0/Documents/FFmpeg/lame/build/include \
     -L/c/Users/user0/Documents/FFmpeg/lame/build/lib \
     -lmp3lame -o test_lame.exe
+
+./test_lame.exe
 ```
 
 ```sh
@@ -1533,6 +1583,10 @@ make install
 ### 测试
 
 ```sh
+pacman -S mingw-w64-ucrt-x86_64-python
+```
+
+```sh
 python -c "
 import struct
 sample_rate = 48000
@@ -1546,5 +1600,8 @@ sys.stdout.buffer.write(data)
 " | ./ffmpeg-build/bin/ffmpeg -y -f f32le -ar 48000 -ac 1 -i - -c:a libmp3lame -b:a 192k test.mp3
 ```
 
+```sh
+./ffmpeg-build/bin/ffplay test.mp3
+```
 
 </details>
