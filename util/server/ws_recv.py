@@ -219,3 +219,17 @@ async def ws_recv(websocket):
             sockets_id.remove(str(websocket.id))
         if str(websocket.id) in Cosmic.sockets_id:
             Cosmic.sockets_id.remove(str(websocket.id))
+        # 清理识别结果缓存，防止客户端中途断开留下泄漏/陈旧结果（backport bc74275）
+        socket_id = str(websocket.id)
+        for _recognize_mod in (
+            "util.server.recognize_paraformer",
+            "util.server.recognize_sensevoice",
+            "util.server.recognize_funasr",
+        ):
+            try:
+                _clear = __import__(
+                    _recognize_mod, fromlist=["clear_results_by_socket_id"]
+                ).clear_results_by_socket_id
+                _clear(socket_id)
+            except Exception:
+                logger.debug(f"跳过清理 {_recognize_mod} 的结果缓存")

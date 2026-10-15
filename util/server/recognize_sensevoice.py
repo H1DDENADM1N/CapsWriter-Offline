@@ -13,6 +13,18 @@ from util.server.format_tools import adjust_space
 results = {}
 
 
+def clear_results_by_socket_id(socket_id: str) -> int:
+    """
+    清理指定 socket 关联的所有任务结果缓存。
+
+    当客户端连接断开时调用，防止中途断开遗留的结果缓存泄漏/陈旧（backport bc74275）。
+    """
+    stale = [task_id for task_id, r in results.items() if r.socket_id == socket_id]
+    for task_id in stale:
+        results.pop(task_id, None)
+    return len(stale)
+
+
 def format_text(text):
     if Config.format_spell:
         text = adjust_space(text)  # 调空格
