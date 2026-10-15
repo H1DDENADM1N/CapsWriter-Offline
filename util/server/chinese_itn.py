@@ -230,7 +230,9 @@ def is_range_expression(text):
         )
     """)
 
-    return range_pattern.search(text) is not None
+    # 只认「整串」范围表达式（三五百/十五六/三四十万…），
+    # 避免把连续数字序列（三百零五七百/三十五六七八）中的子串误判成范围
+    return range_pattern.fullmatch(text) is not None
 
 
 def convert_range_expression(text):
@@ -318,12 +320,6 @@ value_num = re.compile(
     f"十?(零?[一二两三四五六七八九十][十百千万]{{1,2}})*零?十?[一二三四五六七八九]?(点[零一二三四五六七八九]+)? *([a-zA-Z]|{common_units})?"
 )
 
-# 连续数值检测
-consecutive_tens = re.compile(rf"^((?:十[一二三四五六七八九])+)({common_units})?$")
-consecutive_hundreds = re.compile(
-    rf"^((?:[一二三四五六七八九]百零?[一二三四五六七八九])+)({common_units})?$"
-)
-
 # 百分值
 percent_value = re.compile(
     "(?<![一二三四五六七八九])(百分之)[零一二三四五六七八九十百千万]+(点)?(?(2)[零一二三四五六七八九]+)"
@@ -363,31 +359,219 @@ def strip_trailing_unit(text):
     return text
 
 
+# ============================================================
+# 连续数字序列拆分（局部移植自 upstream a589dfb sequence_parser 的
+# 词法/解析核心，仅保留基础数字 Token 集）。只对「一个匹配内解析出
+# >=2 个独立数字」的序列生效（十二十三十/三百零五七百/三十五六七八）；
+# 单个数字（二千二 等）不在此分支处理，落回后面的数值分支。
+# ============================================================
+
+_SEQ_RULES = [
+    ("DIGIT", "[一二两三四五六七八九幺]"),
+    ("TEN", "十"),
+    ("HUNDRED", "百"),
+    ("THOUSAND", "千"),
+    ("TEN_THOUSAND", "万"),
+    ("HUNDRED_MILLION", "亿"),
+    ("ZERO", "零"),
+    ("WHITESPACE", r"\s+"),
+    ("OTHER", "."),
+]
+_seq_lexer = re.compile("|".join(f"(?P<{n}>{p})" for n, p in _SEQ_RULES))
+_BASIC_SEQ_TYPES = {
+    "DIGIT", "TEN", "HUNDRED", "THOUSAND", "TEN_THOUSAND", "HUNDRED_MILLION", "ZERO",
+}
+_SEQ_VALUE_MAP = {
+    "零": 0, "一": 1, "幺": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5,
+    "六": 6, "七": 7, "八": 8, "九": 9,
+    "十": 10, "百": 100, "千": 1000, "万": 10000, "亿": 100000000,
+}
+
+
+def _seq_tokenize(text):
+    """词法切分；若含任何非基础数字 Token（点/分之/比/年月日等）返回 None"""
+    tokens = []
+    for match in _seq_lexer.finditer(text):
+        token_type = match.lastgroup
+        if token_type == "WHITESPACE":
+            continue
+        if token_type == "OTHER" or token_type not in _BASIC_SEQ_TYPES:
+            return None
+        tokens.append((token_type, _SEQ_VALUE_MAP[match.group(token_type)]))
+    return tokens
+
+
+def _seq_parse_atomic(tokens, i):
+    """从位置 i 解析一个原子数值，返回 (值, 消耗_token数) 或 None"""
+    n = len(tokens)
+    if i >= n:
+        return None
+    t, v = tokens[i]
+
+    if t == "DIGIT":
+        if i + 1 < n and tokens[i + 1][0] == "HUNDRED_MILLION":
+            return (v * 100000000, 2)
+        if i + 1 < n and tokens[i + 1][0] == "TEN_THOUSAND":
+            return (v * 10000, 2)
+        if i + 1 < n and tokens[i + 1][0] == "THOUSAND":
+            return (v * 1000, 2)
+        if i + 1 < n and tokens[i + 1][0] == "HUNDRED":
+            base = v * 100
+            consumed = 2
+            j = i + 2
+            if j < n and tokens[j][0] == "ZERO":
+                if j + 1 < n and tokens[j + 1][0] == "DIGIT":
+                    base += tokens[j + 1][1]
+                    consumed += 2
+            elif j < n and tokens[j][0] == "DIGIT":
+                tens_d = tokens[j][1]
+                if j + 1 < n and tokens[j + 1][0] == "TEN":
+                    base += tens_d * 10
+                    consumed += 2
+                    j += 2
+                    if j < n and tokens[j][0] == "DIGIT":
+                        base += tokens[j][1]
+                        consumed += 1
+                else:
+                    base += tens_d * 10
+                    consumed += 1
+            return (base, consumed)
+        if (
+            i + 2 < n
+            and tokens[i + 1][0] == "TEN"
+            and tokens[i + 2][0] == "DIGIT"
+        ):
+            if i + 3 < n and tokens[i + 3][0] == "TEN":
+                pass  # 后跟 TEN → 倾向拆开
+            else:
+                return (10 * v + tokens[i + 2][1], 3)
+        if i + 1 < n and tokens[i + 1][0] == "TEN":
+            if i > 0 and tokens[i - 1][0] == "DIGIT":
+                pass
+            else:
+                return (10 * v, 2)
+        return (v, 1)
+
+    if t == "TEN":
+        if (
+            i + 2 < n
+            and tokens[i + 1][0] == "DIGIT"
+            and tokens[i + 2][0] == "HUNDRED_MILLION"
+        ):
+            return ((10 + tokens[i + 1][1]) * 100000000, 3)
+        if i + 1 < n and tokens[i + 1][0] == "HUNDRED_MILLION":
+            return (10 * 100000000, 2)
+        if i + 1 < n and tokens[i + 1][0] == "DIGIT":
+            return (10 + tokens[i + 1][1], 2)
+        return (10, 1)
+
+    if t == "ZERO":
+        return (0, 1)
+
+    if t in ("HUNDRED", "THOUSAND", "TEN_THOUSAND", "HUNDRED_MILLION"):
+        return (v, 1)
+
+    return None
+
+
+def _seq_build_number(tokens, i):
+    """从位置 i 解析一个完整数值，返回 (值, 消耗_token数) 或 None"""
+    result = _seq_parse_atomic(tokens, i)
+    if result is None:
+        return None
+    value, consumed = result
+    n = len(tokens)
+    j = i + consumed
+
+    if j < n:
+        nxt = tokens[j][0]
+        if nxt == "TEN_THOUSAND" and 0 < value < 10000:
+            value *= 10000
+            consumed += 1
+            j += 1
+        elif nxt == "HUNDRED_MILLION" and 0 < value < 100000000:
+            value *= 100000000
+            consumed += 1
+            j += 1
+
+    if value >= 10000:
+        limit = 10000
+    elif value >= 1000:
+        limit = 1000
+    else:
+        limit = None
+
+    if limit:
+        while j < n:
+            if tokens[j][0] == "ZERO":
+                consumed += 1
+                j += 1
+                continue
+            chunk = _seq_parse_atomic(tokens, j)
+            if chunk is None:
+                break
+            chunk_val, chunk_con = chunk
+            if chunk_val >= limit:
+                break
+            value += chunk_val
+            consumed += chunk_con
+            j += chunk_con
+
+    if j < n:
+        nxt = tokens[j][0]
+        if nxt == "TEN_THOUSAND" and 0 < value < 10000:
+            value *= 10000
+            consumed += 1
+        elif nxt == "HUNDRED_MILLION" and 0 < value < 100000000:
+            value *= 100000000
+            consumed += 1
+
+    return (value, consumed)
+
+
+def _seq_parse_all(tokens):
+    """规约 Token 序列为阿拉伯数字列表；失败返回 None"""
+    nums = []
+    i = 0
+    n = len(tokens)
+    while i < n:
+        result = _seq_build_number(tokens, i)
+        if result is None:
+            return None
+        value, consumed = result
+        nums.append(value)
+        i += consumed
+    return nums
+
+
+def split_number_sequence(text):
+    """把一个匹配内的连续数字序列拆分为空格分隔的阿拉伯数字。
+    仅当解析出 >=2 个独立数字时返回，否则返回 None（单个数字交数值分支）。
+    """
+    stripped, unit = strip_unit(text)
+    if unit in ("万", "亿"):
+        stripped = text
+        unit = ""
+    tokens = _seq_tokenize(stripped)
+    if tokens is None:
+        return None
+    nums = _seq_parse_all(tokens)
+    if nums is None or len(nums) < 2:
+        return None
+    result = " ".join(str(num) for num in nums)
+    if unit:
+        result += unit
+    return result
+
+
 def is_consecutive_value(text):
-    """检测是否是连续数值结构"""
-    return consecutive_tens.match(text) or consecutive_hundreds.match(text)
+    """检测是否为连续数值（一个匹配内解析出 >=2 个独立数字）"""
+    return split_number_sequence(text) is not None
 
 
 def split_consecutive_value(text):
     """分割连续数值为空格分隔的阿拉伯数字"""
-    unit = ""
-    for c in common_units:
-        if text.endswith(c):
-            unit = c
-            text = text[:-1]
-            break
-
-    if consecutive_tens.match(text + unit):
-        parts = re.findall(r"十[一二三四五六七八九]", text)
-        nums = [convert_value_num(p) for p in parts]
-        return " ".join(nums) + unit
-
-    if consecutive_hundreds.match(text + unit):
-        parts = re.findall(r"[一二三四五六七八九]百零?[一二三四五六七八九]", text)
-        nums = [convert_value_num(p) for p in parts]
-        return " ".join(nums) + unit
-
-    return text + unit
+    return split_number_sequence(text)
 
 
 def strip_unit(original):
@@ -469,6 +653,9 @@ def convert_value_num(original):
 
 def convert_fraction_value(original):
     """转换分数"""
+    # 修正千分比：千分之三 → 3‰（原逻辑把「千分」当分母，得出 3/0）
+    if original.startswith("千分之"):
+        return convert_value_num(original[3:]) + "‰"
     denominator, numerator = original.split("分之")
     return convert_value_num(numerator) + "/" + convert_value_num(denominator)
 
