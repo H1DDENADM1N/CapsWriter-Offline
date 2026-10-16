@@ -34,6 +34,54 @@
 <details>
 <summary><h1">展开最近更新</h1></summary>
 
+## 更新 嵌入式 Python 3.14.8（runtime/ 运行时整体升级）
+>
+> `runtime/` 与 `pyproject.toml` 依赖整体升级（3.13 → 3.14.2 → 3.14.8），uv 索引源改阿里云镜像
+
+## 移除 qt_material 依赖，改用纯 PySide6 样式表复现主题外观
+>
+> 移除全部 `apply_stylesheet` 调用与 `qt-material` 依赖，改用纯 PySide6 样式表复现 dark_teal / dark_amber 主题外观，新增 QMenu 圆形单选指示器；同期修复托盘消失、云贴只显一行、双击熔断、事件循环崩溃等客户端问题
+
+## 修复 FunASR 分段拼接丢文本与时间戳塌缩
+>
+> 跨分片按字符位置切开不再吞字，用绝对索引保留已累积 token，修复丢文本与时间戳塌缩
+
+## 新增 flash-attn 显式配置开关（默认关闭，规避 Vulkan/部分 GPU 输出 NaN 乱码）
+>
+> llama.cpp 升级并按新头文件重对齐 ctypes；flash-attn 改为可配置开关（默认关闭），规避部分 GPU 输出 NaN 乱码
+
+## 热词检索 head2tail：音素尾锚点，丢首字可召回
+>
+> FastRAG 对长度 ≥3 的音素序列额外锚定尾音素，丢首字/单字缺失的查询仍能命中索引键
+
+## 新增 热词黑名单 / 主词别名 / 多实例全替换 / hot-rule 空格规则
+>
+> 新增根目录 `hot-blacklist.txt` 就近拦截；热词行按 `|` 切分主词与别名入索引去重；hot-rule 可用 `\s` 表示空格
+
+## ITN 数字/标点修正移植（正负数、斤两单位、千分比等）
+>
+> 单位表新增斤/两、支持负数与正负号提取，修正费率词、完全单位字、点开头动词及千分比类误转；口述标点只删末尾最后一个
+
+## 字幕智能分行与句末时间组句
+>
+> 智能分行两遍式：先按强标点切句（缩写点不切），再按弱标点分行，短片段并入相邻；句末 `end` 组句生成并保证 `end > start`
+
+## 服务端断开按 socket_id 清理识别结果缓存
+>
+> FunASR/Paraformer/Sensevoice 新增 `clear_results_by_socket_id`，连接断开时清理该 socket 的结果缓存
+
+## 客户端连接与退出修复（websockets 本地禁代理、退出关端口、特殊键补发、延迟自动回车）
+>
+> websockets 本地显式 `proxy=None`；退出主动关端口；取消录音清空残留帧；特殊键异步补发；`enter_apps` 名单进程延迟自动回车
+
+## 更新 ffmpeg/ffplay 与 deeplx 二进制
+>
+> 更新 `ffmpeg.exe`/`ffplay.exe` 与 Deeplx 服务端二进制
+
+## 更新 AI 模型名示例配置
+>
+> 智谱 `glm-4.5-flash` → `glm-4-flash-250414`、硅基流动翻译模型改 `tencent/Hunyuan-MT-7B`，智谱优化改 `thinking={type:"enabled",budget_tokens:1024}`；同步 `flash_attn`/`enter_apps` 到示例配置并新增 `dev/tray_diag.py` 排障脚本
+
 ## 新增 可选项 是否在启动服务端之前，先检查所需端口占用情况
 >
 > 如果启用，服务端启动时间增加约 25 秒
