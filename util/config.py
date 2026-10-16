@@ -250,6 +250,7 @@ class FunASRArgs:
     directml_enable: bool = config["funasr_args"]["directml_enable"]
     vulkan_enable: bool = config["funasr_args"]["vulkan_enable"]
     vulkan_force_fp32: bool = config["funasr_args"]["vulkan_force_fp32"]
+    flash_attn: bool = config["funasr_args"]["flash_attn"]
     verbose: bool = config["funasr_args"]["verbose"]
 
 

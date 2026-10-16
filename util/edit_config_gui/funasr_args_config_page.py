@@ -191,6 +191,19 @@ class FunASRArgsConfigPage(SiPage):
             )
             self.vulkan_force_fp32_linear_attaching.addWidget(self.vulkan_force_fp32)
 
+            # 是否启用 flash-attention
+            self.flash_attn = SiSwitch(self)
+            self.flash_attn.setChecked(self.config["funasr_args"]["flash_attn"])
+            self.flash_attn_linear_attaching = SiOptionCardLinear(self)
+            self.flash_attn_linear_attaching.setTitle(
+                "是否启用 flash-attention",
+                "默认关闭，避免部分后端/GPU 下输出 NaN 或乱码",
+            )
+            self.flash_attn_linear_attaching.load(
+                SiGlobal.siui.iconpack.get("ic_fluent_settings_light")
+            )
+            self.flash_attn_linear_attaching.addWidget(self.flash_attn)
+
             # verbose
             self.verbose = SiSwitch(self)
             self.verbose.setChecked(self.config["funasr_args"]["verbose"])
@@ -213,6 +226,7 @@ class FunASRArgsConfigPage(SiPage):
             self.params_container.addWidget(self.directml_enable_linear_attaching)
             self.params_container.addWidget(self.vulkan_enable_linear_attaching)
             self.params_container.addWidget(self.vulkan_force_fp32_linear_attaching)
+            self.params_container.addWidget(self.flash_attn_linear_attaching)
             self.params_container.addWidget(self.verbose_linear_attaching)
 
             group.addWidget(self.params_container)
@@ -239,6 +253,7 @@ class FunASRArgsConfigPage(SiPage):
             self.config["funasr_args"]["vulkan_force_fp32"] = (
                 self.vulkan_force_fp32.isChecked()
             )
+            self.config["funasr_args"]["flash_attn"] = self.flash_attn.isChecked()
             self.config["funasr_args"]["verbose"] = self.verbose.isChecked()
 
         def print_config():
@@ -286,6 +301,11 @@ class FunASRArgsConfigPage(SiPage):
                 "vulkan_force_fp32",
                 clearly_type(self.config["funasr_args"]["vulkan_force_fp32"]),
                 str(self.config["funasr_args"]["vulkan_force_fp32"]),
+            )
+            table.add_row(
+                "flash_attn",
+                clearly_type(self.config["funasr_args"]["flash_attn"]),
+                str(self.config["funasr_args"]["flash_attn"]),
             )
             table.add_row(
                 "verbose",

@@ -138,6 +138,7 @@ class ASREngineConfig:
         similar_threshold: 热词相似度阈值
         max_hotwords: 召回并发送给 LLM 的最大热词数
         sample_rate: 音频采样率
+        flash_attn: 是否启用 flash-attention（可在脚本 Vulkan 选项中控制）
     """
 
     encoder_onnx_path: str
@@ -156,6 +157,7 @@ class ASREngineConfig:
     directml_enable: bool = True
     vulkan_enable: bool = True
     vulkan_force_fp32: bool = False
+    flash_attn: bool = False
 
 
 # ==================== CTC 结果相关 ====================

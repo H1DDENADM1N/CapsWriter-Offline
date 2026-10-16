@@ -1,4 +1,3 @@
-from util.fun_asr_gguf.core import logger
 import os
 import time
 from pathlib import Path
@@ -95,6 +94,7 @@ class ModelManager:
                 n_ctx=2048,
                 n_batch=2048,
                 n_ubatch=self.config.n_ubatch,
+                flash_attn=self.config.flash_attn,
                 n_threads=self.config.n_threads,
                 n_threads_batch=self.config.n_threads_batch,
             )

@@ -1194,6 +1194,9 @@ vulkan_enable = true
 vulkan_force_fp32 = false
 # 是否强制 FP32 计算（如果 GPU 是 Intel 集显且出现精度溢出，可设为 true）
 
+flash_attn = false
+# 是否启用 flash-attention（默认关闭，避免部分后端/GPU 下输出 NaN 或乱码）
+
 verbose = false
 # 是否输出详细日志
 

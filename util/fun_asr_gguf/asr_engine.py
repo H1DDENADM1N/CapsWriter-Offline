@@ -38,6 +38,7 @@ class FunASREngine:
         directml_enable: bool = True,
         vulkan_enable: bool = True,
         vulkan_force_fp32: bool = False,
+        flash_attn: bool = False,
         logger: Optional[Logger] = None,
     ):
         # 封装配置
@@ -55,6 +56,7 @@ class FunASREngine:
             directml_enable=directml_enable,
             vulkan_enable=vulkan_enable,
             vulkan_force_fp32=vulkan_force_fp32,
+            flash_attn=flash_attn,
         )
 
         # 初始化组件
@@ -145,6 +147,7 @@ def create_asr_engine(
     directml_enable: bool = True,
     vulkan_enable: bool = True,
     vulkan_force_fp32: bool = False,
+    flash_attn: bool = False,
     verbose: bool = True,
     logger: Optional[Logger] = None,
 ) -> FunASREngine:
@@ -163,6 +166,7 @@ def create_asr_engine(
         directml_enable=directml_enable,
         vulkan_enable=vulkan_enable,
         vulkan_force_fp32=vulkan_force_fp32,
+        flash_attn=flash_attn,
         logger=logger,
     )
     if not engine.initialize(verbose=verbose):

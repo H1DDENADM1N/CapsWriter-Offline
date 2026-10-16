@@ -1,4 +1,3 @@
-from util.fun_asr_gguf.hotword.rag_fast import _logger
 import time
 from typing import Optional
 

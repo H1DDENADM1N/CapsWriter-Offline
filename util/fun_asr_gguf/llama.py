@@ -167,10 +167,6 @@ llama_get_memory = None
 llama_memory_clear = None
 llama_model_n_embd = None
 
-# b11675 的 Vulkan 后端需关闭 flash-attn 才能得到正确 logits（Vulkan+flash 输出全 NaN）。
-# init_llama_lib 成功加载 Vulkan 且未被 VK_ICD_FILENAMES=none 禁用时置为 True。
-_vulkan_enabled = False
-
 # Sampler
 llama_sampler_chain_default_params = None
 llama_sampler_chain_init = None
@@ -304,22 +300,14 @@ def init_llama_lib():
                 pass
         os.environ["PATH"] = lib_dir + os.pathsep + os.environ["PATH"]
         loaded = False
-        vk_loaded = False
         for name in ("ggml-cpu-x64.dll", "ggml-vulkan.dll"):
             full = os.path.join(lib_dir, name)
             try:
                 if ggml_backend_load(full.encode("utf-8")):
                     _logger.info(f"ggml backend loaded: {name}")
                     loaded = True
-                    if name == "ggml-vulkan.dll":
-                        vk_loaded = True
             except Exception as e:
                 _logger.warning(f"ggml backend {name} load failed: {e}")
-        # b11675 的 Vulkan + flash-attn(FLASH_ATTN_EXT) 路径会产出全 NaN logits（已实证），
-        # 仅当用户未用 VK_ICD_FILENAMES=none 禁用时才视 Vulkan 为可用；
-        # 用 Vulkan 时必须关闭 flash-attn，否则识别退化为满屏问号。
-        global _vulkan_enabled
-        _vulkan_enabled = vk_loaded and (os.environ.get("VK_ICD_FILENAMES") != "none")
         if not loaded:
             raise RuntimeError(
                 "未加载到任何 ggml 后端（llama-cpu-x64.dll / llama-vulkan.dll 均失败）"
@@ -561,7 +549,7 @@ def create_context(
     n_seq_max=1,
     embeddings=False,
     pooling_type=0,
-    flash_attn=True,
+    flash_attn=False,
     offload_kqv=True,
     no_perf=True,
     n_threads=None,
@@ -574,10 +562,7 @@ def create_context(
     params.n_seq_max = n_seq_max
     params.embeddings = embeddings
     params.pooling_type = pooling_type
-    params.flash_attn_type = (
-        (1 if flash_attn else 0) if not _vulkan_enabled else 0
-    )  # 1 = ON, 0 = OFF；b11675 的 Vulkan+flash(FLASH_ATTN_EXT) 会输出全 NaN，
-    # 故启用 Vulkan 时强制关闭 flash-attn，否则识别退化为满屏问号（已实证）。
+    params.flash_attn_type = 1 if flash_attn else 0  # 1 = ON, 0 = OFF
     params.offload_kqv = offload_kqv
     params.no_perf = no_perf
 
@@ -652,7 +637,7 @@ class LlamaContext:
         n_seq_max=1,
         embeddings=False,
         pooling_type=0,
-        flash_attn=True,
+        flash_attn=False,
         offload_kqv=True,
         no_perf=True,
         n_threads=None,
@@ -666,7 +651,7 @@ class LlamaContext:
         params.n_seq_max = n_seq_max
         params.embeddings = embeddings
         params.pooling_type = pooling_type
-        params.flash_attn_type = (1 if flash_attn else 0) if not _vulkan_enabled else 0
+        params.flash_attn_type = 1 if flash_attn else 0  # 1 = ON, 0 = OFF
         params.offload_kqv = offload_kqv
         params.no_perf = no_perf
 
