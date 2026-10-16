@@ -36,12 +36,17 @@ llama_pos = ctypes.c_int32
 llama_seq_id = ctypes.c_int32
 
 
+# 对齐 b11675 include/llama.h 的 struct llama_model_params（2026-10-16 更新）。
+# 注意：b11675 用 load_mode/lazy_mode 代替了旧的 use_mmap/use_direct_io/use_mlock，
+# 末尾新增 load_mtp；字段顺序与偏移必须严格一致（ctypes 按声明顺序排布）。
 class llama_model_params(ctypes.Structure):
     _fields_ = [
         ("devices", ctypes.POINTER(ctypes.c_void_p)),
         ("tensor_buft_overrides", ctypes.POINTER(ctypes.c_void_p)),
         ("n_gpu_layers", ctypes.c_int32),
         ("split_mode", ctypes.c_int32),
+        ("load_mode", ctypes.c_int32),
+        ("lazy_mode", ctypes.c_int32),
         ("main_gpu", ctypes.c_int32),
         ("tensor_split", ctypes.POINTER(ctypes.c_float)),
         (
@@ -51,24 +56,29 @@ class llama_model_params(ctypes.Structure):
         ("progress_callback_user_data", ctypes.c_void_p),
         ("kv_overrides", ctypes.POINTER(ctypes.c_void_p)),
         ("vocab_only", ctypes.c_bool),
-        ("use_mmap", ctypes.c_bool),
-        ("use_direct_io", ctypes.c_bool),
-        ("use_mlock", ctypes.c_bool),
         ("check_tensors", ctypes.c_bool),
         ("use_extra_bufts", ctypes.c_bool),
         ("no_host", ctypes.c_bool),
         ("no_alloc", ctypes.c_bool),
+        ("load_mtp", ctypes.c_bool),
     ]
 
 
+# 对齐 b11675 include/llama.h 的 struct llama_context_params（2026-10-16 更新）。
+# b11675 在 n_seq_max 后新增 n_rs_seq/n_outputs_max/n_outputs_max_per_seq/ctx_type，
+# 在 type_v 后新增 moe_cache_size，末部新增 ctx_other；顺序偏移必须逐字段一致。
 class llama_context_params(ctypes.Structure):
     _fields_ = [
         ("n_ctx", ctypes.c_uint32),
         ("n_batch", ctypes.c_uint32),
         ("n_ubatch", ctypes.c_uint32),
         ("n_seq_max", ctypes.c_uint32),
+        ("n_rs_seq", ctypes.c_uint32),
+        ("n_outputs_max", ctypes.c_uint32),
+        ("n_outputs_max_per_seq", ctypes.c_uint32),
         ("n_threads", ctypes.c_int32),
         ("n_threads_batch", ctypes.c_int32),
+        ("ctx_type", ctypes.c_int32),
         ("rope_scaling_type", ctypes.c_int32),
         ("pooling_type", ctypes.c_int32),
         ("attention_type", ctypes.c_int32),
@@ -85,6 +95,7 @@ class llama_context_params(ctypes.Structure):
         ("cb_eval_user_data", ctypes.c_void_p),
         ("type_k", ctypes.c_int32),
         ("type_v", ctypes.c_int32),
+        ("moe_cache_size", ctypes.c_size_t),
         ("abort_callback", ctypes.c_void_p),
         ("abort_callback_data", ctypes.c_void_p),
         ("embeddings", ctypes.c_bool),
@@ -95,6 +106,7 @@ class llama_context_params(ctypes.Structure):
         ("kv_unified", ctypes.c_bool),
         ("samplers", ctypes.POINTER(ctypes.c_void_p)),
         ("n_samplers", ctypes.c_size_t),
+        ("ctx_other", ctypes.c_void_p),
     ]
 
 
@@ -154,6 +166,10 @@ llama_token_to_piece = None
 llama_get_memory = None
 llama_memory_clear = None
 llama_model_n_embd = None
+
+# b11675 的 Vulkan 后端需关闭 flash-attn 才能得到正确 logits（Vulkan+flash 输出全 NaN）。
+# init_llama_lib 成功加载 Vulkan 且未被 VK_ICD_FILENAMES=none 禁用时置为 True。
+_vulkan_enabled = False
 
 # Sampler
 llama_sampler_chain_default_params = None
@@ -274,8 +290,40 @@ def init_llama_lib():
     # 加载后端
     try:
         _logger.info("Loading ggml backend...")
-        ggml_backend_load_all = _bind_function(ggml, "ggml_backend_load_all", [], None)
-        ggml_backend_load_all()
+        # b11675 起 ggml_backend_load_all() 不再自动发现 DLL（否则提示
+        # "no backends are loaded"），需显式用 ggml_backend_load() 按路径加载。
+        # CPU 后端必须加载，Vulkan 按配置启用时会额外加载（失败仅告警）。
+        ggml_backend_load = _bind_function(
+            ggml, "ggml_backend_load", [ctypes.c_char_p], ctypes.c_bool
+        )
+        # 确保 bin 目录可被发现后端 DLL
+        if hasattr(os, "add_dll_directory"):
+            try:
+                os.add_dll_directory(lib_dir)
+            except Exception:
+                pass
+        os.environ["PATH"] = lib_dir + os.pathsep + os.environ["PATH"]
+        loaded = False
+        vk_loaded = False
+        for name in ("ggml-cpu-x64.dll", "ggml-vulkan.dll"):
+            full = os.path.join(lib_dir, name)
+            try:
+                if ggml_backend_load(full.encode("utf-8")):
+                    _logger.info(f"ggml backend loaded: {name}")
+                    loaded = True
+                    if name == "ggml-vulkan.dll":
+                        vk_loaded = True
+            except Exception as e:
+                _logger.warning(f"ggml backend {name} load failed: {e}")
+        # b11675 的 Vulkan + flash-attn(FLASH_ATTN_EXT) 路径会产出全 NaN logits（已实证），
+        # 仅当用户未用 VK_ICD_FILENAMES=none 禁用时才视 Vulkan 为可用；
+        # 用 Vulkan 时必须关闭 flash-attn，否则识别退化为满屏问号。
+        global _vulkan_enabled
+        _vulkan_enabled = vk_loaded and (os.environ.get("VK_ICD_FILENAMES") != "none")
+        if not loaded:
+            raise RuntimeError(
+                "未加载到任何 ggml 后端（llama-cpu-x64.dll / llama-vulkan.dll 均失败）"
+            )
         _logger.info("ggml backend loaded successfully")
     except Exception as e:
         _logger.error(f"Failed to load ggml backend: {e}")
@@ -527,8 +575,9 @@ def create_context(
     params.embeddings = embeddings
     params.pooling_type = pooling_type
     params.flash_attn_type = (
-        1 if flash_attn else 0
-    )  # 1 = ON, 0 = OFF (auto typically uses what's available)
+        (1 if flash_attn else 0) if not _vulkan_enabled else 0
+    )  # 1 = ON, 0 = OFF；b11675 的 Vulkan+flash(FLASH_ATTN_EXT) 会输出全 NaN，
+    # 故启用 Vulkan 时强制关闭 flash-attn，否则识别退化为满屏问号（已实证）。
     params.offload_kqv = offload_kqv
     params.no_perf = no_perf
 
@@ -617,7 +666,7 @@ class LlamaContext:
         params.n_seq_max = n_seq_max
         params.embeddings = embeddings
         params.pooling_type = pooling_type
-        params.flash_attn_type = 1 if flash_attn else 0
+        params.flash_attn_type = (1 if flash_attn else 0) if not _vulkan_enabled else 0
         params.offload_kqv = offload_kqv
         params.no_perf = no_perf
 
@@ -928,12 +977,18 @@ def configure_logging(quiet=False):
 # =========================================================================
 
 
-def text_to_tokens(vocab, text):
+def text_to_tokens(vocab, text, add_special=False, parse_special=True):
     text_bytes = text.encode("utf-8")
     n_tokens_max = len(text_bytes) + 32
     tokens = (llama_token * n_tokens_max)()
     n = llama_tokenize(
-        vocab, text_bytes, len(text_bytes), tokens, n_tokens_max, False, True
+        vocab,
+        text_bytes,
+        len(text_bytes),
+        tokens,
+        n_tokens_max,
+        add_special,
+        parse_special,
     )
     return [tokens[i] for i in range(n)] if n >= 0 else []
 
