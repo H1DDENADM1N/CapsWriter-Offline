@@ -5,7 +5,7 @@ maintainers = [{ name = "H1DDENADM1N" }, { name = "JoanthanWu" }]
 version = "7.0.1"
 description = "离线语音输入简/繁体、中译英、字幕转录；在线多译多、云剪贴板等等 （选用SenseVoice模型 支持中粤英日韩多语种）"
 readme = "readme.md"
-requires-python = "==3.14.2"
+requires-python = "==3.14.8"
 dependencies = [
     "loguru>=0.7.3",
     "numpy>=2.5.4,<3",
