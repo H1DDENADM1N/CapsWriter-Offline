@@ -334,6 +334,14 @@ opencc_converter = "s2t"
 # t2jp Traditional Chinese Characters (Kyūjitai) to New Japanese Kanji (Shinjitai) 繁体（OpenCC 标准，旧字体）到日文新字体
 # jp2t New Japanese Kanji (Shinjitai) to Traditional Chinese Characters (Kyūjitai) 日文新字体到繁体（OpenCC 标准，旧字体）
 
+enable_adb_control = false
+# 是否启用 ADB 控制手机
+# 启用后，语音输入时会通过 ADB 控制手机静音并暂停播放，语音输入结束后恢复音量并继续播放
+# 需电脑已安装 adb，且手机已开启无线调试并与电脑同网
+
+adb_addr = "192.168.3.127:10101"
+# 手机 ADB 无线调试地址
+
 enable_ai_optimize_language_expression = false
 # 是否启用 AI 优化语言表达
 # 启用后预计增加 5s 时间延长

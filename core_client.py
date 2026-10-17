@@ -13,6 +13,7 @@ import typer
 from loguru import logger as default_logger
 from loguru._logger import Logger
 
+from util.client import adb_control
 from util.client.cosmic import Cosmic, console
 from util.client.transcribe.file_transcriber import FileTranscriber
 from util.client.transcribe.srt_adjuster import SrtAdjuster
@@ -52,6 +53,11 @@ async def main_mic(logger: Optional[Logger] = None):
     Cosmic.queue_out = asyncio.Queue()
 
     show_mic_tips()
+
+    # ADB 控制手机: 启动时检查是否已连接到手机地址, 未连接则尝试连接
+    # 连接失败只输出提示, 不重试
+    if Config.enable_adb_control:
+        adb_control.ensure_connected()
 
     # 更新热词
     update_hot_all()
@@ -144,6 +150,7 @@ def init_mic(logger: Optional[Logger] = None):
     except KeyboardInterrupt:
         console.print("再见！")
     finally:
+        adb_control.close()
         console.print("...")
         sys.exit()
 

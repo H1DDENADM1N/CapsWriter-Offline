@@ -12,6 +12,7 @@ from pycaw.pycaw import AudioUtilities
 from tomlkit import dumps, parse
 
 from util.check_process import check_focus, check_process
+from util.client import adb_control
 from util.client.cosmic import Cosmic, console
 from util.client.pause_other_audio import (
     get_audio_playing_apps,
@@ -179,6 +180,10 @@ def restore_audio_playing():
         Cosmic.loop,  # 目标事件循环
     )
 
+    # ADB 控制手机: 录音结束时恢复手机音量并继续播放。
+    # 这里不使用 Config.enable_adb_control 做门控: 若录音期间用户关闭了该开关, 也必须把手机恢复回去。
+    adb_control.resume_after_recording()
+
 
 def translate_needed():
     # 确认是否需要翻译
@@ -343,6 +348,10 @@ def launch_task():
                         saved_result_for_restore_audio_playing_needed = False
                         restore_audio_playing_needed = False
                     print("不支持暂停多个程序的音频播放，跳过暂停其他音频播放")
+
+    # ADB 控制手机: 录音开始时通过 ADB 控制手机静音并暂停播放（手机未在播放时不动作）
+    if Config.enable_adb_control:
+        adb_control.pause_for_recording()
 
 
 def cancel_task():

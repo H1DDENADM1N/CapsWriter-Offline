@@ -19,7 +19,7 @@
 8. 可通过客户端托盘菜单 热切换 是否启用 AI 优化语言表达 以及 AI 服务商、修改 API Key 和 AI 优化风格
 9. 可快捷键切换 AI优化语言表达 提示风格
 10. 可在鼠标离开客户端界面时 变为数字时钟
-11. 可录音时自动 `静音` 或 `暂停` 其他音频播放（暂停主要由模拟播放软件全局快捷键实现）
+11. 可录音时自动 `静音` 或 `暂停` 其他音频播放（暂停主要由模拟播放软件全局快捷键实现），也可启用 `enable_adb_control` 后通过 ADB 控制手机静音并暂停播放
 12. 可通过 `config_selector.exe` 选择配置文件
 
 - [✨ 特性](#-特性)
@@ -33,6 +33,14 @@
 
 <details>
 <summary><h1">展开最近更新</h1></summary>
+
+## 新增 通过 ADB 控制手机静音并暂停播放
+>
+> 新增 `enable_adb_control`（默认关闭）与 `adb_addr`（默认 `192.168.3.127:10101`）配置项：启用后客户端启动时自动检查并按需 `adb connect` 手机地址（失败仅提示、不重试）；语音输入期间通过 ADB 把手机媒体音量置 0 并发送 `播放/暂停` 键（仅在手机确实在播放时执行），语音输入结束后恢复原音量并继续播放。托盘菜单新增「ADB 控制手机」开关（位于「AI 优化语言表达」上方），随 `config.toml` 热更新，无需重启
+>
+> 电脑端需要提前将 adb 可执行文件路径加入系统 PATH，或是修改 `util\client\adb_control.py` 中的 `ADB_PATH`
+> 
+> 如果手机端有 Root (KernelSU) 推荐使用 [altdb](https://github.com/Dr-TSNG/altdb)（ A KernelSU module that provides wireless ADB over your local network. ）
 
 ## 更新 嵌入式 Python 3.14.8（runtime/ 运行时整体升级）
 >
@@ -314,6 +322,7 @@
 22. 默认使用简体中文作为主要输出，快速双击输出繁体中文。设置 `config.toml` 中 `convert_to_traditional_chinese_main = '繁'` 可以默认使用繁体中文，双击输出简体中文
 23. 修改 AI 服务商 后，点击 客户端托盘菜单 `🔑 修改 API Key` 会弹出对应的API Key 输入框
 24. 配置选择器的使用：将您修改后的自定义配置 `config.toml` 复制到 `./configs/` 目录下，重命名为例如 `my config.toml`。使用前先关闭服务端和客户端，再通过 `config_selector.exe` 选择对应的配置文件，点击 `保存`，最后手动重启服务端和客户端。
+25. ADB 控制手机功能：在 `config.toml` 中启用 `enable_adb_control` 后，客户端启动时会自动检查并连接 `adb_addr`（默认 `192.168.3.127:10101`）指向的手机（连接失败仅提示，不重试）；语音输入期间通过 ADB 让手机媒体静音并暂停播放，语音输入结束恢复音量并继续播放。可通过客户端托盘菜单「ADB 控制手机」热切换（位于「AI 优化语言表达」上方），需电脑已安装 `adb` 且手机已开启无线调试并与电脑同网
 
 # ⬇️ 下载地址
 
@@ -802,6 +811,14 @@ opencc_converter = "s2t"
 # t2hk Traditional Chinese (OpenCC Standard) to Hong Kong Standard 繁体（OpenCC 标准）到香港繁体（香港小学学习字词表标准）
 # t2jp Traditional Chinese Characters (Kyūjitai) to New Japanese Kanji (Shinjitai) 繁体（OpenCC 标准，旧字体）到日文新字体
 # jp2t New Japanese Kanji (Shinjitai) to Traditional Chinese Characters (Kyūjitai) 日文新字体到繁体（OpenCC 标准，旧字体）
+
+enable_adb_control = false
+# 是否启用 ADB 控制手机
+# 启用后，语音输入时会通过 ADB 控制手机静音并暂停播放，语音输入结束后恢复音量并继续播放
+# 需电脑已安装 adb，且手机已开启无线调试并与电脑同网
+
+adb_addr = "192.168.3.127:10101"
+# 手机 ADB 无线调试地址
 
 enable_ai_optimize_language_expression = false
 # 是否启用 AI 优化语言表达
