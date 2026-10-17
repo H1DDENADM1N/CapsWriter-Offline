@@ -13,4 +13,3 @@ __pycache__
 /logs
 /util/fun_asr_gguf/bin
 configs/my config.toml
-trim_pyside6.ps1
