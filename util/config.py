@@ -155,6 +155,8 @@ class ClientConfig:
     enable_ai_optimize_language_expression: bool = config["client"][
         "enable_ai_optimize_language_expression"
     ]
+    enable_adb_control: bool = config["client"]["enable_adb_control"]
+    adb_addr: str = config["client"]["adb_addr"]
     ai_provider: Literal["zhipuai", "openai"] = config["client"]["ai_provider"]
     prompt_style_selection: str = config["client"]["prompt_style_selection"]
     show_prompt_style_changed_notification: bool = config["client"][

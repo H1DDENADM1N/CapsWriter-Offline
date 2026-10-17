@@ -758,6 +758,16 @@ class GUI(QMainWindow):
                     )
                     self.prompt_style_menu.setEnabled(False)
 
+            # 更新 ADB 控制手机选项
+            old_value_enable_adb_control = self.get_config_value(
+                "client.enable_adb_control", False
+            )
+            match old_value_enable_adb_control:
+                case True:
+                    self.enable_adb_control_action.setText("✅ ADB 控制手机")
+                case False:
+                    self.enable_adb_control_action.setText("❌ ADB 控制手机")
+
             # 更新AI供应商
             old_value_ai_provider_selection = self.get_config_value(
                 "client.ai_provider", ""
@@ -973,6 +983,7 @@ class GUI(QMainWindow):
         self.convert_to_traditional_chinese_main_action = QAction(
             "⚙️ 默认使用 简/繁 体", self
         )
+        self.enable_adb_control_action = QAction("⚙️ ADB 控制手机", self)
         self.enable_ai_optimize_language_expression_action = QAction(
             "⚙️ AI 优化语言表达", self
         )
@@ -986,6 +997,9 @@ class GUI(QMainWindow):
         )
         old_value_convert_to_traditional_chinese_main = self.get_config_value(
             "client.convert_to_traditional_chinese_main", "简"
+        )
+        old_value_enable_adb_control = self.get_config_value(
+            "client.enable_adb_control", False
         )
         old_value_enable_ai_optimize_language_expression = self.get_config_value(
             "client.enable_ai_optimize_language_expression", False
@@ -1020,6 +1034,11 @@ class GUI(QMainWindow):
                 self.convert_to_traditional_chinese_main_action.setText("简体中文")
             case "繁":
                 self.convert_to_traditional_chinese_main_action.setText("繁體中文")
+        match old_value_enable_adb_control:
+            case True:
+                self.enable_adb_control_action.setText("✅ ADB 控制手机")
+            case False:
+                self.enable_adb_control_action.setText("❌ ADB 控制手机")
         match old_value_enable_ai_optimize_language_expression:
             case True:
                 self.enable_ai_optimize_language_expression_action.setText(
@@ -1057,6 +1076,7 @@ class GUI(QMainWindow):
         self.convert_to_traditional_chinese_main_action.triggered.connect(
             self.switch_between_simplified_and_traditional
         )
+        self.enable_adb_control_action.triggered.connect(self.toogle_enable_adb_control)
         self.enable_ai_optimize_language_expression_action.triggered.connect(
             self.toogle_ai_provider_and_ai_optimize_language_expression
         )
@@ -1093,6 +1113,7 @@ class GUI(QMainWindow):
         tray_menu.addAction(self.save_markdown_action)
         tray_menu.addAction(self.save_non_kwd_markdown_action)
         tray_menu.addAction(self.convert_to_traditional_chinese_main_action)
+        tray_menu.addAction(self.enable_adb_control_action)
         tray_menu.addAction(self.enable_ai_optimize_language_expression_action)
         tray_menu.addMenu(self.ai_provider_menu)
         tray_menu.addAction(self.edit_api_key_action)
@@ -1309,6 +1330,24 @@ class GUI(QMainWindow):
                         self.convert_to_traditional_chinese_main_action.setText(
                             "简体中文"
                         )
+            else:
+                self.logger.error("保存配置文件失败")
+        else:
+            self.logger.error("更新内存配置失败")
+
+    def toogle_enable_adb_control(self):
+        # 从内存配置中获取当前值
+        old_value = self.get_config_value("client.enable_adb_control", False)
+        # 切换值
+        new_value = not old_value
+        # 更新内存配置并保存到文件
+        if self.set_config_value("client.enable_adb_control", new_value):
+            if self.save_config():
+                # 更新托盘菜单
+                if old_value:
+                    self.enable_adb_control_action.setText("❌ ADB 控制手机")
+                else:
+                    self.enable_adb_control_action.setText("✅ ADB 控制手机")
             else:
                 self.logger.error("保存配置文件失败")
         else:

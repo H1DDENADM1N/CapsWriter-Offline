@@ -9,6 +9,7 @@ from typing import Literal
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+from util.client import adb_control
 from util.client import hot_kwds, hot_sub_en, hot_sub_rule, hot_sub_zh
 from util.client.cosmic import Cosmic, console
 
@@ -126,6 +127,8 @@ def update_config():
             update_save_non_kwd_markdown(new_config)
             update_convert_to_traditional_chinese(new_config)
             update_enable_ai_optimize_language_expression(new_config)
+            update_enable_adb_control(new_config)
+            update_adb_addr(new_config)
             update_ai_provider(new_config)
             update_prompt_style_selection(new_config)
             update_openai_api_key(new_config)
@@ -191,6 +194,28 @@ def update_enable_ai_optimize_language_expression(new_config):
     if old_value != new_value:
         Config.enable_ai_optimize_language_expression = new_value
         console.print(f"[green4]AI语言优化配置已更新，启用AI语言优化为 {new_value} [/]")
+
+
+def update_enable_adb_control(new_config):
+    """更新启用 ADB 控制手机配置"""
+    old_value: bool = Config.enable_adb_control
+    new_value: bool = new_config["client"]["enable_adb_control"]
+
+    if old_value != new_value:
+        Config.enable_adb_control = new_value
+        console.print(f"[green4]ADB 控制手机配置已更新，启用 ADB 控制手机为 {new_value} [/]")
+        if new_value:
+            adb_control.ensure_connected()
+
+
+def update_adb_addr(new_config):
+    """更新手机 ADB 无线调试地址配置"""
+    old_value: str = Config.adb_addr
+    new_value: str = new_config["client"]["adb_addr"]
+
+    if old_value != new_value:
+        Config.adb_addr = new_value
+        console.print(f"[green4]手机 ADB 无线调试地址配置已更新，ADB 地址为 {new_value} [/]")
 
 
 def update_ai_provider(new_config):
