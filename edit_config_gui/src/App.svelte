@@ -4,16 +4,28 @@
   import CommandPalette from './lib/components/CommandPalette.svelte';
   import DiffDialog from './lib/components/DiffDialog.svelte';
   import DirtyBar from './lib/components/DirtyBar.svelte';
+  import Onboarding from './lib/components/Onboarding.svelte';
   import PageView from './lib/components/pages/PageView.svelte';
   import Sidebar from './lib/components/Sidebar.svelte';
+  import StatusBar from './lib/components/StatusBar.svelte';
   import { configStore } from './lib/stores/config.svelte.ts';
   import { saveStore } from './lib/stores/save.svelte.ts';
 
+  /**
+   * `__forceState` 仅测试用。
+   *
+   * 「没找到 config.toml」这一态在 jsdom 里没法自然走到（要么真的让 IPC 失败，
+   * 要么去 mock Tauri internals 的拒绝路径），而它恰好是用户第一次运行时唯一会
+   * 看到的页面——最该被测试盯住的一屏，反而最容易没人测。
+   */
+  let { __forceState }: { __forceState?: 'onboarding' } = $props();
+
   onMount(() => {
+    if (__forceState) return;
     void configStore.load();
   });
 
-  const phase = $derived(configStore.state());
+  const phase = $derived(__forceState ?? configStore.state());
 
   /**
    * `Ctrl+S` 走的是和底部「保存…」按钮同一条路径：先预览、再确认。
@@ -30,32 +42,37 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="shell">
-  <Sidebar />
+{#if phase === 'onboarding'}
+  <Onboarding />
+{:else}
+  <div class="app">
+    <div class="shell">
+      <Sidebar />
 
-  <div class="main">
-    <main class="content">
-      {#if phase === 'loading'}
-        <p class="hint">正在读取 config.toml…</p>
-      {:else if phase === 'ready'}
-        <PageView />
-      {:else if phase === 'onboarding'}
-        <div class="hint">
-          <p>没找到 config.toml。</p>
-          <p>请确认本程序放在 CapsWriter-Offline 目录下，或手动选择一个配置文件。</p>
-        </div>
-      {:else}
-        <div class="hint">
-          <p>读取配置失败：</p>
-          <pre>{configStore.lastError()}</pre>
-          <button type="button" onclick={() => void configStore.load()}>重试</button>
-        </div>
-      {/if}
-    </main>
+      <div class="main">
+        <main class="content">
+          {#if phase === 'loading'}
+            <p class="hint">正在读取 config.toml…</p>
+          {:else if phase === 'ready'}
+            <PageView />
+          {:else}
+            <div class="hint">
+              <p>读取配置失败：</p>
+              <pre>{configStore.lastError()}</pre>
+              <button type="button" onclick={() => void configStore.load()}>重试</button>
+            </div>
+          {/if}
+        </main>
 
-    <DirtyBar />
+        <DirtyBar />
+      </div>
+    </div>
+
+    {#if phase === 'ready'}
+      <StatusBar />
+    {/if}
   </div>
-</div>
+{/if}
 
 <CommandPalette />
 <DiffDialog />
@@ -74,9 +91,16 @@
     font-size: 13px;
   }
 
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
   .shell {
     display: flex;
-    height: 100vh;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow: hidden;
   }
 
