@@ -1,0 +1,44 @@
+# 配置编辑器测试样本：与仓库根 config.toml 同构，只保留每种形态的最小片段。
+# 覆盖：行尾注释、多行字符串、二维数组、动态内联表、非 ASCII 键、派生占位键。
+[debug]
+logger_level = "DEBUG" # 调试日志级别
+# 级别名称
+# DEBUG           10
+
+[server]
+model = "FunASR"
+speech_recognition_port = "6016"
+# 值是字符串，写回时必须保持字符串，不能变成整数 6016
+
+[client]
+threshold = 0.5
+# 按下快捷键后，触发语音识别的时间阈值
+hold_mode = true
+# 长按模式，按下录音，松开停止
+enter_apps = [["happ.exe", 0.5], ["hexin.exe", 0.5]]
+# 格式：[["<进程名>", <延迟秒数>], ...] 进程名小写
+disable_exe_list = [""]
+# 在运行这些程序时(包括在背景运行)，不启用客户端功能:语音输入
+"多音字" = true
+# true 表示多音字匹配
+
+[client.prompt_style]
+prompt_official_shortcut = "ctrl + alt + shift + f1"
+# 切换提示风格为正式公文文本校对助手的快捷键
+prompt_official = """
+你是一位专业的公文文本校对助手。你的任务是对语音转录生成的文本进行校对和润色。
+
+核心原则：
+1. 语言一致性：输出语言必须与原始文本完全一致（中文或英文）
+2. 内容保真性：严格保留原文核心事实与意图，不得增删、改变或曲解实质性信息
+"""
+
+[client.additional_special_apps]
+"vlc.exe" = { hotkey = "ctrl + alt + f9", name = "VLC Media Player" } # VLC 设置全局快捷键后需要重启 VLC 才能生效
+# "<进程名>" = { hotkey = "<对应程序设置的全局快捷键>", name = "<用于输出日志的对应程序名称>" }
+
+[funasr_args]
+ctc_onnx_path = "${model_paths.funasr_ctc_path}"
+# # CTC 快速预识别 模型路径
+n_predict = 512
+# LLM 最大生成 token 数
