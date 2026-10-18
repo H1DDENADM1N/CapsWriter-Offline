@@ -36,7 +36,7 @@ pnpm install
 pnpm dev          # 只起 Vite，浏览器里看 UI（IPC 会提示「不在 Tauri 窗口中运行」）
 pnpm dev:tauri    # 起完整窗口，可读写配置
 
-pnpm test         # 前端 118 个用例
+pnpm test         # 前端 123 个用例 / 10 个文件（schema 12 + 拼音 8 + 搜索 15 + stores 27 + 控件 16 + 渲染 9 + 导航 12 + 面板 7 + 保存 9 + 状态 8）
 pnpm check        # svelte-check，必须 0 error 0 warning
 pnpm gen:schema-paths   # 改了 schema 后重新生成 Rust 侧的键清单
 

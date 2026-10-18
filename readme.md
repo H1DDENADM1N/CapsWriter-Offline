@@ -34,6 +34,10 @@
 <details>
 <summary><h1">展开最近更新</h1></summary>
 
+## 使用 `Tauri 2` + `Svelte 5` 重构 `edit_config_gui` 
+
+> 优化交互逻辑，更方便且安全地修改 服务端、客户端的配置。 抛弃现有 pyside6 + siui 架构 ，toml注释保留，结构保留
+
 ## 新增 通过 ADB 控制手机静音并暂停播放
 >
 > 新增 `enable_adb_control`（默认关闭）与 `adb_addr`（默认 `192.168.3.127:10101`）配置项：启用后客户端启动时自动检查并按需 `adb connect` 手机地址（失败仅提示、不重试）；语音输入期间通过 ADB 把手机媒体音量置 0 并发送 `播放/暂停` 键（仅在手机确实在播放时执行），语音输入结束后恢复原音量并继续播放。托盘菜单新增「ADB 控制手机」开关（位于「AI 优化语言表达」上方），随 `config.toml` 热更新，无需重启
@@ -439,9 +443,62 @@ uv run start_client_gui.py
 
 启动配置编辑器GUI
 
-双击仓库根目录下的 `edit_config_gui.exe` 即可（单文件，不需要 Python 环境）。
+双击仓库根目录下的 `edit_config_gui.exe` 即可（单文件，不需要 Python 环境）。它是 Tauri 2 + Svelte 5 的产物，从源码运行与构建见下面的 3.3。
 
-从源码构建见 [`edit_config_gui/README.md`](edit_config_gui/README.md)。
+#### 3.3 配置编辑器 GUI 的源码运行与构建（Tauri 2 + Svelte 5）
+
+`edit_config_gui.exe` 与上面几个 Python 程序无关：它不依赖 `runtime/`、不依赖 `.venv`，前端资源在构建时内嵌进 exe。要注意它与 Python 侧的 `config.toml` 共用同一份文件，两边改的是同一个位置。
+
+需要的工具链（仅 Windows）：
+
+| 工具 | 版本 | 说明 |
+|---|---|---|
+| Rust | ≥ 1.95 | `rustup` 安装，另需 MSVC Build Tools（提供 `link.exe`）。版本下限由 `sysinfo` 决定 |
+| Node.js | ≥ 20.19 | |
+| pnpm | ≥ 9 | `npm i -g pnpm` |
+| WebView2 Runtime | 任意近期版本 | Win11 自带；Win10 缺了要装 Evergreen Runtime |
+
+Rust 不在 `PATH` 里时先补一句：
+
+```powershell
+$env:PATH = "$env:USERPROFILE\.cargo\bin;" + $env:PATH
+```
+
+安装前端依赖，并启动带真实窗口的开发模式（改前端代码即时热更新，能真正读写配置）：
+
+```powershell
+cd edit_config_gui
+pnpm install
+pnpm dev:tauri
+```
+
+> `pnpm dev` 只起 Vite，浏览器里能看到界面，但读写配置会提示「当前不在 Tauri 窗口中运行」，因为 IPC 只在 Tauri 窗口里可用。
+
+提交前跑三类检查：
+
+```powershell
+pnpm check                              # svelte-check，必须 0 error 0 warning
+pnpm test                               # 前端用例（vitest + jsdom）
+cd src-tauri; cargo test --release; cd ../..   # Rust 侧用例（含模板键双向覆盖断言）
+```
+
+构建单文件 exe 并复制到仓库根：
+
+```powershell
+pnpm build:dist
+```
+
+产物有两份：`edit_config_gui/src-tauri/target/release/edit_config_gui.exe`（构建产物）与仓库根的 `edit_config_gui.exe`（约 10 MB，前端资源已内嵌，旁边不需要 `dist/`）。
+
+**改了配置项之后必须同步两处索引**，否则 Rust 侧的覆盖断言会失败：
+
+```powershell
+pnpm gen:schema-paths               # -> src-tauri/tests/schema_paths.json
+node scripts/gen-pinyin-map.mjs     # -> src/lib/pinyin-map.json（搜索用的拼音表）
+pnpm test
+```
+
+更多细节（目录结构、常见错误、为什么保存必须走 Windows 的 `ReplaceFileW`）见 [`edit_config_gui/README.md`](edit_config_gui/README.md)。
 
 ### 4. 检测和升级依赖包
 
@@ -463,7 +520,16 @@ uv run dev\check_site_packages_update.py
 
 ### 5. 打包
 
-详见 [Pystand](https://github.com/H1DDENADM1N/PyStand)
+Python 部分（`core_*.py`、`start_*_gui.py`、`config_selector.py`、`hint_while_recording.ahk`）用 PyStand 打包成 `runtime/` + exe，详见 [PyStand](https://github.com/H1DDENADM1N/PyStand)。
+
+配置编辑器 GUI 是独立的一套，**不用 PyStand**，由 Tauri 打包：
+
+```powershell
+cd edit_config_gui
+pnpm build:dist
+```
+
+`tauri.conf.json` 里 `bundle.active = false`，所以只产出裸 exe、不生成 msi/nsis 安装包；exe 由 `scripts/copy-dist.mjs` 复制到仓库根。
 
 </details>
 

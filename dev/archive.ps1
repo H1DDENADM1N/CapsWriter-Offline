@@ -1,4 +1,9 @@
-﻿# backup.ps1 —— 把 archive_list.txt 里的内容打进 7z 备份包
+# archive.ps1 —— 按 archive_list.txt 打包发布用的 7z 压缩包
+#
+# 列表里只放「运行时需要的东西」：可执行的 exe、PyStand 要跑的 .py、runtime/、
+# 模型之外的必需数据（keywords.txt、hot-*.txt、configs/）等。
+# 源码树、设计稿、构建中间产物一律不进包——edit_config_gui 的源码、docs/、dev/
+# 都不该出现在这里；发布包里多一份源码只会增大体积并泄露开发内容。
 #
 # 依赖:
 #   7-Zip        C:\Program Files\7-Zip\7z.exe
