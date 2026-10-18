@@ -141,6 +141,7 @@ class ParaformerArgs:
 
 - 新建 `edit_config_gui/` Tauri 2 项目（Rust + Svelte 5 前端）。
 - 覆盖 `config.toml` 全部 162 个叶子键。
+- 提供全配置项搜索（`Ctrl+K` 命令面板，支持中文标题/键名/注释/当前值/拼音全拼与首字母），可直达任意字段并聚焦（§9.7）。
 - 删除旧的 `edit_config_gui.py` 与 `util/edit_config_gui/`（15 个文件）。
 - 保留 `config.toml` 的注释、键顺序、`[section]` 结构与值类型。
 - 生成单文件可执行程序（`edit_config_gui.exe`）。
@@ -267,6 +268,9 @@ edit_config_gui/
 ├── svelte.config.js
 ├── tsconfig.json
 ├── index.html
+├── scripts/
+│   ├── gen-schema-paths.mjs        # 构建期生成 schema_paths.json（覆盖断言用）
+│   └── gen-pinyin-map.mjs          # 构建期生成 pinyin-map.json（搜索拼音用）
 ├── src/
 │   ├── main.ts
 │   ├── App.svelte
@@ -283,10 +287,13 @@ edit_config_gui/
 │       │   ├── translate.ts         # libretranslate + deeplx
 │       │   ├── modelPaths.ts        # model_paths（13 键）
 │       │   ├── modelArgs.ts         # funasr_args / sensevoice_args / paraformer_args
-│       │   └── index.ts             # 汇总 + 按页分组
+│       │   └── index.ts             # 汇总 + 按页分组 + 扁平化（含 fieldId）
+│       ├── search.ts                # 搜索索引构建 + 打分排序（纯函数，可单测）
+│       ├── pinyin.ts                # 用 pinyin-map.json 做变体展开
+│       ├── pinyin-map.json          # 构建期生成，841 字 / 12 688 字节
 │       ├── components/
 │       │   ├── Sidebar.svelte
-│       │   ├── SearchBox.svelte
+│       │   ├── CommandPalette.svelte # §9.7 搜索命令面板（含顶部搜索框收起态）
 │       │   ├── Section.svelte
 │       │   ├── Field.svelte         # 按 FieldMeta.widget 分发
 │       │   ├── DirtyBar.svelte
@@ -307,6 +314,7 @@ edit_config_gui/
 │       │       └── DynamicTableWidget.svelte  # additional_special_apps
 │       └── stores/
 │           ├── config.ts            # original / current / dirty
+│           ├── search.ts            # open / query / selectedIndex / recent
 │           └── toast.ts
 └── src-tauri/
     ├── Cargo.toml
@@ -397,6 +405,8 @@ export interface FieldMeta {
   visibleWhen?: { path: string; equals?: unknown; in?: unknown[] };
   /** 只读派生：真实生效位置 */
   derivedFrom?: string;
+  /** 搜索同义词（§9.7.2），如 client.speech_recognition_shortcut 加 ['语音','说话'] */
+  aliases?: string[];
 }
 
 export interface SectionMeta {
@@ -1178,7 +1188,7 @@ json.dump(cn.canonical_names, open('canonical_names.json','w'), ensure_ascii=Fal
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ 配置编辑器  config.toml            [搜索框]    [⚙ 进程提示] │
+│ 配置编辑器  config.toml   [🔍 搜索配置项  Ctrl+K    ]  [⚙] │
 ├──────────────┬──────────────────────────────────────────┤
 │ 服务端     ① │                                          │
 │ 客户端     ③ │  ▸ 基础                                    │
@@ -1197,11 +1207,13 @@ json.dump(cn.canonical_names, open('canonical_names.json','w'), ensure_ascii=Fal
 └─────────────────────────────────────────────────────────┘
 ```
 
+顶部搜索框是 §9.7 命令面板的入口，常驻可见（不是收起成图标），因为「快速定位到某个配置项」是本编辑器最高频的动作。
+
 ### 9.2 相对旧 GUI 的交互改进
 
 | 项 | 旧 | 新 |
 |---|---|---|
-| 全局搜索 | 无 | 顶部搜索框，按标题/键名/注释过滤，回车跳转并高亮 |
+| 全局搜索 | 无 | 命令面板式搜索（Ctrl+K），按标题/键名/注释/当前值/页名模糊匹配，回车直达并高亮（详见 §9.7） |
 | 脏态 | 无提示 | 导航项角标计数 + 底部脏状态栏 |
 | 未保存关闭 | 直接关 | 拦截确认 |
 | 撤销 | 无 | 「放弃」回滚全部；单字段「恢复默认」 |
@@ -1288,6 +1300,97 @@ json.dump(cn.canonical_names, open('canonical_names.json','w'), ensure_ascii=Fal
 - 浅色/深色跟随系统。
 - 中文界面，文案与 `config.toml` 注释保持一致。
 
+### 9.7 配置项搜索（命令面板）
+
+162 个键分布在 13 个页面里，用户知道「要改端口」却不知道端口在哪一页，是旧版最耗时的操作。旧 GUI 的 21 个分节标题（`addTitle` 统计）里，「端口」这两项就分别藏在服务端页与客户端页的「语音识别」小节 —— 靠肉眼翻页找并不现实。因此搜索不是辅助功能，而是主入口。
+
+#### 9.7.1 交互
+
+- **唤起**：`Ctrl+K`（macOS `Cmd+K`）、点击顶部搜索框、或选中任意字段后按 `Ctrl+F`（自动带上该字段所在页名作为初始查询）。
+- **输入即搜**：每敲一个字符重算一次。162 个条目的索引在内存里，单次过滤 < 1 ms，**不做防抖**（防抖只会让长查询看起来更慢）。
+- **键盘全程可控**：`↑`/`↓` 移动选中，`Enter` 跳转，`Esc` 关闭并把焦点还给原控件，`Tab` 补全当前选中项的标题到输入框。
+- **结果行**：`<标题>` `<页 / 小节>` `<匹配原因徽标>`，标题里命中片段加下划线高亮。匹配原因徽标取 `标题` / `键名` / `注释` / `当前值` / `拼音` 之一，让用户知道「为什么这条会出现」。
+- **跳转**：切到目标页 → `scrollIntoView({block:'center'})` → 该字段外层加 2 秒的聚焦描边动画 → 焦点落到输入控件并把光标置于文末。
+- **空态**：输入框为空时列出本次会话内最近跳转过的 5 项（内存里，不落盘、不进 localStorage），下方补一句「输入关键词搜索全部 162 个配置项」。
+- **无结果**：显示「未找到匹配的配置项」，并给出一个兜底入口「以 TOML 键名精确查找」，把输入当字面键名再匹配一次（应对用户直接粘贴 `client.speech_recognition_shortcut` 这类全路径）。
+
+#### 9.7.2 匹配范围与排序
+
+索引条目结构（`src/lib/search.ts` 里的 `SearchEntry`，与 Svelte 无关，可单独单测）：
+
+```ts
+export interface SearchEntry {
+  fieldId: number;        // 扁平化 schema 中的稳定下标，用于 DOM 定位
+  segments: string[];
+  path: string;           // client.speech_recognition_shortcut（仅展示/兜底精确匹配用）
+  title: string;
+  note?: string;          // config.toml 注释原文
+  value: string;          // 当前值（编辑中或已保存，取 current）
+  pageTitle: string;
+  sectionTitle: string;
+  readonly: boolean;      // 9 个派生只读键
+  hidden: boolean;        // visibleWhen 当前不满足
+  secret: boolean;        // widget === 'secret'
+  aliases: string[];      // FieldMeta.aliases，人工补充的同义词
+}
+```
+
+**可搜字段**：标题、键名末段与全路径、注释原文、当前值、页名、小节名、`aliases`、拼音（全拼 + 首字母）。
+
+**明确不搜**：API Key 的**值**（`secret: true` 的条目跳过值匹配，避免搜索结果把密钥显示在屏幕上；标题与键名照常可搜，用户仍能找到那个字段）。
+
+**打分**（分数高者排前，同分按 schema 顺序，保证结果稳定不跳动）：
+
+| 匹配 | 分数 |
+|---|---|
+| 标题完全等于查询 | 1000 |
+| 标题以查询开头 | 800 |
+| 标题包含查询（子串） | 600 |
+| 任一 alias 包含查询 | 500 |
+| 键名末段包含查询 | 400 |
+| 键名全路径包含查询 | 350 |
+| 小节名 / 页名包含查询 | 300 |
+| 注释包含查询 | 200 |
+| 拼音全拼命中 | 150 |
+| 拼音首字母命中 | 100 |
+| 当前值包含查询 | 50 |
+
+多关键词（空格分隔）按 AND 处理：每个词都必须命中至少一个字段，取各项分数之和；全词命中的结果排在部分命中之前。
+
+**模糊匹配**：对标题额外做子序列匹配（`zjp` → `字…键…盘` 之类），但子序列命中只给 60 分并放在所有子串命中之后，避免把无关结果顶上来。子序列匹配只作用于标题与别名，不作用于注释（注释太长，子序列会命中一片噪声）。
+
+**中文拼音（构建期生成，不带运行时依赖）**：不引入 `pinyin-pro` 作为运行时依赖——实测把它打进前端产物是 **459 582 字节（minify 后，gzip 149 591）**，为了一次搜索索引背 460 KB 不值得。改为**构建期一次性生成拼音表**：
+
+1. `edit_config_gui/scripts/gen-pinyin-map.mjs`（Node 脚本，`pinyin-pro` 只作为 `devDependencies`，产物提交进仓库）。
+2. 脚本收集全部需要索引的汉字：**`config.toml` 里出现的 820 个不重复汉字 + UI 文案里的 21 个字 = 841 个**（脚本从 `config.toml` 与 `src/lib/schema/*.ts` 的实际文本里提取，不手写清单）。
+3. 对每个字取**全部读音**（`pinyin(ch, { type:'array', multiple:true })`），输出 `src/lib/pinyin-map.json`：**12 688 字节（gzip 4 573）**，其中 112 个是多音字（如 `行`→`xing/hang/heng`、`重`→`zhong/chong`）。
+4. 运行时用这张小表对标题做**变体展开**：多音字按全部读音组合，单条最多 16 个变体；`ü` 额外产出 `v` 与 `u` 两种写法（`采样率` → `caiyanglü` / `caiyanglv` / `caiyanglu`）。实测 `端口`→`duankou`/`dk`，`声调`→`shengtiao/shengdiao/shengzhou`。
+5. 实测耗时：**162 条索引全量构建 ≈ 5.9 ms**（单页构建 0.29 ms），在 `open_config` 返回后同步做一次完全没有感知。
+
+这样既没有运行时依赖、不增加产物体积，又不会因为生僻字/多音字漏索引——字表是从真实文案里提取的，不是猜的。若后续新增了字表里没有的字，`schema_paths` 同款覆盖测试会在 CI 里报出来（见 §10.3 的 `pinyin_map_covers_all_titles`）。
+
+**结果上限**：最多显示 50 条，超出时底部提示「已显示前 50 条，请继续输入以缩小范围」。
+
+#### 9.7.3 隐藏字段与只读字段的处理
+
+这两类是搜索最容易踩空的地方，必须显式设计：
+
+- **`visibleWhen` 不满足而隐藏的字段**（如 `client.enable_adb_control = false` 时的 `client.adb_addr`，`client.use_offline_translate_function = false` 时的 `client.offline_translate_port`）：**仍然出现在结果里**，标 `已隐藏` 徽标。点进去跳转到目标页，但字段位置显示一张占位卡片：
+
+  > 该配置项当前被隐藏，因为 `client.enable_adb_control` = `false`。
+  > [去开启该开关]
+
+  点按钮则跳到那个控制字段并高亮。理由是用户搜出来就是要改它，直接不显示反而让人以为编辑器有 bug。
+- **9 个派生只读键**（`funasr_args.encoder_onnx_path` 等）：出现在结果里，标 `只读` 徽标。跳转后定位到该只读控件（它本身会显示「实际生效：`<model_paths 解析值>`」），并在徽标旁提供第二跳「去 `model_paths.funasr_encoder_adaptor_path`」，直接落到真正能改的那个字段。
+- **动态表 `client.additional_special_apps`**：不为每个现有条目单独建索引项（条目会随用户增删而变），只建一条「附加特殊应用」指向该表；用户按进程名搜索时走注释与表标题匹配。运行时若用户输入了某个条目的进程名，结果里额外补一条 `动态条目 vlc.exe`，直接跳到表格中该行。
+
+#### 9.7.4 状态与组件落点
+
+- 搜索状态（`open` / `query` / `selectedIndex` / `recent`）放在 `src/lib/stores/search.ts`，不进 `config.ts`，避免与配置脏态耦合。
+- 组件：`src/lib/components/CommandPalette.svelte`（顶部搜索框是它的收起态外观，同一组件两态）。
+- 索引在 `open_config` 成功返回后构建一次；此后每次字段值变化只更新对应条目的 `value`/`hidden`/`readonly` 三个字段，不重建全表（162 项重建也不慢，但增量更新能让「最近跳转」与选中位置不跳）。
+- **DOM 定位**：每个字段的根元素带 `data-field-id={fieldId}`。用索引下标而不是 `segments.join('.')` 作定位键，因为 `vlc.exe` 这类含点的段会让 join 后的字符串有歧义（§5.2 的同一条理由）。因字段被 `visibleWhen` 隐藏而尚未挂载时，先确保目标页渲染、等该字段出现再滚动。
+
 ---
 
 ## 10. 测试策略
@@ -1344,6 +1447,16 @@ json.dump(cn.canonical_names, open('canonical_names.json','w'), ensure_ascii=Fal
 | `revert_all` | 「放弃」后 current == original，dirty 为空 |
 | `revert_field` | 单字段恢复默认只改该字段 |
 | `visibleWhen` | `use_online_translate_function=false` 时在线翻译字段不渲染 |
+| `search_exact_title_wins` | 查询「端口」时标题含「端口」的条目排在仅注释命中「端口」的前面（验证 §9.7.2 打分表） |
+| `search_hidden_field_found` | `client.enable_adb_control=false` 时搜「adb」仍能搜到 `client.adb_addr`，结果带 `已隐藏` 标记 |
+| `search_readonly_has_jump_target` | 搜「encoder_onnx_path」返回只读条目，其 `derivedFrom` 指向 `model_paths.funasr_encoder_adaptor_path` 且在 schema 中存在 |
+| `search_secret_value_not_matched` | 把 `client.zhipuai.api_key` 设为 `sk-abc123` 后搜 `abc123` **不返回**该字段；搜「智谱」仍返回 |
+| `search_pinyin_full_and_abbr` | 搜 `duankou` 与 `dk` 都能命中标题含「端口」的条目 |
+| `search_pinyin_polyphonic` | 搜 `chongmingming` 与 `zhongmingming` 都能命中「重命名」（多音字变体展开） |
+| `search_no_match_falls_back_to_path` | 搜一个完整 TOML 路径（含 `vlc.exe` 这类带点段）能精确命中 |
+| `search_ranking_stable` | 同分结果按 schema 顺序排列，连续两次过滤结果顺序一致 |
+| `search_result_cap` | 构造 60 条全命中查询时返回 50 条并置 `truncated` 标记 |
+| `pinyin_map_covers_all_titles` | 所有 `FieldMeta.title` 里的汉字都在 `pinyin-map.json` 的键集合中（漏字即失败，防止新增字段没重跑生成脚本） |
 | `error_aggregation` | 3 个字段非法时返回 3 条错误 |
 | `pair_list_roundtrip` | `enter_apps` 表格编辑后序列化为 `[["exe", 0.5]]` |
 
@@ -1357,6 +1470,10 @@ json.dump(cn.canonical_names, open('canonical_names.json','w'), ensure_ascii=Fal
 6. 撤销：重新打开，改回原值。
 7. 并发：打开编辑器后在外部改 `config.toml`，再保存 → 必须提示冲突。
 8. 未保存关闭 → 必须拦截。
+9. 搜索：按 `Ctrl+K`，输入 `dk` → 结果含「端口」相关字段；选中回车 → 跳到服务端页并把焦点落到端口输入框且光标在文末；按 `Esc` → 焦点回到跳转前的字段。
+10. 搜索隐藏字段：把 `client.enable_adb_control` 关掉，搜 `adb` → 结果仍列出 `client.addr` 之外的 `client.adb_addr`（带「已隐藏」），点进去看到占位卡片与「去开启该开关」按钮。
+11. 搜索派生键：搜 `onnx` → 命中 `funasr_args.encoder_onnx_path`（带「只读」），点第二跳落到 `model_paths.funasr_encoder_adaptor_path`。
+12. 搜索密钥：把某个 API Key 设成一眼能认出的字符串，再搜它 → 结果里**不出现**该字段（验证 §9.7.2 的 secret 跳过值匹配）。
 
 ---
 
@@ -1419,6 +1536,9 @@ util/edit_config_gui/                           (整目录删除，14 个 .py + 
 | 用户误以为派生键可改 | 改了没效果 | 只读展示 + 跳转到真实来源 |
 | `client.trash_punc` 被写入正则元字符 | `util/client/strip_punc.py:22` 把该值原样拼进字符类，`\` / `^` / 空串使 Python 抛 `re.error` 直接崩溃，`[` 则静默失效 | 新增 `regexClass` 校验器禁用 `\` `^` `[` 并禁空（§8.0.1）；`validate_regex_class` 用例固化，且断言 31 个中日韩标点仍可用 |
 | `client.adb_addr` 写错格式 | 消费端 `adb_control.py:341-349` 不校验，只表现为「连接手机失败」，用户无从判断 | 新增 `ipPort` 校验器（§8.0.1）；`enable_adb_control=false` 时隐藏且不校验 |
+| 拼音表随新增字段失配 | 新加了带生僻字的字段，搜拼音搜不到且没人发现 | `pinyin_map_covers_all_titles` 测试：标题里的汉字必须全在 `pinyin-map.json` 键集合内，漏字即失败；生成脚本从源码实际文本提取字表，不手写（§9.7.2） |
+| 搜索把 API Key 明文显示 | 用户搜 `sk-` 时密钥出现在结果行里 | `secret: true` 的条目**跳过当前值匹配**，标题/键名/注释照常可搜；`search_secret_value_not_matched` 用例固化（§9.7.2） |
+| 搜索跳转到 `visibleWhen` 隐藏字段 | 结果点进去一片空白，像是编辑器 bug | 隐藏字段仍可搜到并标「已隐藏」，落地为占位卡片 + 「去开启该开关」按钮（§9.7.3） |
 
 ---
 
@@ -1443,6 +1563,9 @@ util/edit_config_gui/                           (整目录删除，14 个 .py + 
 17. 从任意工作目录启动编辑器并点「重启服务端」，服务端能正确读到仓库根的模型与 `config.toml`（验证 §9.4 的 `lpCurrentDirectory`）。
 18. `client.trash_punc` 写 `\` / `^` / `[` / 空串都被校验拦下并给出提示；模板值 `，。,.` 原样保存后，`util/client/strip_punc.py` 的行为与改动前一致（注释与值均未被 `toml_edit` 改写）。
 19. `client.enable_adb_control=false` 时 `adb_addr` 隐藏且不参与全量校验；置 `true` 后填入 `192.168.3.127:10101` 可通过保存。
+20. 搜索覆盖全部 162 个配置项：任意键的全路径、标题、注释、拼音全拼、拼音首字母都能命中；`Ctrl+K` 唤起、`↑↓` 选择、`Enter` 跳转并聚焦、`Esc` 关闭还原焦点；连续两次相同查询结果顺序一致。
+21. 搜索结果的三种特殊徽标行为正确：`已隐藏`（可跳转、落地占位卡片）、`只读`（可跳转、提供第二跳）、secret 值不参与匹配。
+22. `pinyin-map.json` 与 `schema` 保持同步（`pinyin_map_covers_all_titles` 通过），且该文件由构建期脚本生成、已提交，前端**不**依赖 `pinyin-pro` 运行时包（`package.json` 的 `dependencies` 里不含它）。
 
 ---
 
