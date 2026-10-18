@@ -1,4 +1,12 @@
 <script lang="ts">
+  /*
+   * 图标直接用 `src-tauri/icons/icon.ico`：它与仓库根的 `assets/icon/config-icon.ico`
+   * 字节一致（SHA256 相同），也是 exe 与窗口的图标。再往 `src/assets` 拷一份的话，
+   * 将来换图标必然漏掉其中一处——关于页显示旧图标比显示不出图标更难发现。
+   * 该目录在 Vite root（edit_config_gui/）之内，构建时会被当成资源打包进 dist。
+   */
+  import appIcon from '../../../../src-tauri/icons/icon.ico';
+
   import { bridge } from '../../../bridge.ts';
   import { configStore } from '../../stores/config.svelte.ts';
   import Icon from '../Icon.svelte';
@@ -55,7 +63,7 @@
 
 <article class="about">
   <section class="hero">
-    <div class="mark" aria-hidden="true">C</div>
+    <img class="mark" src={appIcon} alt="" width="52" height="52" aria-hidden="true" />
     <div class="intro">
       <h2>配置编辑器</h2>
       <p class="tagline">
@@ -150,17 +158,14 @@
   }
 
   .mark {
-    display: flex;
     flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    width: 46px;
-    height: 46px;
-    border-radius: 12px;
-    background: var(--ecg-accent, #1a56c4);
-    color: #fff;
-    font-size: 22px;
-    font-weight: 700;
+    width: 52px;
+    height: 52px;
+    /*
+     * ico 里带 256/128/64/48/32/24/16 七种尺寸，浏览器会挑最合适的一档，
+     * 52px 下不会糊；`image-rendering` 保持默认的平滑插值即可。
+     */
+    border-radius: 10px;
   }
 
   .intro h2 {
