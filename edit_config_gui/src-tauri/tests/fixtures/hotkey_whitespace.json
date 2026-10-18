@@ -1,0 +1,442 @@
+[
+[
+"a\t+b",
+"ok"
+],
+[
+"ctrl\t+a",
+"ok"
+],
+[
+"ctrl +\ta",
+"ok"
+],
+[
+"a+\tb",
+"ok"
+],
+[
+"ctrl\talt",
+"err"
+],
+[
+"a\n+b",
+"ok"
+],
+[
+"ctrl\n+a",
+"ok"
+],
+[
+"ctrl +\na",
+"ok"
+],
+[
+"a+\nb",
+"ok"
+],
+[
+"ctrl\nalt",
+"err"
+],
+[
+"a\u000b+b",
+"ok"
+],
+[
+"ctrl\u000b+a",
+"ok"
+],
+[
+"ctrl +\u000ba",
+"ok"
+],
+[
+"a+\u000bb",
+"ok"
+],
+[
+"ctrl\u000balt",
+"err"
+],
+[
+"a\f+b",
+"ok"
+],
+[
+"ctrl\f+a",
+"ok"
+],
+[
+"ctrl +\fa",
+"ok"
+],
+[
+"a+\fb",
+"ok"
+],
+[
+"ctrl\falt",
+"err"
+],
+[
+"a\r+b",
+"ok"
+],
+[
+"ctrl\r+a",
+"ok"
+],
+[
+"ctrl +\ra",
+"ok"
+],
+[
+"a+\rb",
+"ok"
+],
+[
+"ctrl\ralt",
+"err"
+],
+[
+"a\u001c+b",
+"ok"
+],
+[
+"ctrl\u001c+a",
+"ok"
+],
+[
+"ctrl +\u001ca",
+"ok"
+],
+[
+"a+\u001cb",
+"ok"
+],
+[
+"ctrl\u001calt",
+"err"
+],
+[
+"a\u001d+b",
+"ok"
+],
+[
+"ctrl\u001d+a",
+"ok"
+],
+[
+"ctrl +\u001da",
+"ok"
+],
+[
+"a+\u001db",
+"ok"
+],
+[
+"ctrl\u001dalt",
+"err"
+],
+[
+"a\u001e+b",
+"ok"
+],
+[
+"ctrl\u001e+a",
+"ok"
+],
+[
+"ctrl +\u001ea",
+"ok"
+],
+[
+"a+\u001eb",
+"ok"
+],
+[
+"ctrl\u001ealt",
+"err"
+],
+[
+"a\u001f+b",
+"ok"
+],
+[
+"ctrl\u001f+a",
+"ok"
+],
+[
+"ctrl +\u001fa",
+"ok"
+],
+[
+"a+\u001fb",
+"ok"
+],
+[
+"ctrl\u001falt",
+"err"
+],
+[
+"a +b",
+"ok"
+],
+[
+"ctrl +a",
+"ok"
+],
+[
+"ctrl + a",
+"ok"
+],
+[
+"a+ b",
+"ok"
+],
+[
+"ctrl alt",
+"err"
+],
+[
+"a+b",
+"ok"
+],
+[
+"ctrl+a",
+"ok"
+],
+[
+"ctrl +a",
+"ok"
+],
+[
+"a+b",
+"ok"
+],
+[
+"ctrlalt",
+"err"
+],
+[
+"a +b",
+"ok"
+],
+[
+"ctrl +a",
+"ok"
+],
+[
+"ctrl + a",
+"ok"
+],
+[
+"a+ b",
+"ok"
+],
+[
+"ctrl alt",
+"err"
+],
+[
+"a +b",
+"ok"
+],
+[
+"ctrl +a",
+"ok"
+],
+[
+"ctrl + a",
+"ok"
+],
+[
+"a+ b",
+"ok"
+],
+[
+"ctrl alt",
+"err"
+],
+[
+"a +b",
+"ok"
+],
+[
+"ctrl +a",
+"ok"
+],
+[
+"ctrl + a",
+"ok"
+],
+[
+"a+ b",
+"ok"
+],
+[
+"ctrl alt",
+"err"
+],
+[
+"a +b",
+"ok"
+],
+[
+"ctrl +a",
+"ok"
+],
+[
+"ctrl + a",
+"ok"
+],
+[
+"a+ b",
+"ok"
+],
+[
+"ctrl alt",
+"err"
+],
+[
+"a +b",
+"ok"
+],
+[
+"ctrl +a",
+"ok"
+],
+[
+"ctrl + a",
+"ok"
+],
+[
+"a+ b",
+"ok"
+],
+[
+"ctrl alt",
+"err"
+],
+[
+"a +b",
+"ok"
+],
+[
+"ctrl +a",
+"ok"
+],
+[
+"ctrl + a",
+"ok"
+],
+[
+"a+ b",
+"ok"
+],
+[
+"ctrl alt",
+"err"
+],
+[
+"a +b",
+"ok"
+],
+[
+"ctrl +a",
+"ok"
+],
+[
+"ctrl + a",
+"ok"
+],
+[
+"a+ b",
+"ok"
+],
+[
+"ctrl alt",
+"err"
+],
+[
+"a +b",
+"ok"
+],
+[
+"ctrl +a",
+"ok"
+],
+[
+"ctrl + a",
+"ok"
+],
+[
+"a+ b",
+"ok"
+],
+[
+"ctrl alt",
+"err"
+],
+[
+"a　+b",
+"ok"
+],
+[
+"ctrl　+a",
+"ok"
+],
+[
+"ctrl +　a",
+"ok"
+],
+[
+"a+　b",
+"ok"
+],
+[
+"ctrl　alt",
+"err"
+],
+[
+"ctrl  +  a",
+"err"
+],
+[
+"ctrl\t\t+\t\ta",
+"err"
+],
+[
+"ctrl　　+　　a",
+"err"
+],
+[
+"alt+a,  alt+b",
+"err"
+],
+[
+"alt+a,\t\talt+b",
+"err"
+],
+[
+"alt+a,　　alt+b",
+"err"
+],
+[
+"ctrl  +  a",
+"err"
+],
+[
+"ctrl   +   a",
+"err"
+],
+[
+"ctrl　+ a",
+"ok"
+],
+[
+"ctrl +  a",
+"err"
+]
+]

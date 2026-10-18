@@ -268,6 +268,26 @@ mod tests {
         assert_eq!(diff, 0, "别名穷举对拍必须 0 差异");
     }
 
+    /// 空白字符语义对拍（110 例）：`re` 的 `\s` 把 U+001C..U+001F 也算空白，
+    /// Unicode White_Space 属性不认 —— 这直接改变 `\s?` 能吃掉哪个字符。
+    /// 另含「分隔符后跟 2 个以上空白」的判别用例：只吃一个 vs 吃光，真值必然不同。
+    #[test]
+    fn hotkey_whitespace_parity() {
+        let rows: Vec<(String, String)> =
+            serde_json::from_str(include_str!("../tests/fixtures/hotkey_whitespace.json"))
+                .expect("hotkey_whitespace.json 损坏");
+        assert_eq!(rows.len(), 110);
+        let mut diff = 0usize;
+        for (case, want) in &rows {
+            let got = if is_valid_hotkey(case) { "ok" } else { "err" };
+            if got != want {
+                diff += 1;
+                eprintln!("ws diff: {case:?} expected {want} got {got}");
+            }
+        }
+        assert_eq!(diff, 0, "空白语义对拍必须 0 差异");
+    }
+
     /// 两张表的规模钉死：`export_hotkey_tables.py` 重跑后若数字变了，
     /// 说明 upstream `keyboard` 包换了键名表 —— 必须重新对拍。
     #[test]

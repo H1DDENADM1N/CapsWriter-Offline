@@ -200,3 +200,42 @@ print(f"alias total: {len(alias_rows)}  ok: {alias_ok_n}  err: {len(alias_rows) 
     json.dumps(alias_rows, ensure_ascii=False, indent=0), encoding="utf-8"
 )
 print(f"wrote {OUT / 'hotkey_alias.json'}")
+
+
+# =================================================== 空白字符语义对拍集（JSON）
+# `re` 的 `\s` 与 Rust `char::is_whitespace()` 不完全等价：Python 的 `str.isspace()`
+# 把 U+001C..U+001F 也算空白，Unicode White_Space 属性不认。这直接影响
+# `re.split(r'\s?\+\s?')` 能在 `+` 前吃掉哪个字符，所以必须单独对拍。
+# 这里还顺带覆盖 NBSP(U+00A0)、全角空格(U+3000)、各类 Unicode 空白、制表符。
+ws_rows = []
+for ws in [
+    "\u0009", "\u000a", "\u000b", "\u000c", "\u000d",
+    "\u001c", "\u001d", "\u001e", "\u001f",
+    "\u0020", "\u0085", "\u00a0", "\u1680", "\u2000", "\u2003",
+    "\u2028", "\u2029", "\u202f", "\u205f", "\u3000",
+]:
+    for tmpl in ["a{ws}+b", "ctrl{ws}+a", "ctrl +{ws}a", "a+{ws}b", "ctrl{ws}alt"]:
+        ws_rows.append([tmpl.format(ws=ws), expected(tmpl.format(ws=ws))])
+# 多空白叠加：`\s?` 只吃一个，第二个留在段内 → 非法
+for hk in ["ctrl  +  a", "ctrl\t\t+\t\ta", "ctrl\u3000\u3000+\u3000\u3000a"]:
+    ws_rows.append([hk, expected(hk)])
+
+# 「只吃一个」与「吃光」的关键区别：分隔符后跟 **2 个以上**空白再接合法键。
+# 只吃一个 → 段首残留空白 → 段非法；吃光 → 段合法。这两类的真值必然不同。
+for hk in [
+    "alt+a,  alt+b",           # 逗号后两个空格
+    "alt+a,\t\talt+b",         # 逗号后两个制表符
+    "alt+a,\u3000\u3000alt+b", # 逗号后两个全角空格
+    "ctrl  +  a",              # 加号两侧各两个空格
+    "ctrl   +   a",
+    "ctrl\u3000+ a",
+    "ctrl +  a",
+]:
+    ws_rows.append([hk, expected(hk)])
+
+ws_ok_n = sum(1 for _, r in ws_rows if r == "ok")
+print(f"ws total: {len(ws_rows)}  ok: {ws_ok_n}  err: {len(ws_rows) - ws_ok_n}")
+(OUT / "hotkey_whitespace.json").write_text(
+    json.dumps(ws_rows, ensure_ascii=False, indent=0), encoding="utf-8"
+)
+print(f"wrote {OUT / 'hotkey_whitespace.json'}")
