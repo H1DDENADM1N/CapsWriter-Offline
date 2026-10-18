@@ -1,0 +1,841 @@
+caps lock
+ctrl + alt + f5
+Ctrl + Alt + F5
+left shift
+ctrl + alt + [
+f13
+f24
+space
+enter
+shift
++
+_
+esc
+escape
+ctrl+alt+f5
+alt+a, alt+b
+volume up
+left windows
+alt+f4
+f999
+f25
+
+ctrl + 
+mouse left
+  ctrl  +  alt  +  f5  
+ctrl + shift + ,
+鼠标
+right shift
+ctrl + alt + f6
+ctrl + alt + f7
+ctrl + alt + f8
+ctrl + alt + shift + f1
+ctrl + alt + shift + f2
+ctrl + alt + shift + f3
+ctrl + alt + shift + f4
+ctrl + alt + shift + f5
+ctrl + alt + shift + f6
+ctrl + alt + shift + f7
+ctrl + alt + shift + f8
+ctrl + alt + f9
+ctrl + a
+ctrl+a
+ctrl  +  a
+ctrl + f1
+ctrl+f1
+ctrl  +  f1
+ctrl + f12
+ctrl+f12
+ctrl  +  f12
+ctrl + f13
+ctrl+f13
+ctrl  +  f13
+ctrl + f24
+ctrl+f24
+ctrl  +  f24
+ctrl + space
+ctrl+space
+ctrl  +  space
+ctrl + enter
+ctrl+enter
+ctrl  +  enter
+ctrl + [
+ctrl+[
+ctrl  +  [
+ctrl + ]
+ctrl+]
+ctrl  +  ]
+ctrl + esc
+ctrl+esc
+ctrl  +  esc
+ctrl + escape
+ctrl+escape
+ctrl  +  escape
+ctrl + tab
+ctrl+tab
+ctrl  +  tab
+ctrl + backspace
+ctrl+backspace
+ctrl  +  backspace
+ctrl + delete
+ctrl+delete
+ctrl  +  delete
+ctrl + del
+ctrl+del
+ctrl  +  del
+ctrl + home
+ctrl+home
+ctrl  +  home
+ctrl + end
+ctrl+end
+ctrl  +  end
+ctrl + page up
+ctrl+page up
+ctrl  +  page up
+ctrl + volume up
+ctrl+volume up
+ctrl  +  volume up
+ctrl + 媒体
+ctrl+媒体
+ctrl  +  媒体
+ctrl + mouse left
+ctrl+mouse left
+ctrl  +  mouse left
+ctrl + f0
+ctrl+f0
+ctrl  +  f0
+ctrl + f25
+ctrl+f25
+ctrl  +  f25
+ctrl + f999
+ctrl+f999
+ctrl  +  f999
+ctrl+
+ctrl  +  
+ctrl + +
+ctrl++
+ctrl  +  +
+ctrl + -
+ctrl+-
+ctrl  +  -
+ctrl + _
+ctrl+_
+ctrl  +  _
+ctrl + 1
+ctrl+1
+ctrl  +  1
+ctrl + 5
+ctrl+5
+ctrl  +  5
+alt + a
+alt+a
+alt  +  a
+alt + f1
+alt+f1
+alt  +  f1
+alt + f12
+alt+f12
+alt  +  f12
+alt + f13
+alt+f13
+alt  +  f13
+alt + f24
+alt+f24
+alt  +  f24
+alt + space
+alt+space
+alt  +  space
+alt + enter
+alt+enter
+alt  +  enter
+alt + [
+alt+[
+alt  +  [
+alt + ]
+alt+]
+alt  +  ]
+alt + esc
+alt+esc
+alt  +  esc
+alt + escape
+alt+escape
+alt  +  escape
+alt + tab
+alt+tab
+alt  +  tab
+alt + backspace
+alt+backspace
+alt  +  backspace
+alt + delete
+alt+delete
+alt  +  delete
+alt + del
+alt+del
+alt  +  del
+alt + home
+alt+home
+alt  +  home
+alt + end
+alt+end
+alt  +  end
+alt + page up
+alt+page up
+alt  +  page up
+alt + volume up
+alt+volume up
+alt  +  volume up
+alt + 媒体
+alt+媒体
+alt  +  媒体
+alt + mouse left
+alt+mouse left
+alt  +  mouse left
+alt + f0
+alt+f0
+alt  +  f0
+alt + f25
+alt+f25
+alt  +  f25
+alt + f999
+alt+f999
+alt  +  f999
+alt + 
+alt+
+alt  +  
+alt + +
+alt++
+alt  +  +
+alt + -
+alt+-
+alt  +  -
+alt + _
+alt+_
+alt  +  _
+alt + 1
+alt+1
+alt  +  1
+alt + 5
+alt+5
+alt  +  5
+shift + a
+shift+a
+shift  +  a
+shift + f1
+shift+f1
+shift  +  f1
+shift + f12
+shift+f12
+shift  +  f12
+shift + f13
+shift+f13
+shift  +  f13
+shift + f24
+shift+f24
+shift  +  f24
+shift + space
+shift+space
+shift  +  space
+shift + enter
+shift+enter
+shift  +  enter
+shift + [
+shift+[
+shift  +  [
+shift + ]
+shift+]
+shift  +  ]
+shift + esc
+shift+esc
+shift  +  esc
+shift + escape
+shift+escape
+shift  +  escape
+shift + tab
+shift+tab
+shift  +  tab
+shift + backspace
+shift+backspace
+shift  +  backspace
+shift + delete
+shift+delete
+shift  +  delete
+shift + del
+shift+del
+shift  +  del
+shift + home
+shift+home
+shift  +  home
+shift + end
+shift+end
+shift  +  end
+shift + page up
+shift+page up
+shift  +  page up
+shift + volume up
+shift+volume up
+shift  +  volume up
+shift + 媒体
+shift+媒体
+shift  +  媒体
+shift + mouse left
+shift+mouse left
+shift  +  mouse left
+shift + f0
+shift+f0
+shift  +  f0
+shift + f25
+shift+f25
+shift  +  f25
+shift + f999
+shift+f999
+shift  +  f999
+shift + 
+shift+
+shift  +  
+shift + +
+shift++
+shift  +  +
+shift + -
+shift+-
+shift  +  -
+shift + _
+shift+_
+shift  +  _
+shift + 1
+shift+1
+shift  +  1
+shift + 5
+shift+5
+shift  +  5
+windows + a
+windows+a
+windows  +  a
+windows + f1
+windows+f1
+windows  +  f1
+windows + f12
+windows+f12
+windows  +  f12
+windows + f13
+windows+f13
+windows  +  f13
+windows + f24
+windows+f24
+windows  +  f24
+windows + space
+windows+space
+windows  +  space
+windows + enter
+windows+enter
+windows  +  enter
+windows + [
+windows+[
+windows  +  [
+windows + ]
+windows+]
+windows  +  ]
+windows + esc
+windows+esc
+windows  +  esc
+windows + escape
+windows+escape
+windows  +  escape
+windows + tab
+windows+tab
+windows  +  tab
+windows + backspace
+windows+backspace
+windows  +  backspace
+windows + delete
+windows+delete
+windows  +  delete
+windows + del
+windows+del
+windows  +  del
+windows + home
+windows+home
+windows  +  home
+windows + end
+windows+end
+windows  +  end
+windows + page up
+windows+page up
+windows  +  page up
+windows + volume up
+windows+volume up
+windows  +  volume up
+windows + 媒体
+windows+媒体
+windows  +  媒体
+windows + mouse left
+windows+mouse left
+windows  +  mouse left
+windows + f0
+windows+f0
+windows  +  f0
+windows + f25
+windows+f25
+windows  +  f25
+windows + f999
+windows+f999
+windows  +  f999
+windows + 
+windows+
+windows  +  
+windows + +
+windows++
+windows  +  +
+windows + -
+windows+-
+windows  +  -
+windows + _
+windows+_
+windows  +  _
+windows + 1
+windows+1
+windows  +  1
+windows + 5
+windows+5
+windows  +  5
+left ctrl + a
+left ctrl+a
+left ctrl  +  a
+left ctrl + f1
+left ctrl+f1
+left ctrl  +  f1
+left ctrl + f12
+left ctrl+f12
+left ctrl  +  f12
+left ctrl + f13
+left ctrl+f13
+left ctrl  +  f13
+left ctrl + f24
+left ctrl+f24
+left ctrl  +  f24
+left ctrl + space
+left ctrl+space
+left ctrl  +  space
+left ctrl + enter
+left ctrl+enter
+left ctrl  +  enter
+left ctrl + [
+left ctrl+[
+left ctrl  +  [
+left ctrl + ]
+left ctrl+]
+left ctrl  +  ]
+left ctrl + esc
+left ctrl+esc
+left ctrl  +  esc
+left ctrl + escape
+left ctrl+escape
+left ctrl  +  escape
+left ctrl + tab
+left ctrl+tab
+left ctrl  +  tab
+left ctrl + backspace
+left ctrl+backspace
+left ctrl  +  backspace
+left ctrl + delete
+left ctrl+delete
+left ctrl  +  delete
+left ctrl + del
+left ctrl+del
+left ctrl  +  del
+left ctrl + home
+left ctrl+home
+left ctrl  +  home
+left ctrl + end
+left ctrl+end
+left ctrl  +  end
+left ctrl + page up
+left ctrl+page up
+left ctrl  +  page up
+left ctrl + volume up
+left ctrl+volume up
+left ctrl  +  volume up
+left ctrl + 媒体
+left ctrl+媒体
+left ctrl  +  媒体
+left ctrl + mouse left
+left ctrl+mouse left
+left ctrl  +  mouse left
+left ctrl + f0
+left ctrl+f0
+left ctrl  +  f0
+left ctrl + f25
+left ctrl+f25
+left ctrl  +  f25
+left ctrl + f999
+left ctrl+f999
+left ctrl  +  f999
+left ctrl + 
+left ctrl+
+left ctrl  +  
+left ctrl + +
+left ctrl++
+left ctrl  +  +
+left ctrl + -
+left ctrl+-
+left ctrl  +  -
+left ctrl + _
+left ctrl+_
+left ctrl  +  _
+left ctrl + 1
+left ctrl+1
+left ctrl  +  1
+left ctrl + 5
+left ctrl+5
+left ctrl  +  5
+right shift + a
+right shift+a
+right shift  +  a
+right shift + f1
+right shift+f1
+right shift  +  f1
+right shift + f12
+right shift+f12
+right shift  +  f12
+right shift + f13
+right shift+f13
+right shift  +  f13
+right shift + f24
+right shift+f24
+right shift  +  f24
+right shift + space
+right shift+space
+right shift  +  space
+right shift + enter
+right shift+enter
+right shift  +  enter
+right shift + [
+right shift+[
+right shift  +  [
+right shift + ]
+right shift+]
+right shift  +  ]
+right shift + esc
+right shift+esc
+right shift  +  esc
+right shift + escape
+right shift+escape
+right shift  +  escape
+right shift + tab
+right shift+tab
+right shift  +  tab
+right shift + backspace
+right shift+backspace
+right shift  +  backspace
+right shift + delete
+right shift+delete
+right shift  +  delete
+right shift + del
+right shift+del
+right shift  +  del
+right shift + home
+right shift+home
+right shift  +  home
+right shift + end
+right shift+end
+right shift  +  end
+right shift + page up
+right shift+page up
+right shift  +  page up
+right shift + volume up
+right shift+volume up
+right shift  +  volume up
+right shift + 媒体
+right shift+媒体
+right shift  +  媒体
+right shift + mouse left
+right shift+mouse left
+right shift  +  mouse left
+right shift + f0
+right shift+f0
+right shift  +  f0
+right shift + f25
+right shift+f25
+right shift  +  f25
+right shift + f999
+right shift+f999
+right shift  +  f999
+right shift + 
+right shift+
+right shift  +  
+right shift + +
+right shift++
+right shift  +  +
+right shift + -
+right shift+-
+right shift  +  -
+right shift + _
+right shift+_
+right shift  +  _
+right shift + 1
+right shift+1
+right shift  +  1
+right shift + 5
+right shift+5
+right shift  +  5
+Ctrl + a
+Ctrl+a
+Ctrl  +  a
+Ctrl + f1
+Ctrl+f1
+Ctrl  +  f1
+Ctrl + f12
+Ctrl+f12
+Ctrl  +  f12
+Ctrl + f13
+Ctrl+f13
+Ctrl  +  f13
+Ctrl + f24
+Ctrl+f24
+Ctrl  +  f24
+Ctrl + space
+Ctrl+space
+Ctrl  +  space
+Ctrl + enter
+Ctrl+enter
+Ctrl  +  enter
+Ctrl + [
+Ctrl+[
+Ctrl  +  [
+Ctrl + ]
+Ctrl+]
+Ctrl  +  ]
+Ctrl + esc
+Ctrl+esc
+Ctrl  +  esc
+Ctrl + escape
+Ctrl+escape
+Ctrl  +  escape
+Ctrl + tab
+Ctrl+tab
+Ctrl  +  tab
+Ctrl + backspace
+Ctrl+backspace
+Ctrl  +  backspace
+Ctrl + delete
+Ctrl+delete
+Ctrl  +  delete
+Ctrl + del
+Ctrl+del
+Ctrl  +  del
+Ctrl + home
+Ctrl+home
+Ctrl  +  home
+Ctrl + end
+Ctrl+end
+Ctrl  +  end
+Ctrl + page up
+Ctrl+page up
+Ctrl  +  page up
+Ctrl + volume up
+Ctrl+volume up
+Ctrl  +  volume up
+Ctrl + 媒体
+Ctrl+媒体
+Ctrl  +  媒体
+Ctrl + mouse left
+Ctrl+mouse left
+Ctrl  +  mouse left
+Ctrl + f0
+Ctrl+f0
+Ctrl  +  f0
+Ctrl + f25
+Ctrl+f25
+Ctrl  +  f25
+Ctrl + f999
+Ctrl+f999
+Ctrl  +  f999
+Ctrl + 
+Ctrl+
+Ctrl  +  
+Ctrl + +
+Ctrl++
+Ctrl  +  +
+Ctrl + -
+Ctrl+-
+Ctrl  +  -
+Ctrl + _
+Ctrl+_
+Ctrl  +  _
+Ctrl + 1
+Ctrl+1
+Ctrl  +  1
+Ctrl + 5
+Ctrl+5
+Ctrl  +  5
+ALT + a
+ALT+a
+ALT  +  a
+ALT + f1
+ALT+f1
+ALT  +  f1
+ALT + f12
+ALT+f12
+ALT  +  f12
+ALT + f13
+ALT+f13
+ALT  +  f13
+ALT + f24
+ALT+f24
+ALT  +  f24
+ALT + space
+ALT+space
+ALT  +  space
+ALT + enter
+ALT+enter
+ALT  +  enter
+ALT + [
+ALT+[
+ALT  +  [
+ALT + ]
+ALT+]
+ALT  +  ]
+ALT + esc
+ALT+esc
+ALT  +  esc
+ALT + escape
+ALT+escape
+ALT  +  escape
+ALT + tab
+ALT+tab
+ALT  +  tab
+ALT + backspace
+ALT+backspace
+ALT  +  backspace
+ALT + delete
+ALT+delete
+ALT  +  delete
+ALT + del
+ALT+del
+ALT  +  del
+ALT + home
+ALT+home
+ALT  +  home
+ALT + end
+ALT+end
+ALT  +  end
+ALT + page up
+ALT+page up
+ALT  +  page up
+ALT + volume up
+ALT+volume up
+ALT  +  volume up
+ALT + 媒体
+ALT+媒体
+ALT  +  媒体
+ALT + mouse left
+ALT+mouse left
+ALT  +  mouse left
+ALT + f0
+ALT+f0
+ALT  +  f0
+ALT + f25
+ALT+f25
+ALT  +  f25
+ALT + f999
+ALT+f999
+ALT  +  f999
+ALT + 
+ALT+
+ALT  +  
+ALT + +
+ALT++
+ALT  +  +
+ALT + -
+ALT+-
+ALT  +  -
+ALT + _
+ALT+_
+ALT  +  _
+ALT + 1
+ALT+1
+ALT  +  1
+ALT + 5
+ALT+5
+ALT  +  5
+alt+a,alt+b
+alt+a ,  alt+b
+alt+a, ctrl+shift+z
+alt+a,ctrl+shift+z
+alt+a ,  ctrl+shift+z
+alt+a, nonsense
+alt+a,nonsense
+alt+a ,  nonsense
+alt+a, 
+alt+a,
+alt+a ,  
+ctrl+alt+f5, alt+b
+ctrl+alt+f5,alt+b
+ctrl+alt+f5 ,  alt+b
+ctrl+alt+f5, ctrl+shift+z
+ctrl+alt+f5,ctrl+shift+z
+ctrl+alt+f5 ,  ctrl+shift+z
+ctrl+alt+f5, nonsense
+ctrl+alt+f5,nonsense
+ctrl+alt+f5 ,  nonsense
+ctrl+alt+f5, 
+ctrl+alt+f5,
+ctrl+alt+f5 ,  
+caps lock, alt+b
+caps lock,alt+b
+caps lock ,  alt+b
+caps lock, ctrl+shift+z
+caps lock,ctrl+shift+z
+caps lock ,  ctrl+shift+z
+caps lock, nonsense
+caps lock,nonsense
+caps lock ,  nonsense
+caps lock, 
+caps lock,
+caps lock ,  
+bad key, alt+b
+bad key,alt+b
+bad key ,  alt+b
+bad key, ctrl+shift+z
+bad key,ctrl+shift+z
+bad key ,  ctrl+shift+z
+bad key, nonsense
+bad key,nonsense
+bad key ,  nonsense
+bad key, 
+bad key,
+bad key ,  
+a
+b
+c
+x
+y
+z
+0
+1
+8
+9
+-
+=
+[
+]
+;
+,
+.
+/
+`
+255
+4294967295
+-1
+1.5
+3 
+ 3
+CAPS LOCK
+Caps Lock
+caps  lock
+caps	lock
+ ctrl + a
+ctrl + a 
+ctrl +
++a
+a+
+ctrl++a
