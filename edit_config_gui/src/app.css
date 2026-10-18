@@ -21,6 +21,8 @@
   --ecg-muted: #6b7280;
   --ecg-ok: #2f9e44;
   --ecg-warn: #b8860b;
+  /* 紫色：服务端/客户端以管理员权限运行（深色单独调过） */
+  --ecg-elevated: #8e44ad;
   --ecg-danger: #c0392b;
 
   /*
@@ -61,6 +63,8 @@
     --ecg-muted: #9aa1ad;
     --ecg-ok: #57c277;
     --ecg-warn: #e0b34a;
+    /* 紫色：服务端/客户端以管理员权限运行（深色单独调过） */
+    --ecg-elevated: #c084fc;
     --ecg-danger: #e0736a;
 
     --ecg-input-bg: #1f232a;

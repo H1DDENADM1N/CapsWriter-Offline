@@ -28,9 +28,13 @@ sysinfo = "0.39"
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
+  "Win32_Globalization",
   "Win32_Storage_FileSystem",
   "Win32_System_Threading",
   "Win32_System_ProcessStatus",
+  # SHELLEXECUTEINFOW / ShellExecuteExW 在 0.59 里被 Win32_System_Registry 门控
+  # （结构体字段 hkeyClass: HKEY 的归属模块），提权助手需要它。
+  "Win32_System_Registry",
   "Win32_Security",
   "Win32_UI_WindowsAndMessaging",
   "Win32_UI_Shell",

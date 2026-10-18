@@ -90,6 +90,39 @@ export interface RunningInfo {
   /** 只有客户端在跑时才有值，例如 `start_client_gui_admin.exe` */
   clientVariant: string | null;
   isAdmin: boolean;
+  /**
+   * 客户端是否以管理员权限运行。
+   *
+   * 与 `isAdmin` 是两件事：`isAdmin` 说的是「管理器自己」提没提权，`clientAdmin`
+   * 说的是「被探测到的客户端进程」有没有提权。客户端提权运行时（`start_client_gui_admin.exe`）
+   * 结束它需要管理员权限，普通权限的重启会被拒绝——前端要据此提前提示并走提权路径。
+   */
+  clientAdmin: boolean;
+  /**
+   * 服务端进程是否以管理员权限运行。
+   *
+   * 与 `isAdmin` 同样是两件事：`isAdmin` 说的是「管理器自己」提没提权，`serverAdmin`
+   * 说的是「被探测到的服务端进程」有没有提权。服务端提权运行时，普通权限结束不了它，
+   * 重启需要提权；探测令牌查询失败时按 `false` 处理。
+   */
+  serverAdmin: boolean;
+}
+
+/** 重启的目标进程。与 Rust `process::ServiceTarget`（`rename_all = "lowercase"`）对应。 */
+export type ServiceTarget = 'server' | 'client';
+
+/** 与 Rust `process::RestartOutcome` 对应。 */
+export interface RestartOutcome {
+  /**
+   * 原本以管理员身份运行、但降权启动失败并回退成了普通权限。调用方**必须**把它
+   * 显示给用户，不能当成功处理。
+   */
+  degraded: boolean;
+  /**
+   * 普通权限无法结束目标进程，需要提权（会弹出 UAC）。为 true 时前端应停在确认框里
+   * 改走 `restartServiceElevated`，而不是关闭对话框当作重启完成。
+   */
+  needsElevation: boolean;
 }
 
 /**
@@ -153,9 +186,22 @@ export const bridge = {
    *
    * `degraded === true` 表示原本以管理员身份运行、但降权启动失败并回退成了普通权限——
    * 调用方**必须**把它显示给用户，不能当成功处理。
+   *
+   * `needsElevation === true` 表示普通权限结束不了目标进程（例如管理员变体的客户端），
+   * 此时并没有完成重启；调用方应改走 `restartServiceElevated`。
    */
-  restartService(target: 'server' | 'client'): Promise<{ degraded: boolean }> {
-    return call<{ degraded: boolean }>('restart_service', { target });
+  restartService(target: ServiceTarget): Promise<RestartOutcome> {
+    return call<RestartOutcome>('restart_service', { target });
+  },
+
+  /**
+   * 以管理员权限（弹出 UAC）结束并重新拉起服务端/客户端。
+   *
+   * 只应在 `restartService` 返回 `needsElevation === true` 后调用：它是同一个确认流程的
+   * 第二阶段，成功/降权/失败的语义与 `restartService` 一致。
+   */
+  restartServiceElevated(target: ServiceTarget): Promise<RestartOutcome> {
+    return call<RestartOutcome>('restart_service_elevated', { target });
   },
 
   /**

@@ -26,7 +26,7 @@ use std::sync::{Mutex, MutexGuard};
 use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 
-use crate::{config_doc, file_io, patch, process, validate};
+use crate::{config_doc, elevate, file_io, patch, process, validate};
 
 /// 约定的配置文件名。定位、备份槽都以它为准。
 const CONFIG_FILE: &str = "config.toml";
@@ -436,6 +436,10 @@ pub async fn running_processes() -> Result<process::RunningInfo, String> {
 /// `variant` 取 `detect()` 的结果原样传递，让重启后的客户端保持原来的普通/admin 形态；
 /// `degraded == true` 也必须原样返回——它表示「提权失败、已降级为普通启动」，前端要据此
 /// 提示用户，绝不能在这里吞成成功。
+///
+/// 预检在这里、也在 `process::restart` 里各做一次：目标以管理员权限运行时，本函数**在
+/// kill 之前**就返回 `needsElevation`，一个进程都不结束。安全网覆盖「预检为假、真正 kill
+/// 时才被拒绝访问」的竞态（例如目标进程恰在两次扫描之间被提权重启）。
 #[tauri::command]
 pub async fn restart_service(
     state: State<'_, AppState>,
@@ -447,8 +451,41 @@ pub async fn restart_service(
         session.base_dir.clone()
     }; // 锁在这里就释放：restart 会结束/拉起进程，可能耗时数秒，不该让预览/重载干等。
 
+    if process::needs_elevation(target) {
+        return Ok(process::RestartOutcome {
+            degraded: false,
+            needs_elevation: true,
+        });
+    }
+
     let variant = process::detect().client_variant;
-    process::restart(target, &base_dir, variant.as_deref()).map_err(|e| e.to_string())
+    match process::restart(target, &base_dir, variant.as_deref()) {
+        Ok(outcome) => Ok(outcome),
+        Err(process::ProcError::AccessDenied(_)) => Ok(process::RestartOutcome {
+            degraded: false,
+            needs_elevation: true,
+        }),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// 提权重启：前端在收到 `needsElevation == true` 后，用户点「以管理员身份重启」时调用。
+///
+/// 安全边界与 [`restart_service`] 相同：`base_dir` 只从会话取，绝不接受前端传路径。
+/// 本函数自身不做任何结束/启动，只是以 `runas` 拉起同一个 exe 的助手模式，由助手在提权
+/// 上下文里完成「结束 + 拉起」。用户取消 UAC 时返回明确文案且磁盘/进程零改动。
+#[tauri::command]
+pub async fn restart_service_elevated(
+    state: State<'_, AppState>,
+    target: process::ServiceTarget,
+) -> Result<process::RestartOutcome, String> {
+    let base_dir = {
+        let guard = lock_session(state.inner())?;
+        let session = guard.as_ref().ok_or_else(|| NO_SESSION.to_string())?;
+        session.base_dir.clone()
+    }; // 同样先放锁：UAC 弹窗期间的等待不该占住会话，让预览/重载还能用。
+
+    elevate::spawn_elevated_helper(target, &base_dir)
 }
 
 /// 「关于」页打开项目主页用。

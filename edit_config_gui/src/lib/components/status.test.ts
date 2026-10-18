@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   pickPath: vi.fn(),
   runningProcesses: vi.fn(),
   restartService: vi.fn(),
+  restartServiceElevated: vi.fn(),
 }));
 
 vi.mock('../../bridge.ts', () => ({ bridge: mocks }));
@@ -31,6 +32,8 @@ function running(over: Record<string, unknown> = {}): void {
     client: false,
     clientVariant: null,
     isAdmin: false,
+    clientAdmin: false,
+    serverAdmin: false,
     ...over,
   });
 }
@@ -96,6 +99,112 @@ describe('StatusBar', () => {
     await fireEvent.click(screen.getByRole('button', { name: '确认重启' }));
 
     expect(await screen.findByText(/重启失败：进程已在运行/)).toBeTruthy();
+  });
+
+  it('客户端以管理员权限运行时圆点变紫色并换 aria-label', async () => {
+    running({ client: true, clientAdmin: true });
+    render(StatusBar);
+
+    const dot = await screen.findByLabelText('客户端以管理员权限运行');
+    expect(dot.classList.contains('admin')).toBe(true);
+    expect(screen.queryByLabelText('客户端运行中')).toBeNull();
+  });
+
+  it('普通权限的客户端圆点不带紫色 class', async () => {
+    running({ client: true, clientAdmin: false });
+    render(StatusBar);
+
+    const dot = await screen.findByLabelText('客户端运行中');
+    expect(dot.classList.contains('admin')).toBe(false);
+  });
+
+  it('服务端以管理员权限运行时圆点变紫色并换 aria-label', async () => {
+    running({ serverAdmin: true });
+    render(StatusBar);
+
+    const dot = await screen.findByLabelText('服务端以管理员权限运行');
+    expect(dot.classList.contains('admin')).toBe(true);
+    expect(screen.queryByLabelText('服务端运行中')).toBeNull();
+  });
+
+  it('普通权限的服务端圆点不带紫色 class', async () => {
+    running({ serverAdmin: false });
+    render(StatusBar);
+
+    const dot = await screen.findByLabelText('服务端运行中');
+    expect(dot.classList.contains('admin')).toBe(false);
+  });
+
+  it('客户端管理员且管理器未提权时，确认框先给出提权预提示', async () => {
+    running({ client: true, clientAdmin: true, isAdmin: false });
+    render(StatusBar);
+
+    await fireEvent.click(await screen.findByRole('button', { name: '重启客户端' }));
+
+    expect(screen.getByText('客户端以管理员权限运行，重启需要提权（会弹出 UAC 确认）')).toBeTruthy();
+  });
+
+  it('服务端管理员且管理器未提权时，确认框先给出提权预提示', async () => {
+    running({ serverAdmin: true, isAdmin: false });
+    render(StatusBar);
+
+    await fireEvent.click(await screen.findByRole('button', { name: '重启服务端' }));
+
+    expect(screen.getByText('服务端以管理员权限运行，重启需要提权（会弹出 UAC 确认）')).toBeTruthy();
+  });
+
+  it('服务端未提权而客户端提权时，服务端不显示提权提示、圆点也不带紫色', async () => {
+    running({ server: true, client: true, serverAdmin: false, clientAdmin: true, isAdmin: false });
+    render(StatusBar);
+
+    const serverDot = await screen.findByLabelText('服务端运行中');
+    expect(serverDot.classList.contains('admin')).toBe(false);
+    expect(await screen.findByLabelText('客户端以管理员权限运行')).toBeTruthy();
+
+    await fireEvent.click(screen.getByRole('button', { name: '重启服务端' }));
+
+    expect(screen.queryByText('服务端以管理员权限运行，重启需要提权（会弹出 UAC 确认）')).toBeNull();
+  });
+
+  it('needsElevation=true 时对话框不关闭，停在提权阶段且未调 restart_service_elevated', async () => {
+    running({ client: true, clientAdmin: true });
+    mocks.restartService.mockResolvedValue({ degraded: false, needsElevation: true });
+    render(StatusBar);
+
+    await fireEvent.click(await screen.findByRole('button', { name: '重启客户端' }));
+    await fireEvent.click(screen.getByRole('button', { name: '确认重启' }));
+
+    expect(await screen.findByRole('button', { name: '以管理员权限重启' })).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '确认重启' })).toBeNull();
+    expect(mocks.restartServiceElevated).not.toHaveBeenCalled();
+  });
+
+  it('提权阶段点「以管理员权限重启」才对 client 调 restart_service_elevated', async () => {
+    running({ client: true, clientAdmin: true });
+    mocks.restartService.mockResolvedValue({ degraded: false, needsElevation: true });
+    mocks.restartServiceElevated.mockResolvedValue({ degraded: false, needsElevation: false });
+    render(StatusBar);
+
+    await fireEvent.click(await screen.findByRole('button', { name: '重启客户端' }));
+    await fireEvent.click(screen.getByRole('button', { name: '确认重启' }));
+    await fireEvent.click(await screen.findByRole('button', { name: '以管理员权限重启' }));
+
+    expect(mocks.restartServiceElevated).toHaveBeenCalledWith('client');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('提权重启失败时显示重启失败文案', async () => {
+    running({ client: true, clientAdmin: true });
+    mocks.restartService.mockResolvedValue({ degraded: false, needsElevation: true });
+    mocks.restartServiceElevated.mockRejectedValue('用户拒绝了 UAC');
+    render(StatusBar);
+
+    await fireEvent.click(await screen.findByRole('button', { name: '重启客户端' }));
+    await fireEvent.click(screen.getByRole('button', { name: '确认重启' }));
+    await fireEvent.click(await screen.findByRole('button', { name: '以管理员权限重启' }));
+
+    expect(await screen.findByText(/重启失败：用户拒绝了 UAC/)).toBeTruthy();
   });
 });
 

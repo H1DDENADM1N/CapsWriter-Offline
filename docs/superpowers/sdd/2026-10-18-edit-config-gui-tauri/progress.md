@@ -145,3 +145,104 @@ windows-sys，不引新 crate），返回 `<= 32` 视为失败并把错误码回
 `white-space: nowrap` 让卡片的最小内容宽度等于整条 URL（`min-width: 0` 缺失时
 `text-overflow` 也没机会生效）。另外 `auto-fit` 的 `minmax` 从 240px 降到 220px，
 因为主区可用宽度只有 ~730px，3×240 + 2 个 gap = 736 差一点排不下。
+
+## 重启管理员客户端：乱码修复 + 金黄指示 + 提权助手（2026-10-19）
+
+> 后续变更（同日）：指示颜色由金黄改为**紫色**，提权检测扩展到**服务端**；见本文末「提权指示改为紫色 + 检测扩展到服务端」。本节记录的是当时的实现与证据。
+
+用户报：客户端以管理员权限运行时，非管理员的 `edit_config_gui` 点「重启客户端」得到
+`重启失败：结束进程失败：taskkill start_client_gui_admin.exe 失败（退出码 1）：…拒绝访问`，
+而且整串是乱码。三项改动（Rust 与前端并行实现；独立验证见
+`verification/2026-10-19-elevation-restart.md`）：
+
+1. **乱码根因与修法**：`taskkill` 的中文文案是 **cp936** 字节，旧代码
+   `String::from_utf8_lossy(stdout)+from_utf8_lossy(stderr)` 解出来全是替换字符。新增
+   `process::decode_console_output`：按 `GetACP()` 用 `MultiByteToWideChar`（先严格
+   `MB_ERR_INVALID_CHARS`、失败再放宽）→ `String::from_utf16`，都失败才回落
+   `from_utf8_lossy`。非零退出分类抽成纯函数 `classify_taskkill`：退出码 128 或
+   「没有找到/找不到/not found」→ `NotFound`（继续）、「拒绝访问 / access is denied」→
+   `ProcError::AccessDenied`、其余 → 可读的 `Kill`。`AccessDenied` 在命令层还会被映射成
+   `needsElevation=true`（预检为假但 kill 时才被拒的安全网）。
+2. **管理员客户端检测**：`process::process_is_elevated(pid)` =
+   `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` → `OpenProcessToken(TOKEN_QUERY)` →
+   `GetTokenInformation(TokenElevation)`，任何一步失败返回 `None`、绝不 panic（受保护进程
+   打不开是正常的）。`RunningInfo` 新增 `client_admin`；状态栏客户端圆点新增 `.dot.admin`
+   （金黄 `var(--ecg-warn, #b8860b)`，声明在 `.dot.on` 之后 → 同特异性覆盖绿），`aria-label`
+   三态（管理员/运行中/未运行）。所有 token 查询都失败时回退「检测到的变体是 admin 启动器」。
+   **实测证据**：本非管理员 Medium 会话能查询**同用户提权**进程（PowerToys.exe、
+   SystemInformer.exe、sing-box.exe 等实测 `TokenIsElevated=1`），只有 SYSTEM / 受保护进程
+   返回 `None`（`OpenProcess` 错误 5）——真实场景下金黄判定可靠，变体回退只是兜底。
+3. **重启前提权（两阶段确认 + 一次性助手）**：`process::needs_elevation(target)` 在任何 kill
+   **之前**预检，为真就直接返回 `needs_elevation=true`、**一个进程都不结束**（非管理员 kill
+   提权进程只会拿到「拒绝访问」，还会先把同组普通进程杀掉、留下半重启的坏状态）。前端
+   `doRestart` 收到 `needsElevation` 时不关对话框、切到提权阶段；点「以管理员权限重启」才调
+   `restart_service_elevated`，取消/失败走 `重启失败：${e}`。Rust 侧 `elevate.rs` 用同一个 exe
+   以 `runas` 拉起自己（`--elevated-restart=<server|client> --nonce=<hex>`、`SW_HIDE`、
+   `SEE_MASK_NOCLOSEPROCESS`），助手在 `main()` 最开头被 `run_if_requested()` 拦截（绝不进
+   Tauri、绝不显示窗口），按 `LaunchPolicy`（Server → `DowngradeWhenAdmin`、Client →
+   `InheritToken`）在提权上下文里结束并重新拉起，结果写
+   `%TEMP%\edit_config_gui_elevated_<nonce>.txt` 由父进程读回；UAC 取消（错误码 1223）→
+   「已取消管理员授权（UAC），未做任何改动」。nonce 只允许十六进制（校验不过的错误路径再过滤
+   成字母数字），`../` 之类的路径穿越拼不出来。
+
+### 测试与验证
+
+- `cargo test --release` → lib **109**（新增 `decode_console_output` 2 例、`classify_taskkill`
+  1 例、`process_is_elevated` 1 例、`client_admin` 三分支 2 例）+ `tests/coverage.rs` 2，全绿、
+  无 warning。
+- `pnpm test` → 10 files / **129** tests（`status.test.ts` 8 → 14）；`pnpm check` 0 error 0 warning。
+- 独立验证报告：8 条验收项 + 逐行核对 + 真实 release 产物探针；发现 F1（读结果失败路径漏
+  `CloseHandle`/漏删临时文件）与 F2（`WAIT_FAILED/WAIT_ABANDONED` 被并入超时文案），本轮已
+  用 `HelperGuard`（`Drop` 统一清理）与等待码 `match` 修掉。
+- **未做真实 UAC 端到端**（本会话非交互、非管理员）：同意/取消两条路径、以及换管理员账号
+  授权（over-the-shoulder，助手 `%TEMP%` 与父进程不同）需在交互提权会话手工验证，步骤见
+  验证报告第 5 节。
+
+### 本轮踩到的坑
+
+- windows-sys 0.59 里 `ShellExecuteExW` / `SHELLEXECUTEINFOW` 被
+  `#[cfg(feature = "Win32_System_Registry")]` 门控（结构体带 `hkeyClass` 字段），不加该 feature
+  编不过；`GetACP`/`MultiByteToWideChar` 需要 `Win32_Globalization`。
+- 任务书里给的 cp936「拒绝访问」字节 `E6 8B 92 E7 BB 9D E8 AE BF E9 97 AE` 其实是它的
+  **UTF-8** 编码；真 GBK 是 `BE DC BE F8 B7 C3 CE CA`（按 GBK 字节单测已核对）。
+- 本机 `taskkill` 输出是英文 ASCII（ACP 仍是 936），所以真正命中分类的是 `128 / not found`
+  与 `access is denied` 两个分支；中文分支只由单测覆盖。
+
+## 提权指示改为紫色 + 检测扩展到服务端（2026-10-19）
+
+用户后续要求：不要金黄，改为**紫色**；并且不只是客户端，**服务端**也要检测是否以管理员权限
+运行。两处改动（Rust 与前端并行，写入范围互不重叠；独立复核见验证报告第 8 节）：
+
+1. **服务端提权检测**：`process::scan()` 本来就在一遍扫描里记录了 `server_elevated`（任一命中
+   `SERVER_PROCS` 的进程 `TokenIsElevated=1`），但没往外暴露。`RunningInfo` 新增 `server_admin`
+   （`detect()` 填 `scan.server_elevated`），与 `needs_elevation(target)` 的 `Server` 分支
+   **同源同值**——前端渲染的紫色与后端「要不要走提权」来自同一个布尔，不会出现「显示紫色却直接
+   kill」或「绿色却弹 UAC」的错配。token 查询全失败时为 `false`：服务端没有 `admin 变体` 那样的
+   字面量线索，不猜（宁可尝试 kill 拿一个明确的拒绝访问）。
+2. **前端紫色指示**：新增设计令牌 `--ecg-elevated`（浅色 `#8e44ad`、深色 `#c084fc`），服务端与
+   客户端圆点都用 `class:admin={info?.server/client === true && info?.serverAdmin/clientAdmin === true}`
+   + `aria-label` 三态；`.dot.admin` 仍声明在 `.dot.on` 之后（同特异性、后声明覆盖绿色）。确认框
+   预提示泛化成按 target 取字段：`{targetLabel(target)}以管理员权限运行，重启需要提权（会弹出 UAC 确认）`。
+3. **语义边界**：提权助手对服务端用 `DowngradeWhenAdmin`（既有约定：服务端不该带着管理员权限跑，
+   否则客户端可能连不上），所以**提权重启后服务端会回到普通权限、指示由紫转绿**；客户端用
+   `InheritToken`，保持提权形态（仍紫色）。这不是 bug，是两条不同的启动策略。
+
+### 测试与验证（本轮）
+
+- `pnpm test` → 10 files / **133** tests（`status.test.ts` 14 → 18，新增 4 个服务端用例）；
+  `pnpm check` 0 error 0 warning。
+- `cargo test --release` → lib **109** + `tests/coverage.rs` 2，全绿、无 warning（本轮不加 Rust
+  用例，只在 `detect_does_not_panic` 里补了「未运行的服务端不可能被判定为提权」的不变量断言）。
+- 未验证：真实以管理员权限运行的服务端进程上的 `server_admin` 取值（本机没有提权服务端在跑）；
+  真实 UAC 端到端仍同上一节。
+
+### 产物级复核（Lead）
+
+源码冻结后 `pnpm build:dist`（vite 434ms + cargo release 40.95s，退出码 0）统一重建产物：仓库根
+`edit_config_gui.exe` 与 `src-tauri/target/release/edit_config_gui.exe` 均 10,470,400 B、07:29:04，
+SHA256 相同（`3612E853…`）。exe 字节扫描命中本次 vite 产出的哈希资源名 `index-CayQwl-Z.css` /
+`index-DEFXsB9n.js`（旧的金黄版哈希不同 → 证明内嵌的是紫色版前端），以及 Rust 侧串
+`serverAdmin`、`restart_service_elevated`。构建后 CSS 中 `.dot.on` 先于 `.dot.admin` 声明、取色
+`var(--ecg-elevated,#8e44ad)`。新 exe 冒烟：助手参数校验 `--elevated-restart=bogus --nonce=zz`
+→ 退出码 2 + 中文错误文件（已删、`%TEMP%` 无残留）；GUI 启动 5 秒存活、标题「配置编辑器」、
+关闭后无 `edit_config_gui`/WebView2 孤儿。详见验证报告 §9。
