@@ -3,7 +3,10 @@ name = "edit_config_gui"
 version = "0.1.0"
 description = "CapsWriter 配置编辑器"
 edition = "2021"
-rust-version = "1.77.2"
+# 1.95 是实测依赖的 MSRV 下限：sysinfo 0.39.6 要 1.95，tauri/tauri-build/
+# tauri-plugin-dialog 要 1.90、similar 要 1.85（三者均为 edition 2024）。
+# 写低了会在旧工具链上直接爆 edition2024 错误。
+rust-version = "1.95"
 
 [lib]
 name = "edit_config_gui_lib"

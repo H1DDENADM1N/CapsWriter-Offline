@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - 目标平台 **Windows 10+ x64**。所有 Windows API 调用通过 `windows-sys 0.59`，不得引入 `winapi` 或手写 `extern "system"`。
-- 工具链下限：`rustc >= 1.77.2`（本机实测 1.99.1，位于 `%USERPROFILE%\.cargo\bin`，PATH 里没有，需手动前置）、`node >= 20.19`（实测 24.21.0）、`pnpm >= 9`（实测 12.11.2）。
+- 工具链下限：`rustc >= 1.95`（本机实测 1.99.1，位于 `%USERPROFILE%\.cargo\bin`，PATH 里没有，需手动前置）、`node >= 20.19`（实测 24.21.0）、`pnpm >= 9`（实测 12.11.2）。
 - **不允许**向 `config.toml` 引入任何新键、删除任何键、重排键序或改写既有注释。基准：852 个 CRLF 行、306 行整行注释、162 个叶子键、无 BOM、文件末尾有 CRLF。
 - 运行 `toml_edit` 前**必须** `raw.replace("\r\n", "\n")`，输出后**必须** `.replace('\n', "\r\n")`。直接 parse CRLF 会产生混合换行（实测 852 CRLF → 199 CRLF + 653 裸 LF）。
 - 一对一替换动态表条目时必须**先搬运 decor**（`prefix`/`suffix`），否则行尾注释丢失。
@@ -245,9 +245,14 @@ edit_config_gui/
 ```ts
 import { defineConfig } from 'vitest/config';   // 不是 'vite'：否则 test 字段过不了类型检查
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { svelteTesting } from '@testing-library/svelte/vite';
 
 export default defineConfig({
-  plugins: [svelte()],
+  // svelteTesting() 只在 vitest 下生效，把 resolve.conditions 切到 browser。
+  // 不加会把 `svelte` 解析到 index-server.js，组件测试全部报
+  // `lifecycle_function_unavailable: mount(...) is not available on the server`。
+  // 它也带 autoCleanup，省掉每个测试文件手写 cleanup()。
+  plugins: [svelte(), svelteTesting()],
   clearScreen: false,
   server: { port: 1420, strictPort: true, watch: { ignored: ['**/src-tauri/**'] } },
   build: { target: 'chrome110', emptyOutDir: true, sourcemap: false },
@@ -281,7 +286,7 @@ name = "edit_config_gui"
 version = "0.1.0"
 description = "CapsWriter 配置编辑器"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.95"
 
 [lib]
 name = "edit_config_gui_lib"
@@ -3198,7 +3203,7 @@ git commit -F $env:TEMP\ecg-commit.txt
 - Create: `edit_config_gui/README.md`
 - Modify: `readme.md`（4 处）
 - Modify: `pyproject.toml`（删掉 `[dependency-groups] editconfiggui`）
-- Modify: `.gitignore`（加 `edit_config_gui/node_modules`、`edit_config_gui/dist`、`edit_config_gui/src-tauri/target`）
+- ~~Modify: `.gitignore`~~（已在 Task 1 落地：`edit_config_gui/node_modules`、`edit_config_gui/dist`、`edit_config_gui/src-tauri/target`、`edit_config_gui/src-tauri/gen` 共 4 行，本任务**不再重复添加**）
 - Modify: `dev/archive_list.txt`（若含旧路径则同步）
 
 **Interfaces:**
@@ -3267,7 +3272,7 @@ git rm edit_config_gui.py
 - `readme.md` L406 附近：**整行删除**「调试配置编辑器 GUI （edit_config_gui.py） 另需手动下载 siui 放在 .venv/Lib/site-packages」——新实现是单文件 exe，不再需要 Python 与 siui。
 - `readme.md` L442–446 的代码块 `uv run edit_config_gui.py` → 「双击 `edit_config_gui.exe`」+ 一行构建说明「源码构建见 `edit_config_gui/README.md`」。
 - `pyproject.toml`：**只删** `[dependency-groups]` 里的 `editconfiggui = [...]` 段（pyproject.toml:58-62，2 项有效内容 + 2 行 siui 注释）。**不要**动 `client` 组里的 `keyboard>=0.13.5`（pyproject.toml:41）—— 已实测它被 4 个客户端模块使用：`util/client/check_microphone_usage.py:6`、`util/client/pause_other_audio.py:4`、`util/client/shortcut_handler.py:8`、`util/client/type_result.py:5`。**也不要**动 `tomlkit>=0.15.1`（pyproject.toml:14）—— 它被 `util/config.py:7`、`util/client/hot_update.py:17`、`util/client/shortcut_handler.py:12`、`start_client_gui.py:50` 使用，只有 `util/edit_config_gui/write_toml.py:1` 那处会随旧包一起删除。
-- 新建 `edit_config_gui/README.md`：前置工具链（Rust ≥ 1.77.2 + MSVC Build Tools、Node ≥ 20.19、pnpm ≥ 9）、`pnpm install` / `pnpm dev` / `pnpm test` / `pnpm check` / `pnpm build:dist`、产物位置与复制步骤、常见错误（`icons/icon.ico not found`、`link.exe not found`、`cargo: command not found`、`WebView2 Runtime 缺失`）。
+- 新建 `edit_config_gui/README.md`：前置工具链（Rust ≥ 1.95 + MSVC Build Tools、Node ≥ 20.19、pnpm ≥ 9）、`pnpm install` / `pnpm dev` / `pnpm test` / `pnpm check` / `pnpm build:dist`、产物位置与复制步骤、常见错误（`icons/icon.ico not found`、`link.exe not found`、`cargo: command not found`、`WebView2 Runtime 缺失`）。
 
 
 - [ ] **Step 5: 跑最终验证**
