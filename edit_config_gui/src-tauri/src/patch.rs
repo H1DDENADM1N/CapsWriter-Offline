@@ -808,12 +808,48 @@ mod tests {
     fn diff_only_changed() {
         let raw = std::fs::read_to_string(REAL).unwrap();
         let mut doc = ConfigDoc::parse(&raw).unwrap();
+
+        // 三个补丁值必须与磁盘上的当前值不同，否则是空操作、diff 只剩 2 行。
+        // 不能把它们写死成某个值：`config.toml` 正是本编辑器每保存一次就改的文件，
+        // 用户把它改成 "Sensevoice" 之后，写死 "Sensevoice" 的补丁就变成了空操作
+        // （2026-10-19 实测踩到：93 passed / 1 failed，只有这个用例红）。
+        let current_f = doc
+            .get(&seg(&["client", "threshold"]))
+            .and_then(|i| i.as_float())
+            .expect("config.toml 必须有 client.threshold 浮点值");
+        let next_f = if (current_f - 0.7).abs() < f64::EPSILON {
+            0.9
+        } else {
+            0.7
+        };
+
+        let current_model = doc
+            .get(&seg(&["server", "model"]))
+            .and_then(|i| i.as_str())
+            .expect("config.toml 必须有 server.model")
+            .to_string();
+        let next_model = if current_model == "Sensevoice" {
+            "FunASR"
+        } else {
+            "Sensevoice"
+        };
+
+        let current_log = doc
+            .get(&seg(&["debug", "logger_level"]))
+            .and_then(|i| i.as_str())
+            .expect("config.toml 必须有 debug.logger_level")
+            .to_string();
+        let next_log = if current_log == "INFO" { "DEBUG" } else { "INFO" };
+
         apply(
             &mut doc,
             &[
-                patch(&["client", "threshold"], PatchValue::Float(0.7)),
-                patch(&["server", "model"], PatchValue::Str("Sensevoice".into())),
-                patch(&["debug", "logger_level"], PatchValue::Str("INFO".into())),
+                patch(&["client", "threshold"], PatchValue::Float(next_f)),
+                patch(&["server", "model"], PatchValue::Str(next_model.to_string())),
+                patch(
+                    &["debug", "logger_level"],
+                    PatchValue::Str(next_log.to_string()),
+                ),
             ],
         )
         .unwrap();
