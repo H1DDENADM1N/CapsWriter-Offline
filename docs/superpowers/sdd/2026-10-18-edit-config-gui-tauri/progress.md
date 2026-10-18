@@ -114,3 +114,34 @@
   `ReadonlyWidget` 的「跳转到「X」」语义重复。来源说明与跳转统一由 `ReadonlyWidget` 负责。
 - **枚举框键盘改值不立即置脏**：Chromium 对闭合的 `<select>` 要等提交或失焦才派发
   `change`，用户在那之前看不到任何反馈。`EnumWidget` 同时挂 `oninput` 与 `onchange`。
+
+## 验收后的界面调整（提交 72f0fbd）
+
+用户在真机验收后提了五条，均已完成：
+
+1. **主内容自动拉伸**：`PageView.svelte` 去掉 `max-width: 820px`，改 `width: 100%`。
+   原宽度让模型路径这类 80+ 字符的值读不全，右侧还空一大片。
+2. **侧边栏可折叠**：新增 `src/lib/stores/ui.svelte.ts`（折叠状态存 localStorage，
+   键 `ecg.sidebar.collapsed`）。折叠后 56px 图标列、`.title` 隐藏、徽标缩成右上角
+   小圆点，`aria-label` / `title` 保留完整页面名。
+3. **右上角全局搜索按钮**：新增 `TopBar.svelte`，折叠按钮 + 页面标题 + 搜索按钮
+   （带 `Ctrl K` 提示），点按即 `paletteStore.show()`。
+4. **关于页**：新增 `src/lib/components/pages/AboutPage.svelte` —— 简介、四项能力、
+   三个 GitHub 链接（项目主页 / 提交问题 / 下载发布版）、当前配置文件路径与生效
+   方式、快捷键表。链接走新增的 Rust 命令 `open_url`。
+5. **「关于」置底**：`Sidebar.svelte` 拆成 `.list`（12 个配置页）+ `.foot`（关于，
+   上方一条分隔线）。
+
+### 新增的安全边界
+
+`commands.rs::open_url` 只放行 `https://`（`check_url`）：该命令把字符串交给系统
+协议处理器，`file://` 能打开本地文件、`ms-settings:` 之类自定义协议能拉起别的
+程序，而它的入参最终来自渲染进程。`shell_open` 用 `ShellExecuteW`（项目已依赖
+windows-sys，不引新 crate），返回 `<= 32` 视为失败并把错误码回传。
+
+### 本轮踩到的坑
+
+`AboutPage` 的链接卡片一开始只排得下两列、第三张掉到第二行：`.link-url` 的
+`white-space: nowrap` 让卡片的最小内容宽度等于整条 URL（`min-width: 0` 缺失时
+`text-overflow` 也没机会生效）。另外 `auto-fit` 的 `minmax` 从 240px 降到 220px，
+因为主区可用宽度只有 ~730px，3×240 + 2 个 gap = 736 差一点排不下。
