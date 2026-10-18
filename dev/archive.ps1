@@ -183,3 +183,38 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "压缩完成: $ArchiveName"
+
+# 8. 计算 SHA-256 校验值：打印成可直接粘贴到发布说明的格式，并复制到剪贴板
+#    格式:
+#      **程序** <压缩文件名>
+#      > #️⃣ SHA-256 `<SHA-256值>`
+#    7z 生成的是工作目录下的相对路径，这里统一解析成绝对路径再取文件名
+#    -ArchiveName 不带扩展名时 7z 会自动补 .7z，所以先按原名找，再按 <名>.7z 找一次
+$archivePath = $ArchiveName
+foreach ($candidate in @($ArchiveName, "$ArchiveName.7z")) {
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        $archivePath = (Resolve-Path -LiteralPath $candidate).Path
+        break
+    }
+}
+
+if (Test-Path -LiteralPath $archivePath -PathType Leaf) {
+    $archiveFile = Split-Path -Leaf $archivePath
+    # Get-FileHash 输出本来就是大写十六进制，ToUpperInvariant 只是把格式钉死
+    $sha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToUpperInvariant()
+
+    $shaBlock = "**程序** {0}`n> #️⃣ SHA-256 ``{1}``" -f $archiveFile, $sha256
+
+    Write-Host ""
+    Write-Host $shaBlock
+
+    # 剪贴板不可用时（例如无交互会话）只告警，不影响打包结果
+    try {
+        Set-Clipboard -Value $shaBlock
+        Write-Host "SHA-256 已复制到剪贴板。"
+    } catch {
+        Write-Warning "复制 SHA-256 到剪贴板失败: $($_.Exception.Message)"
+    }
+} else {
+    Write-Warning "压缩包不存在，跳过 SHA-256 计算: $ArchiveName"
+}
