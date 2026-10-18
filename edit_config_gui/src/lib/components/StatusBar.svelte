@@ -150,8 +150,8 @@
     margin-left: 10px;
     padding: 1px 6px;
     border-radius: 4px;
-    background: #fff3cd;
-    color: #7a5a00;
+    background: var(--ecg-tag-bg, #fff3cd);
+    color: var(--ecg-tag-fg, #7a5a00);
   }
 
   .spacer {

@@ -23,6 +23,22 @@
   --ecg-warn: #b8860b;
   --ecg-danger: #c0392b;
 
+  /*
+   * 控件与只读区必须比页面底色高一档：同色时输入框只剩一根边框，深色下尤其看不出
+   * 哪里能输入。这两组值在深色里单独调过，不能共用浅色值。
+   */
+  --ecg-input-bg: #ffffff;
+  --ecg-readonly-bg: #f4f5f7;
+  --ecg-muted-strong: #4b5563;
+
+  /* 警告块与状态标记 */
+  --ecg-warn-bg: #fff8e6;
+  --ecg-warn-fg: #8a6100;
+  --ecg-tag-bg: #fff3cd;
+  --ecg-tag-fg: #7a5a00;
+
+  --ecg-mono: Consolas, 'Cascadia Mono', 'Courier New', monospace;
+
   /* diff 行底色：用独立令牌而不是在组件里 color-mix，深色下才调得动 */
   --ecg-add-bg: rgb(47 158 68 / 12%);
   --ecg-del-bg: rgb(192 57 43 / 10%);
@@ -46,6 +62,15 @@
     --ecg-ok: #57c277;
     --ecg-warn: #e0b34a;
     --ecg-danger: #e0736a;
+
+    --ecg-input-bg: #1f232a;
+    --ecg-readonly-bg: #1a1d23;
+    --ecg-muted-strong: #c3c9d4;
+
+    --ecg-warn-bg: #332a10;
+    --ecg-warn-fg: #e8c878;
+    --ecg-tag-bg: #3a2f10;
+    --ecg-tag-fg: #e8c878;
 
     --ecg-add-bg: rgb(87 194 119 / 16%);
     --ecg-del-bg: rgb(224 115 106 / 16%);

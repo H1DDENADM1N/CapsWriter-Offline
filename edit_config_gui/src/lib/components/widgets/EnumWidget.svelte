@@ -11,6 +11,12 @@
   // 磁盘上的值不在候选里时照样要能显示出来，否则下拉框会静默显示成第一项，
   // 用户以为配置变了，实际上没变
   const hasCurrent = $derived(options.some((o) => o.value === text));
+
+  /*
+   * 只挂 onchange 不够：键盘上下键改选中项时，Chromium 要等到失焦才派发 change，
+   * 用户会在一段时间里既看不到「已修改」标记、也看不到底部保存条，以为没生效。
+   * input 事件是立即派发的，两个都挂上；同一个值重复上报在 store 里是幂等的。
+   */
 </script>
 
 <select
@@ -18,6 +24,7 @@
   aria-label={field.title}
   aria-invalid={error ? 'true' : undefined}
   value={text}
+  oninput={(e) => onChange(e.currentTarget.value)}
   onchange={(e) => onChange(e.currentTarget.value)}
 >
   {#if !hasCurrent && text !== ''}

@@ -83,3 +83,34 @@
 - 拼音表是构建期产物（`scripts/gen-pinyin-map.mjs` → `src/lib/pinyin-map.json`，827 字）；
   新增字段必须重跑，`pinyin_map_covers_all_titles` 会拦。
 - 首字母搜索允许「包含」而不只是前缀（中文标题多为长定语，用户常敲后半截如 `dk`）。
+## Task 22 端到端验收（真机实测）
+
+在仓库根直接跑 `edit_config_gui.exe`（10,334,720 字节）逐项验收，以下均为实测通过：
+
+1. 启动即定位到仓库根的 `config.toml`，13 页导航齐全；深色主题下正文与输入框对比度足够。
+2. `Ctrl+K` 命令面板：输入「日志」命中 2 条（`funasr_args.verbose`、`debug.logger_level`），
+   ↑↓ + Enter 直接切到「调试」页。
+3. 改值后字段旁出现「已修改」、左侧对应页出现计数徽标、底部出现「1 项未保存」+
+   「全部还原」/「保存…」。
+4. `Ctrl+S` 弹出的确认框渲染 unified diff：`+++`/`---` 与 `@@` 不着色，`-`/`+` 分别红/绿，
+   **行尾 `# 调试日志级别` 在原值行与新值行两侧都保留**。
+5. 写入后回读校验通过并报出备份路径；磁盘实测 `git diff` 仅 1 行、852 行全 CRLF、
+   306 行注释不变、无 BOM、`.bak` 里是旧内容。
+6. 外部改盘（`git checkout -- config.toml`）后再保存 → 命中指纹冲突，弹「配置文件已被
+   外部修改」；点「重新加载」丢弃改动并从盘上重读（值回到 DEBUG、徽标清空）。
+7. 「全部还原」把脏值恢复成打开时的基线。
+
+未能自动化的一项：状态栏的「重启服务端 / 重启客户端」按钮只在对应进程运行时才出现，
+本次没有启动真实服务，故该路径仅由 `status.test.ts` 的 8 例覆盖（含确认弹窗与降权提示），
+**未做真机重启**。
+
+### 验收中修掉的三个问题
+
+- **设计变量缺失**：控件里用了 `var(--ecg-input-bg, #fff)` 等 4 个 `app.css` 从未定义的
+  变量，深色下退化成白底 + 浅灰字，输入内容几乎看不见。补齐 `--ecg-input-bg`、
+  `--ecg-readonly-bg`、`--ecg-muted-strong`、`--ecg-mono`、`--ecg-warn-*`、`--ecg-tag-*`
+  两套主题值，并把 DiffDialog / StatusBar 里硬编码的警告色与标签色改成走变量。
+- **只读派生键出现两个跳转按钮**：`Field.svelte` 的「来源：… + 跳转到来源」与
+  `ReadonlyWidget` 的「跳转到「X」」语义重复。来源说明与跳转统一由 `ReadonlyWidget` 负责。
+- **枚举框键盘改值不立即置脏**：Chromium 对闭合的 `<select>` 要等提交或失焦才派发
+  `change`，用户在那之前看不到任何反馈。`EnumWidget` 同时挂 `oninput` 与 `onchange`。

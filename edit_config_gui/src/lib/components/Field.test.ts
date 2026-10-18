@@ -111,7 +111,7 @@ describe('Field 状态显示', () => {
 });
 
 describe('Field 只读派生', () => {
-  it('显示来源面包屑，「跳转到来源」切页并高亮', async () => {
+  it('只读派生字段给出真实生效值与唯一一个跳转按钮', async () => {
     configStore.applyDoc({
       path: 'C:\\x\\config.toml',
       fingerprint: { mtimeMs: 1, size: 0, sha256: '' },
@@ -136,10 +136,10 @@ describe('Field 只读派生', () => {
 
     const { getByText, container } = render(Field, { field });
 
-    expect(container.textContent).toContain('来源：');
+    expect(container.textContent).toContain('此项由');
     expect(container.textContent).toContain('模型路径');
 
-    await fireEvent.click(getByText('跳转到来源'));
+    await fireEvent.click(getByText(/跳转到「/));
 
     expect(navStore.current()).toBe('modelPaths');
     expect(navStore.highlight()).toBe(fieldId(['model_paths', 'funasr_llm_path']));

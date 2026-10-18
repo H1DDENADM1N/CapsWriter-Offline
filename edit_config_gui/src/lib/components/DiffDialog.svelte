@@ -235,8 +235,8 @@
   .warn {
     padding: 8px 10px;
     border-radius: 6px;
-    background: #fff8e6;
-    color: #8a6100;
+    background: var(--ecg-warn-bg, #fff8e6);
+    color: var(--ecg-warn-fg, #8a6100);
     font-size: 12px;
   }
 
