@@ -5,7 +5,7 @@
 # <img src="./assets/readme/windows-logo.png" width="25" height="25"> <span style="color: #4ABAFF;">[Windows](https://www.microsoft.com/zh-cn/windows)</span> 端离线语音输入简/繁体、中译英、字幕转录；在线多译多、云剪贴板等等
 
 > [!IMPORTANT]
-> 图形化配置界面 `edit_config_gui.exe`，可方便修改大部分配置，更多自定义配置仍需手动修改 `config.toml` 文件
+> 图形化配置界面 `edit_config_gui.exe`，覆盖 `config.toml` 的全部配置项（含提示词、API Key、ADB 控制、快捷键），写入前预览 diff 并自动备份
 
 ## 😎 十二个功能
 
@@ -187,7 +187,7 @@
 
 ## 通过 常用播放器内设置的 播放/暂停快捷键 控制 录音时暂停音频播放
 >
-> QQ音乐、网易云音乐、PotPlayer、foobar2000 可通过 edit_config_gui.exe 配置 用于 播放/暂停 的快捷键
+> QQ音乐、网易云音乐、PotPlayer、foobar2000 可通过 edit_config_gui.exe 配置 用于 播放/暂停 的快捷键；留空表示不暂停
 >
 > 如果还有其他特殊应用 请配置 config.toml [client.additional_special_apps]
 >
@@ -403,8 +403,6 @@ cd CapsWriter-Offline
 uv sync --all-groups
 ```
 
-调试配置编辑器 GUI （edit_config_gui.py） 另需手动下载 `siui` （ [PySide6-SiliconUI](https://github.com/H1DDENADM1N/PySide6-SiliconUI) ）放在 `.venv/Lib/site-packages`
-
 #### 2.2 下载模型
 
 详见 [models/模型下载方式.txt](models/模型下载方式.txt) 或 [模型下载链接](#model-download)
@@ -441,9 +439,9 @@ uv run start_client_gui.py
 
 启动配置编辑器GUI
 
-```powershell
-uv run edit_config_gui.py
-```
+双击仓库根目录下的 `edit_config_gui.exe` 即可（单文件，不需要 Python 环境）。
+
+从源码构建见 [`edit_config_gui/README.md`](edit_config_gui/README.md)。
 
 ### 4. 检测和升级依赖包
 
@@ -1451,12 +1449,6 @@ uv pip install --index-url https://mirrors.aliyun.com/pypi/simple/ --target .\si
 ```
 
 复制 `.\site-packages\pywin32_system32\` 中的 `*.dll` 到 `.\runtime\`
-
-# siui
-
-## [PySide6-SiliconUI](https://github.com/H1DDENADM1N/PySide6-SiliconUI)
-
-## [PyQt-SiliconUI](https://github.com/ChinaIceF/PyQt-SiliconUI)
 
 # FFmpeg & FFplay
 

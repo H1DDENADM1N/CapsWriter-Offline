@@ -10,7 +10,6 @@ core_client.py
 core_server.py
 deeplx_windows_amd64.exe
 edit_config_gui.exe
-edit_config_gui.py
 ffmpeg.exe
 ffplay.exe
 hint_while_recording.ahk

@@ -55,11 +55,6 @@ client = [
     "websockets>=17.2",
     "zai-sdk>=0.2.3",
 ]
-editconfiggui = [
-    "keyboard>=0.13.5",
-    # siui  PySide6-SiliconUI  https://github.com/H1DDENADM1N/PySide6-SiliconUI
-    # Note: siui is not available on PyPI, need to download and copy to .venv/Lib/site-packages and ./site-packages manually
-]
 
 [[tool.uv.index]]
 url = "https://mirrors.aliyun.com/pypi/simple/"
