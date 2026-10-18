@@ -2,6 +2,7 @@
 //! 写成私有会报 `error[E0603]: module is private`，且顺带多出几百条 dead_code 警告。
 pub mod config_doc;
 pub mod hotkey;
+pub mod model_paths_resolve;
 pub mod patch;
 pub mod validate;
 
