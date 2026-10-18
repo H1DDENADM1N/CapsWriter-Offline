@@ -3,6 +3,7 @@
 pub mod config_doc;
 pub mod hotkey;
 pub mod patch;
+pub mod validate;
 
 #[cfg(test)]
 pub mod testutil;
