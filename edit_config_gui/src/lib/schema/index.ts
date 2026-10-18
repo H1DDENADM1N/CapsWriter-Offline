@@ -77,7 +77,9 @@ export function pageOfSegments(segments: string[]): PageMeta | undefined {
     p.sections.some((s) =>
       s.fields.some(
         (f) =>
-          f.segments.length === segments.length &&
+          // 前缀匹配而非等长：动态表的行是 4 段（`…additional_special_apps.vlc.exe`），
+          // 而表本身只登记了 2 段；等长比较会让「跳到某个进程名」找不到页。
+          f.segments.length <= segments.length &&
           f.segments.every((x, i) => x === segments[i]),
       ),
     ),

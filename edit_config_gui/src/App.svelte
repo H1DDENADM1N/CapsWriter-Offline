@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
+  import CommandPalette from './lib/components/CommandPalette.svelte';
   import PageView from './lib/components/pages/PageView.svelte';
   import Sidebar from './lib/components/Sidebar.svelte';
   import { configStore } from './lib/stores/config.svelte.ts';
@@ -34,6 +35,8 @@
     {/if}
   </main>
 </div>
+
+<CommandPalette />
 
 <style>
   :global(html, body) {
