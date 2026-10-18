@@ -5,6 +5,7 @@ pub mod file_io;
 pub mod hotkey;
 pub mod model_paths_resolve;
 pub mod patch;
+pub mod process;
 pub mod validate;
 
 #[cfg(test)]
