@@ -73,3 +73,13 @@
 
 - `file_io::atomic_write` 里的 `sync_all()`：只在断电/掉盘语义上有区别，单进程
   测试无法证伪。去掉后全套测试仍绿，故保留该行并在此登记。
+
+## 前端实现的补充约束（Task 14–17 期间确立）
+
+- 组件值不能用 `$derived` 存再 `<Widget />`：Svelte 5 不会把它当组件渲染，控件容器会
+  空白。用 `{@const Widget = widgetFor(field.widget)}`。
+- store 是模块级 `$state`：测试里改完必须 `await tick()`（从 `svelte` 导入）再看 DOM。
+- `pageOfSegments()` 是**前缀**匹配：动态表的行是 4 段，表本身只登记 2 段。
+- 拼音表是构建期产物（`scripts/gen-pinyin-map.mjs` → `src/lib/pinyin-map.json`，827 字）；
+  新增字段必须重跑，`pinyin_map_covers_all_titles` 会拦。
+- 首字母搜索允许「包含」而不只是前缀（中文标题多为长定语，用户常敲后半截如 `dk`）。
