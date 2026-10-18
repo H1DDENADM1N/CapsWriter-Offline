@@ -1,5 +1,6 @@
 import type { FieldMeta, PageMeta } from './types';
 import { serverPages } from './server';
+import { clientPage } from './client';
 
 export * from './types';
 
@@ -7,7 +8,7 @@ export * from './types';
  * 13 页的权威顺序。`navStore.focus()` 反查页 id、侧边栏顺序、
  * `PageView` 对 `about` 页的特判都以这里为准（见计划里「页 id 与标题的权威表」）。
  */
-export const pages: PageMeta[] = [...serverPages];
+export const pages: PageMeta[] = [serverPages[0], clientPage, serverPages[1]];
 
 /**
  * 字段的唯一键：segments 用 U+0000 连接。
