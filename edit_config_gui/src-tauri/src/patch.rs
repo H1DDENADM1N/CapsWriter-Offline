@@ -584,6 +584,52 @@ mod tests {
     }
 
     #[test]
+    /// 补强：`set_scalar_value` 搬 decor 时 prefix 也必须搬。
+    /// 真实 config.toml 的 161 个值全是 prefix " "，恰好等于 toml_edit 的默认值，
+    /// 所以拿真实文件测不出 prefix 丢失 —— 必须用一个 `=` 后带多个空格的自造片段。
+    fn scalar_prefix_spacing_preserved() {
+        let text = "x =   \"keep me aligned\"\n";
+        let mut doc = crate::config_doc::ConfigDoc::parse(text).unwrap();
+        apply(
+            &mut doc,
+            &[patch(&["x"], PatchValue::Str("new".into()))],
+        )
+        .unwrap();
+        assert_eq!(
+            doc.to_toml_string().replace("\r\n", "\n"),
+            "x =   \"new\"\n",
+            "`=` 后的多个空格是旧值 decor 的 prefix，改写时必须原样搬运"
+        );
+    }
+
+    /// 数组元素之间、内联表成员之间的分隔空格同样不能被压平。
+    fn composite_spacing_preserved() {
+        let (mut doc, _) = load_real();
+        apply(
+            &mut doc,
+            &[
+                patch(
+                    &["client", "enter_apps"],
+                    PatchValue::PairArray(vec![("happ.exe".into(), 0.5)]),
+                ),
+                patch(
+                    &["client", "additional_special_apps", "vlc.exe", "hotkey"],
+                    PatchValue::Str("ctrl + alt + f10".into()),
+                ),
+            ],
+        )
+        .unwrap();
+        let out = doc.to_toml_string();
+        let lines: Vec<&str> = out.lines().collect();
+        assert!(
+            lines.contains(&"enter_apps = [[\"happ.exe\", 0.5]]"),
+            "数组元素之间的分隔空格必须保留"
+        );
+        assert!(
+            lines.contains(&"\"vlc.exe\" = { hotkey = \"ctrl + alt + f10\", name = \"VLC Media Player\" }"),
+            "内联表成员改写后空格排版必须不变"
+        );
+    }
     fn scalar_trailing_comment_preserved() {
         // 补强：brief 的 16 个测试里没有任何一条能失败地守护「标量值自身的行尾注释」。
         // config.toml 里只有 logger_level（L3）这一个普通标量带行尾注释，
