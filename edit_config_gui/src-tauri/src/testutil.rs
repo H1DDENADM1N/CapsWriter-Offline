@@ -53,7 +53,42 @@ pub fn seed(dir: &std::path::Path) -> std::path::PathBuf {
     p
 }
 
-// 说明（与 brief 的差异）：brief Step 0 里还列了 `patch()` 与
-// `single_line_probe_patches()` 两个构造器，它们直接引用 `crate::patch::PatchValue` /
-// `crate::patch::Patch`，而 `src/patch.rs` 由 Task 3 建立。Task 2 阶段编译不过，
-// 因此这两个函数留给 Task 3 在新增 `patch.rs` 时一并加入本文件（内容照 brief 原文）。
+/// 构造一个补丁（Task 3 加入：引用 `crate::patch`，Task 2 阶段编译不过）
+pub fn patch(parts: &[&str], v: crate::patch::PatchValue) -> crate::patch::Patch {
+    crate::patch::Patch {
+        segments: seg(parts),
+        value: v,
+    }
+}
+
+/// 单行标量键的探针补丁集合：149 = 162 叶子 − 8 个多行 prompt 正文 − 3 个数组 − 2 条内联表条目
+pub fn single_line_probe_patches(doc: &crate::config_doc::ConfigDoc) -> Vec<crate::patch::Patch> {
+    use crate::config_doc::TomlType::*;
+    use crate::patch::PatchValue as P;
+    let mut out = Vec::new();
+    for f in doc.leaf_fields() {
+        let in_prompt_style =
+            f.segments.len() == 3 && f.segments[0] == "client" && f.segments[1] == "prompt_style";
+        if in_prompt_style && !f.segments[2].ends_with("_shortcut") {
+            continue;
+        }
+        if f.segments.len() >= 3
+            && f.segments[0] == "client"
+            && f.segments[1] == "additional_special_apps"
+        {
+            continue;
+        }
+        let v = match (f.toml_type, &f.value) {
+            (String, serde_json::Value::String(s)) => P::Str(format!("{s}_probe")),
+            (Integer, serde_json::Value::Number(n)) => P::Int(n.as_i64().unwrap() + 1),
+            (Float, serde_json::Value::Number(n)) => P::Float(n.as_f64().unwrap() + 0.01),
+            (Boolean, serde_json::Value::Bool(b)) => P::Bool(!b),
+            _ => continue,
+        };
+        out.push(crate::patch::Patch {
+            segments: f.segments,
+            value: v,
+        });
+    }
+    out
+}
