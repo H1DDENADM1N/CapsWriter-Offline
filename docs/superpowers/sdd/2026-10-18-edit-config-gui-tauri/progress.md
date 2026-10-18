@@ -22,9 +22,10 @@
 | 10 | 前端 schema 基础（类型/schema/debug+server） | 完成 | `4302da2` |
 | 11 | 前端 schema —— client 主表 72 键 | 完成 | `1b2b32b` |
 | 12 | 前端 schema 完成 —— 其余 8 页 + 覆盖闭环 | 完成 | `d8529a0` |
-| 9 | commands（7 个 IPC 命令与状态装配） | 待办 | — |
-| 13 | bridge 与配置状态层 | 待办 | — |
-| 14 | 控件库（13 个 widget） | 待办 | — |
+| 9 | commands（7 个 IPC 命令与状态装配） | 完成 | `bb71207` |
+| 9b | 指纹结构补 camelCase（保存链路阻断缺陷） | 完成 | `5da8acd` |
+| 13 | bridge 与配置状态层 | 完成 | `6be48ea` |
+| 14 | 控件库（13 个 widget） | 完成 | `a0a7ddd` |
 | 15 | Field 与 Section 渲染层 | 待办 | — |
 | 16 | 侧边导航、页面容器与 App 装配 | 待办 | — |
 | 17 | 搜索与命令面板 | 待办 | — |
@@ -48,6 +49,25 @@
 - **动态表 `client.additional_special_apps` 必须逐项 insert/remove**，不能整表
   重建（会丢行尾注释）；进程名大小写敏感、不可归一化。
 - 单行键禁用换行；只有 8 个提示词正文（`longText`）允许换行。
+
+## 与计划的偏差（均为实现必需，已落地）
+
+- `stores/config.ts` → `stores/config.svelte.ts`（同理 `nav`、`toast`）：runes 只在
+  `.svelte.ts` 里被编译器处理，放 `.ts` 里 `$state` 会原样进产物、组件拿不到响应式。
+- 控件额外拆出 `widgets/props.ts` 统一 `WidgetProps`，避免 13 份重复的 props 声明。
+- `EnumWidget` 的 `options` 只接受 `{value,label}[]`（`types.ts` 就是这么定义的），
+  不再兼容裸字符串；日志级别等 label≠value 的场景本来就需要对象。
+
+## 踩过的坑（写代码前先看一眼）
+
+- `.svelte.ts` 里读 `$state` 变量会被编译器改写成 `$.get(doc)`。若写成
+  `doc()` 去调自己的访问器，就变成 `$.get(doc)()`，运行时报
+  `get(...) is not a function`，且栈指向调用处而非定义处。模块内部一律直接读变量。
+- 6 个控件的初值在 `$state(...)` 里直接读了 `value`，触发
+  `state_referenced_locally` 警告；改成从闭包取初值。
+- 测试里 `getByRole('spinbutton')` 要求 `input[type=number]`；`IntWidget` 的
+  `onchange` 必须读 `el.value` 而不是本地 state，否则 `fireEvent.change` 只改 DOM
+  不触发 `input`，夹取拿到的还是旧值。
 
 ## 已知不可测点
 
