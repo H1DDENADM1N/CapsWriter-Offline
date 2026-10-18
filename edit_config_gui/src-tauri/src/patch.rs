@@ -603,6 +603,7 @@ mod tests {
     }
 
     /// 数组元素之间、内联表成员之间的分隔空格同样不能被压平。
+    #[test]
     fn composite_spacing_preserved() {
         let (mut doc, _) = load_real();
         apply(
@@ -625,11 +626,24 @@ mod tests {
             lines.contains(&"enter_apps = [[\"happ.exe\", 0.5]]"),
             "数组元素之间的分隔空格必须保留"
         );
+        // 行尾注释挂在整行的 suffix 上，所以按 starts_with 比对排版部分
+        let vlc_line = lines
+            .iter()
+            .find(|l| l.contains("vlc.exe"))
+            .expect("vlc.exe 行必须存在");
         assert!(
-            lines.contains(&"\"vlc.exe\" = { hotkey = \"ctrl + alt + f10\", name = \"VLC Media Player\" }"),
-            "内联表成员改写后空格排版必须不变"
+            vlc_line.starts_with(
+                "\"vlc.exe\" = { hotkey = \"ctrl + alt + f10\", name = \"VLC Media Player\" }"
+            ),
+            "内联表成员改写后空格排版必须不变, 实际: {vlc_line:?}"
+        );
+        assert!(
+            vlc_line.contains("# VLC 设置全局快捷键后需要重启 VLC 才能生效"),
+            "整行的行尾注释必须保留, 实际: {vlc_line:?}"
         );
     }
+
+    #[test]
     fn scalar_trailing_comment_preserved() {
         // 补强：brief 的 16 个测试里没有任何一条能失败地守护「标量值自身的行尾注释」。
         // config.toml 里只有 logger_level（L3）这一个普通标量带行尾注释，

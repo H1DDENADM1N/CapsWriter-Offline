@@ -61,7 +61,7 @@ impl From<std::io::Error> for IoError {
     }
 }
 
-/// 测试注入：让下一次 `atomic_write` 的回读阶段强制失败，用于验证回滚链。
+// 测试注入：让下一次 `atomic_write` 的回读阶段强制失败，用于验证回滚链。
 // 必须是 thread-local：cargo test 默认并行跑，用全局 AtomicBool 会让
 // `readback_failure_rolls_back` 的注入泄漏到同一进程里其它测试的 atomic_write 上。
 #[cfg(test)]
