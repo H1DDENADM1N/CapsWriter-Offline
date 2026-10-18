@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowJs": true,
-    "types": ["vite/client"]
+    "allowImportingTsExtensions": true,
+    "types": ["vite/client", "node"]
   },
   "include": ["src/**/*.ts", "src/**/*.svelte"]
 }

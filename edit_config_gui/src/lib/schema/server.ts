@@ -1,4 +1,4 @@
-import type { FieldMeta, PageMeta } from './types';
+import type { FieldMeta, PageMeta } from './types.ts';
 
 const serverFields: FieldMeta[] = [
   {
