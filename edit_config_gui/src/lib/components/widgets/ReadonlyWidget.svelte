@@ -65,7 +65,9 @@
     color: var(--ecg-muted-strong, #555);
     font-family: var(--ecg-mono, ui-monospace, Consolas, monospace);
     font-size: 12px;
+    width: 100%;
     max-width: 100%;
+    box-sizing: border-box;
     overflow-wrap: anywhere;
   }
 

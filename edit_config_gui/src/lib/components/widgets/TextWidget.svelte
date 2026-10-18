@@ -10,6 +10,7 @@
   class="w-text"
   type="text"
   aria-label={field.title}
+  title={value == null ? '' : String(value)}
   aria-invalid={error ? 'true' : undefined}
   value={text}
   oninput={(e) => onChange(e.currentTarget.value)}

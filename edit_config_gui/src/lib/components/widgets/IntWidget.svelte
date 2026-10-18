@@ -63,7 +63,8 @@
 
 <style>
   .w-mono {
-    width: 9em;
+    width: 100%;
+    box-sizing: border-box;
     padding: 6px 8px;
     border: 1px solid var(--ecg-border, #c8ccd4);
     border-radius: 6px;

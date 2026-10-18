@@ -35,6 +35,7 @@
     <input
       type="text"
       aria-label={field.title}
+      title={text}
       aria-invalid={error ? 'true' : undefined}
       value={text}
       spellcheck="false"

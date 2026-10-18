@@ -120,7 +120,9 @@
   }
 
   .w-hotkey input {
-    width: 18em;
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
     padding: 6px 8px;
     border: 1px solid var(--ecg-border, #c8ccd4);
     border-radius: 6px;

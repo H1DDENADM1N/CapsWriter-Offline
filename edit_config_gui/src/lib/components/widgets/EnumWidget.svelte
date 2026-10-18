@@ -37,6 +37,8 @@
 
 <style>
   .w-enum {
+    width: 100%;
+    box-sizing: border-box;
     min-width: 12em;
     padding: 6px 8px;
     border: 1px solid var(--ecg-border, #c8ccd4);

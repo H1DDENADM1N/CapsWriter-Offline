@@ -35,7 +35,7 @@
 {#if visible}
   {@const Widget = widgetFor(field.widget)}
 
-  <div class="field" class:wide={field.widget === 'longText' || field.widget === 'dynamicTable'}>
+  <div class="field" class:wide={field.widget === 'longText' || field.widget === 'dynamicTable'} class:bool={field.widget === 'bool'}>
     <div class="label">
       <span class="row">
         <span class="title">{field.title}</span>
@@ -59,10 +59,18 @@
 {/if}
 
 <style>
+  /*
+   * 两列：标签占剩余空间，控件列贴住内容区右边缘。
+   *
+   * 控件列用 clamp 而不是百分比或 1fr：纯百分比在 2560 宽的窗口上会把下拉框
+   * 拉到一千多像素，纯 1fr 又会把控件挤到标签旁边、右边留一大片空白。clamp 让
+   * 它在窄窗口下仍有 300px 可用、宽窗口下最多 560px，且**永远右对齐**——
+   * 每一行的输入框右边缘都落在同一条竖线上，右边不会再有空档。
+   */
   .field {
     display: grid;
-    grid-template-columns: minmax(13em, 26%) 1fr;
-    gap: 4px 16px;
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 52%, 620px);
+    gap: 4px 20px;
     padding: 10px 0;
     border-bottom: 1px solid var(--ecg-line, #eceef2);
     align-items: start;
@@ -78,6 +86,8 @@
 
   .label {
     min-width: 0;
+    /* 说明文字不要跟着宽窗口拉成一整行，读起来会串行 */
+    max-width: 46em;
   }
 
   .row {
@@ -109,7 +119,14 @@
   }
 
   .control {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
+  }
+
+  /* 开关本身没有宽度可拉伸，靠右放，右边缘才和别的控件对齐 */
+  .field.bool .control {
+    align-items: flex-end;
   }
 
   .error {
@@ -122,6 +139,10 @@
   @media (max-width: 760px) {
     .field {
       grid-template-columns: 1fr;
+    }
+
+    .field.bool .control {
+      align-items: flex-start;
     }
   }
 </style>
