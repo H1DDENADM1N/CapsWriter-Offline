@@ -61,17 +61,50 @@ impl std::fmt::Display for TdError {
 
 impl std::error::Error for TdError {}
 
+/// 文件原本用的行尾。输出时按它还原，避免把用户文件的所有行尾改掉。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Eol {
+    Crlf,
+    Lf,
+}
+
+impl Eol {
+    /// 探测输入文本的行尾风格：只要出现过 CRLF 就按 CRLF 处理。
+    ///
+    /// 本仓库 `core.autocrlf=true`，工作树里是 CRLF；但若某台机器 checkout 成 LF，
+    /// 强制输出 CRLF 会让「只改一个键」的保存变成 852 行全变。所以按输入还原。
+    pub fn detect(text: &str) -> Self {
+        if text.contains("\r\n") {
+            Eol::Crlf
+        } else {
+            Eol::Lf
+        }
+    }
+
+    /// 行尾字符串。`to_toml_string` 直接 match `Eol` 而不用它，留着供后续
+    /// （diff 标题、日志、测试文案）复用；`#[allow(dead_code)]` 以免整库构建时告警。
+    #[allow(dead_code)]
+    fn as_str(self) -> &'static str {
+        match self {
+            Eol::Crlf => "\r\n",
+            Eol::Lf => "\n",
+        }
+    }
+}
+
 /// 内存中的 TOML 文档。`original_text` 保留磁盘原文（含 CRLF），供指纹与 diff 使用。
 pub struct ConfigDoc {
     doc: DocumentMut,
     path: PathBuf,
     original_text: String,
+    eol: Eol,
 }
 
 impl ConfigDoc {
-    /// 输入为磁盘原始文本（可含 CRLF）；内部做 LF 归一化。
+    /// 输入为磁盘原始文本（可含 CRLF）；内部做 LF 归一化，并记住原行尾。
     pub fn parse(text: &str) -> Result<Self, TdError> {
         let original_text = text.to_string();
+        let eol = Eol::detect(text);
         // 硬性：先归一化，否则 toml_edit 会把 CRLF 拆成 199 CRLF + 653 裸 LF。
         let lf = text.replace("\r\n", "\n");
         let doc: DocumentMut = lf
@@ -81,6 +114,7 @@ impl ConfigDoc {
             doc,
             path: PathBuf::new(),
             original_text,
+            eol,
         })
     }
 
@@ -92,6 +126,7 @@ impl ConfigDoc {
         Ok(doc)
     }
 
+    /// `parse` 不设路径，`path()` 返回空；只有 `load` 会填。
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -100,10 +135,20 @@ impl ConfigDoc {
         &self.original_text
     }
 
+    /// 输入文件原本的行尾风格。
+    pub fn eol(&self) -> Eol {
+        self.eol
+    }
+
     /// 按 segments 精确查找（禁用点分字符串："vlc.exe" 里的点不是分隔符）。
     ///
     /// 只沿 `Item::Table` 下钻；内联表本身是 `Value::InlineTable`，它的成员
     /// 是 `&Value` 而不是 `&Item`，所以只能查到内联表这一层。
+    ///
+    /// **注意**：`…,"vlc.exe","hotkey"` 这类 4 段内联表成员这里返回 `None`，
+    /// 而 `toml_type_at` 同一路径返回 `Some(String)`。两者不同时为 `Some` 是设计行为
+    /// （签名是 `Option<&Item>`，内联表成员借不出 `&Item`）。要改内联表成员的值，
+    /// 用 `doc_mut()` 逐层 `get_mut` 到 `&mut Value`，不要走 `get()`。
     pub fn get(&self, segments: &[String]) -> Option<&Item> {
         let mut table: &Table = self.doc.as_table();
         let (last, init) = segments.split_last()?;
@@ -124,10 +169,13 @@ impl ConfigDoc {
         type_in_table(self.doc.as_table(), segments)
     }
 
-    /// 输出 CRLF 文本（内部 to_string() 后再还原）。
+    /// 按输入文件原本的行尾输出（CRLF 进 CRLF 出，LF 进 LF 出）。
     pub fn to_toml_string(&self) -> String {
-        // 硬性：输出前还原，保证 852 行全是 CRLF。
-        self.doc.to_string().replace('\n', "\r\n")
+        let lf = self.doc.to_string();
+        match self.eol {
+            Eol::Crlf => lf.replace('\n', "\r\n"),
+            Eol::Lf => lf,
+        }
     }
 
     /// 全部叶子：(segments, 值 JSON, TomlType)。数组与内联表整体作为叶子。
@@ -285,7 +333,7 @@ fn value_to_json(v: &Value) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testutil::{comment_line_count, load_real, seg};
+    use crate::testutil::{comment_line_count, load_real, seg, REAL};
 
     #[test]
     fn parse_real_config() {
@@ -309,13 +357,39 @@ mod tests {
 
     #[test]
     fn crlf_preserved() {
-        let (doc, _) = load_real();
+        let (doc, raw) = load_real();
         let out = doc.to_toml_string();
-        assert_eq!(
-            out.matches("\r\n").count(),
-            out.matches('\n').count(),
-            "不得出现裸 LF"
+        // 三重条件，缺一不可（单看「CRLF 数 == LF 数」几乎恒真，抓不住「忘了归一化」）：
+        // ① 不得叠成 \r\r\n（忘了 parse 端归一化的典型症状）
+        assert!(!out.contains("\r\r\n"), "CRLF 还原不得叠成 \\r\\r\\n");
+        // ② CRLF 数量必须与输入一致
+        assert_eq!(out.matches("\r\n").count(), raw.matches("\r\n").count());
+        // ③ 去掉合法 CRLF 后不得残留任何裸 CR / 裸 LF
+        let stripped = out.replace("\r\n", "");
+        assert!(
+            !stripped.contains('\r') && !stripped.contains('\n'),
+            "不得出现裸 LF / 裸 CR"
         );
+    }
+
+    #[test]
+    fn lf_input_stays_lf() {
+        // 若某台机器 core.autocrlf=false（工作树是 LF），保存不得把全文改成 CRLF
+        let raw = std::fs::read_to_string(REAL).unwrap();
+        let lf = raw.replace("\r\n", "\n");
+        let doc = ConfigDoc::parse(&lf).unwrap();
+        assert_eq!(doc.eol(), Eol::Lf);
+        let out = doc.to_toml_string();
+        assert_eq!(out, lf, "LF 输入必须 LF 输出，否则一次保存会改掉全文行尾");
+        assert!(!out.contains('\r'));
+    }
+
+    #[test]
+    fn empty_document_has_lf_and_parses() {
+        let doc = ConfigDoc::parse("").unwrap();
+        assert_eq!(doc.eol(), Eol::Lf);
+        assert_eq!(doc.to_toml_string(), "");
+        assert!(doc.leaf_fields().is_empty());
     }
 
     #[test]
@@ -374,5 +448,35 @@ mod tests {
         );
         // 表本身不是可编辑值
         assert_eq!(t(&["client", "prompt_style"]), None);
+    }
+
+    #[test]
+    fn get_and_toml_type_are_asymmetric_by_design() {
+        // 锁死这个不对称，防止后人「顺手修好」→ 改坏 patch 的定位逻辑。
+        let (doc, _) = load_real();
+        let row = seg(&["client", "additional_special_apps", "vlc.exe"]);
+        let member = seg(&["client", "additional_special_apps", "vlc.exe", "hotkey"]);
+        // 内联表自身：两者都能拿到
+        assert!(doc.get(&row).is_some());
+        assert_eq!(doc.toml_type_at(&row), Some(TomlType::InlineTable));
+        // 内联表成员：get 拿不到（&Value 借不出 &Item），toml_type_at 拿得到
+        assert!(doc.get(&member).is_none());
+        assert_eq!(doc.toml_type_at(&member), Some(TomlType::String));
+    }
+
+    #[test]
+    fn parse_sets_no_path() {
+        // parse 出来的文档没有路径；只有 load 会填。DocState 必须用 load。
+        let (doc, _) = load_real();
+        assert_eq!(doc.path(), std::path::Path::new(""));
+    }
+
+    #[test]
+    fn fixture_roundtrip_is_byte_identical() {
+        // 让 fixture 真正被用起来：它是 Task 3+ 各测试的最小输入
+        let raw = std::fs::read_to_string("tests/fixtures/config_fixture.toml").unwrap();
+        let doc = ConfigDoc::parse(&raw).unwrap();
+        assert_eq!(doc.to_toml_string(), raw, "fixture 必须字节级往返");
+        assert_eq!(doc.leaf_fields().len(), 14, "fixture 有 14 个叶子");
     }
 }
