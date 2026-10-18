@@ -29,6 +29,22 @@
 
   const closable = $derived(phase.kind !== 'committing');
 
+  const diffLines = $derived(
+    phase.kind === 'confirm' ? phase.result.diff.replace(/\n$/, '').split('\n') : [],
+  );
+
+  /**
+   * 行首标记决定底色。`+++` / `---` 是文件头、`@@` 是 hunk 头，都不能当成
+   * 增删行来染色——否则 diff 的第一行永远是绿的，看多了就没人信这个颜色。
+   */
+  function lineKind(line: string): string {
+    if (line.startsWith('+++') || line.startsWith('---')) return 'meta';
+    if (line.startsWith('@@')) return 'hunk';
+    if (line.startsWith('+')) return 'add';
+    if (line.startsWith('-')) return 'del';
+    return '';
+  }
+
   function close(): void {
     if (closable) saveStore.cancel();
   }
@@ -59,7 +75,11 @@
       {#if phase.kind === 'confirm'}
         <h2 id="save-dialog-title">确认保存</h2>
         <p class="lead">以下改动将写入 config.toml（原文件会备份为 .bak）：</p>
-        <pre class="diff">{phase.result.diff}</pre>
+        <section class="diff" aria-label="配置差异">
+          {#each diffLines as line, i (i)}
+            <div class="ln {lineKind(line)}">{line || ' '}</div>
+          {/each}
+        </section>
 
         {#if phase.result.warnings.length > 0}
           <div class="warn">
@@ -168,8 +188,7 @@
     flex: 1 1 auto;
     min-height: 120px;
     max-height: 46vh;
-    margin: 0;
-    padding: 10px 12px;
+    padding: 8px 0;
     overflow: auto;
     border: 1px solid var(--ecg-border, #dcdfe6);
     border-radius: 6px;
@@ -177,7 +196,27 @@
     font-family: Consolas, 'Cascadia Mono', monospace;
     font-size: 12px;
     line-height: 1.55;
+  }
+
+  .ln {
+    padding: 0 12px;
     white-space: pre;
+  }
+
+  .ln.add {
+    background: var(--ecg-add-bg, rgb(47 158 68 / 12%));
+  }
+
+  .ln.del {
+    background: var(--ecg-del-bg, rgb(192 57 43 / 10%));
+  }
+
+  .ln.hunk {
+    color: var(--ecg-hunk-fg, #7c5cbf);
+  }
+
+  .ln.meta {
+    color: var(--ecg-muted, #888);
   }
 
   .error {

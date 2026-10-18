@@ -1,0 +1,135 @@
+/**
+ * 设计令牌。这里只有颜色、字号、间距与少量全局基础样式。
+ *
+ * 全部走 `--ecg-*` 前缀而不是 `--bg` / `--accent`：Tauri、Vite 的默认模板以及任何
+ * 将来贴进来的第三方片段都可能定义同名变量，前缀是唯一可靠的分界。
+ *
+ * 两套配色都定义在这里，组件里不再写任何 `@media (prefers-color-scheme)`：
+ * 深色只允许在令牌层出现一次，否则迟早出现「某一屏在深色下仍是白底」。
+ */
+
+:root {
+  --ecg-bg: #ffffff;
+  --ecg-fg: #1c2024;
+  --ecg-panel: #f7f8fa;
+  --ecg-border: #d8dce3;
+  --ecg-line: #e7eaf0;
+  --ecg-hover: #f0f2f6;
+  --ecg-active: #e6eefc;
+  --ecg-accent: #2563eb;
+  --ecg-accent-weak: #eaf1ff;
+  --ecg-muted: #6b7280;
+  --ecg-ok: #2f9e44;
+  --ecg-warn: #b8860b;
+  --ecg-danger: #c0392b;
+
+  /* diff 行底色：用独立令牌而不是在组件里 color-mix，深色下才调得动 */
+  --ecg-add-bg: rgb(47 158 68 / 12%);
+  --ecg-del-bg: rgb(192 57 43 / 10%);
+  --ecg-hunk-fg: #7c5cbf;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ecg-bg: #16181c;
+    --ecg-fg: #e7e9ee;
+    --ecg-panel: #1c1f24;
+    --ecg-border: #333842;
+    --ecg-line: #262a31;
+    --ecg-hover: #24282f;
+    --ecg-active: #1e2b45;
+    --ecg-accent: #5b8def;
+    --ecg-accent-weak: #1a2436;
+    --ecg-muted: #9aa1ad;
+    --ecg-ok: #57c277;
+    --ecg-warn: #e0b34a;
+    --ecg-danger: #e0736a;
+
+    --ecg-add-bg: rgb(87 194 119 / 16%);
+    --ecg-del-bg: rgb(224 115 106 / 16%);
+    --ecg-hunk-fg: #b39ddb;
+
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ecg-bg);
+  color: var(--ecg-fg);
+  font-family: 'Microsoft YaHei UI', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input[type='text'],
+input[type='password'],
+input[type='number'],
+select,
+textarea {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--ecg-border);
+  border-radius: 4px;
+  background: var(--ecg-bg);
+}
+
+textarea {
+  height: auto;
+  padding: 6px 8px;
+  line-height: 1.6;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--ecg-panel);
+  color: var(--ecg-muted);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--ecg-accent);
+  outline-offset: 1px;
+}
+
+/* 控件只负责边框，错误文案由 Field 渲染 */
+[aria-invalid='true'] {
+  border-color: var(--ecg-danger);
+}
+
+::selection {
+  background: var(--ecg-accent-weak);
+}
+
+/*
+ * 只有导航禁选。输入框、diff、错误信息必须能选中复制——贴到 issue 里的那一行
+ * 错误文案，往往就是排查的全部线索。
+ */
+[role='tablist'],
+.ecg-noselect {
+  user-select: none;
+}

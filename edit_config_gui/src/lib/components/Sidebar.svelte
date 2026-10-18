@@ -2,6 +2,7 @@
   import { allFields, fieldId, pageOfSegments, pages } from '../schema/index.ts';
   import { configStore } from '../stores/config.svelte.ts';
   import { navStore } from '../stores/nav.svelte.ts';
+  import Icon from './Icon.svelte';
 
   /**
    * 该页有几个脏字段。
@@ -35,7 +36,10 @@
       aria-selected={navStore.current() === page.id}
       onclick={() => navStore.go(page.id)}
     >
-      <span class="title">{page.title}</span>
+      <span class="lead">
+        <Icon name={page.icon} />
+        <span class="title">{page.title}</span>
+      </span>
       {#if n > 0}
         <span class="badge" title={`${n} 项改动尚未保存`}>{n}</span>
       {/if}
@@ -78,8 +82,27 @@
 
   .item.active {
     background: var(--ecg-active, #e8eefb);
+    box-shadow: inset 2px 0 0 var(--ecg-accent, #1a56c4);
     font-weight: 600;
     color: var(--ecg-accent, #1a56c4);
+  }
+
+  .lead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .lead :global(svg) {
+    flex: 0 0 auto;
+    opacity: 0.85;
+  }
+
+  .title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .badge {
