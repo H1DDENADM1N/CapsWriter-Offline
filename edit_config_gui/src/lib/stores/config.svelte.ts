@@ -405,6 +405,26 @@ export const configStore = {
     if (doc) doc = { ...doc, fingerprint: fp };
   },
 
+  /**
+   * 提交成功后重设基线。
+   *
+   * 三件事必须一起做，少一件都会留下不一致：
+   * 1. `original` 换成当前值 —— 否则 `patches()` 仍按旧基线算，用户会看到
+   *    「已保存」但脏标记和保存按钮还不消失；
+   * 2. 清 `dirty` / `errorMap` / `warnings` —— 这些都是「相对旧基线」的结论；
+   * 3. 记下新指纹 —— 否则下一次保存必报 `CONFLICT`（磁盘的 mtime 已变）。
+   *
+   * 这里刻意不重新读盘：`commit_save` 已经把写进去的内容原子替换并回读校验过，
+   * 再读一次只会引入「读的那一刻又被别人改了」的新窗口。
+   */
+  commitSucceeded(fp: DocState['fingerprint']): void {
+    original = clone(values);
+    dirty = {};
+    errorMap = {};
+    warnings = [];
+    if (doc) doc = { ...doc, fingerprint: fp };
+  },
+
   __resetForTest(): void {
     const base = schemaDefaults();
     original = base;
