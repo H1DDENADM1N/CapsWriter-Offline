@@ -312,9 +312,13 @@ edit_config_gui/
 │       │       ├── SecretWidget.svelte        # API Key 掩码 + 显示切换
 │       │       ├── ReadonlyWidget.svelte
 │       │       └── DynamicTableWidget.svelte  # additional_special_apps
+│       ├── pinyin.ts                # 拼音查表（多音字展开）
+│       ├── pinyin-map.json          # 构建期生成的 841 字读音表
+│       ├── search.ts                # 纯检索：打分 / 徽标 / 派生跳转
 │       └── stores/
 │           ├── config.ts            # original / current / dirty
-│           ├── search.ts            # open / query / selectedIndex / recent
+│           ├── palette.ts           # open / query / selectedIndex / recent
+│           ├── nav.ts               # 当前页 / 待跳转目标
 │           └── toast.ts
 └── src-tauri/
     ├── Cargo.toml
@@ -429,6 +433,13 @@ export interface PageMeta {
 `client.additional_special_apps.vlc.exe.hotkey` 中 `vlc.exe` 是**一个含点的表键**。为消除歧义，`FieldMeta` 同时携带 `segments: string[]`（如 `['client','additional_special_apps','vlc.exe','hotkey']`），Rust 侧一律用 `segments` 定位，`path` 仅用于展示与搜索。
 
 `client.多音字`、`client.声调` 的 `segments` 为 `['client','多音字']`，Rust 的 `toml_edit` 键定位天然支持 UTF-8。
+前端内部一切以 `segments` 为准；需要把它当 Map 的键时统一用
+
+```ts
+export const fieldId = (segments: string[]) => segments.join('\u0000');
+```
+
+**不要用 `segments.join('.')` 当键** —— `vlc.exe` 会让 `[''client'',''additional_special_apps'',''vlc.exe'',''hotkey'']` 与 `[''client'',''additional_special_apps'',''vlc'',''exe'',''hotkey'']` 撞成同一个字符串。U+0000 不可能出现在 TOML 键名里（TOML 规范禁止），因此不会歧义。`$state` 里的 `values` / `dirtyIds` / `errors` 全部以 `fieldId` 为键；`data-field-id` 属性也用同一个值。
 
 ### 5.3 Rust 侧文档模型
 
@@ -861,7 +872,7 @@ assert_eq!(out, raw);                             // ✅ 实测 true
 **结论 3：不修改时字节完全一致；改单行键只变那一行。**
 
 - 纯往返（不调任何 setter）：`out == raw` 为 true。
-- 逐键写入探针值（遍历全部 162 个键，按原类型各写一个探针值）：**154 个单行键全部只改变 1 行**，其余行（含 306 行注释、空行、键顺序、行尾注释）逐行相同；换行符全部保持 CRLF。
+- 逐键写入探针值（遍历全部 162 个键，按原类型各写一个探针值）：**149 个单行标量键全部只改变 1 行**（162 − 8 个多行提示词正文 − 3 个数组 − 2 条动态表条目；后两类由 `array_prefix_normalized` 与 `dynamic_table_*` 单独覆盖），其余行（含 306 行注释、空行、键顺序、行尾注释）逐行相同；换行符全部保持 CRLF。
 - 剩余 8 个是多行字符串键（`client.prompt_style.prompt_*` 8 个正文），行数变化是**语义正确**的：写入不含换行的新值时，`"""` 三引号块从多行折叠为单行，行数随之减少。这不是格式损坏。
 
 **结论 4：多行字符串与特殊字符由 `toml_edit` 自动选择正确的引号形式，回读值恒等于写入值。**
@@ -1320,7 +1331,7 @@ json.dump(cn.canonical_names, open('canonical_names.json','w'), ensure_ascii=Fal
 
 ```ts
 export interface SearchEntry {
-  fieldId: number;        // 扁平化 schema 中的稳定下标，用于 DOM 定位
+  fieldId: string;        // segments 用 U+0000 连接成的键（见 §5.2），同时用于 DOM 定位
   segments: string[];
   path: string;           // client.speech_recognition_shortcut（仅展示/兜底精确匹配用）
   title: string;
@@ -1369,7 +1380,7 @@ export interface SearchEntry {
 
 这样既没有运行时依赖、不增加产物体积，又不会因为生僻字/多音字漏索引——字表是从真实文案里提取的，不是猜的。若后续新增了字表里没有的字，`schema_paths` 同款覆盖测试会在 CI 里报出来（见 §10.3 的 `pinyin_map_covers_all_titles`）。
 
-**结果上限**：最多显示 50 条，超出时底部提示「已显示前 50 条，请继续输入以缩小范围」。
+**结果上限**：最多显示 50 条，超出时底部提示「已显示前 50 条，请继续输入以缩小范围」。实现上导出两个函数：`searchAll(q) -> { hits, truncated }`（`hits` 已截断到 50，`truncated` 表示是否还有更多）与便捷包装 `searchFields(q) -> hits`；组件只用后者渲染、用 `truncated` 决定是否显示底部提示。
 
 #### 9.7.3 隐藏字段与只读字段的处理
 
@@ -1386,10 +1397,10 @@ export interface SearchEntry {
 
 #### 9.7.4 状态与组件落点
 
-- 搜索状态（`open` / `query` / `selectedIndex` / `recent`）放在 `src/lib/stores/search.ts`，不进 `config.ts`，避免与配置脏态耦合。
+- 搜索状态（`open` / `query` / `selectedIndex` / `recent`）放在 `src/lib/stores/palette.ts`，不进 `config.ts`，避免与配置脏态耦合；纯检索逻辑（打分、拼音展开、徽标填充）在 `src/lib/search.ts` 与 `src/lib/pinyin.ts`，不持有任何状态。
 - 组件：`src/lib/components/CommandPalette.svelte`（顶部搜索框是它的收起态外观，同一组件两态）。
 - 索引在 `open_config` 成功返回后构建一次；此后每次字段值变化只更新对应条目的 `value`/`hidden`/`readonly` 三个字段，不重建全表（162 项重建也不慢，但增量更新能让「最近跳转」与选中位置不跳）。
-- **DOM 定位**：每个字段的根元素带 `data-field-id={fieldId}`。用索引下标而不是 `segments.join('.')` 作定位键，因为 `vlc.exe` 这类含点的段会让 join 后的字符串有歧义（§5.2 的同一条理由）。因字段被 `visibleWhen` 隐藏而尚未挂载时，先确保目标页渲染、等该字段出现再滚动。
+- **DOM 定位**：每个字段的根元素带 `data-field-id={fieldId}`。定位键是 fieldId（segments 以 U+0000 连接，见 §5.2），不能用 `segments.join('.')`，因为 `vlc.exe` 这类含点的段会让 join 后的字符串有歧义（同 §5.2 的理由）。因字段被 `visibleWhen` 隐藏而尚未挂载时，先确保目标页渲染、等该字段出现再滚动。
 
 ---
 
@@ -1402,37 +1413,35 @@ export interface SearchEntry {
 | `parse_real_config` | 解析真实 `config.toml` 成功，162 叶子键 |
 | `byte_identical_roundtrip` | `emit(parse(normalize(raw)))` 与原始文件**字节相等**（最严格的格式守卫） |
 | `crlf_preserved` | 任意修改后，输出的 `\r\n` 计数 == `\n` 计数（无裸 LF，无混合换行） |
-| `single_line_key_touches_one_line` | 逐个修改 154 个单行键，每次输出行数不变且只有 1 行不同 |
+| `single_line_key_touches_one_line` | 逐个修改 **149** 个单行标量键（162 − 8 个多行提示词正文 − 3 个数组 − 2 条动态表条目；数组与动态表条目由独立测试覆盖），每次输出行数不变且只有 1 行不同 |
 | `comments_preserved_on_set` | 逐键写入探针值后重解析，注释行数 306 不变、键顺序不变、行尾注释仍在 |
 | `newline_rejected_in_single_line` | 给 `server.addr` 写含 `\n` 的值返回校验错误，文件未被改成 `"""` 多行 |
 | `type_fidelity_string` | `server.speech_recognition_port` 写 `"9999"` 后重新读，原值是 `TomlType::String` |
-| `type_fidelity_int` | `client.audio_name_len` 写 `30` 后原值是 `Integer` |
-| `type_fidelity_float` | `client.threshold` 写 `0.75` 后值为 `0.75`（精度不丢） |
+| `type_fidelity_int_and_float` | `client.audio_name_len` 写 `30` 后原值是 `Integer`；`client.threshold` 写 `0.75` 后原值是 `Float` 且值为 `0.75`（精度不丢） |
 | `type_mismatch_rejected` | 字符串键写 `PairArray` 返回 `TypeMismatch` |
 | `diff_only_changed` | 改 3 个键，diff 只含这 3 行 |
-| `atomic_write_failure` | 注入写失败，原文件字节不变 |
+| `tmp_left_over_does_not_corrupt_target` | 预置一个上次残留的 `config.toml.tmp`，目标文件字节不变、仍可解析；下一次 `atomic_write` 正常成功（崩溃残留不毒化后续保存） |
 | `backup_contents` | `.bak` 内容 == 写入前原文；第二次保存后 `.bak` == 上一次内容 |
 | `replace_keeps_acl` | 给目标文件加自定义 ACE，替换后 SDDL 与替换前相等 |
 | `replace_null_backup_ok` | `lpBackupFileName` 传 `NULL` 时替换成功且不产生 `.bak`；传 `""` 时返回 0 且原文件不变（防回归：两种「无备份」写法语义不同） |
-| `fingerprint_conflict` | 改 mtime 后 `commit_save` 返回 `FileChangedExternally` |
-| `readback_validation` | 模拟写入后文件损坏，`commit_save` 恢复 `.bak` 并报错 |
+| `fingerprint_changes_on_external_write` | 三种外部改动都必须改变指纹：内容变（sha256 变）、只 mtime 变（mtime 变）、同大小不同内容（只比 size 会漏检，必须靠 sha256 区分） |
+| `readback_failure_rolls_back` | 用 `set_inject_readback_failure(true)` 模拟写入后文件损坏，`atomic_write` 从 `.bak` 回滚，目标文件回到写入前内容并返回 `ReadbackParse` 错误 |
 | `validate_ip` | 9 个 IPv4 用例（含 `8.8.8.8` 通过 `ip`、拒绝 `localListenableIp`） |
 | `validate_port` | `80`/`1023`/`1024`/`65535`/`65536`/`abc`/`0` |
-| `validate_hotkey` | §8.1 全部 27 个最小回归用例（合法 + 非法双向） |
+| `validate_hotkey_minimal_regression` | §8.1 全部 27 个最小回归用例（19 合法 + 8 非法，双向） |
 | `hotkey_parity` | 读 `tests/fixtures/hotkey_cases.txt` 841 例，逐行与 `hotkey_expected.txt` 相等（规格已用 Python 实测生成该期望，差异 0 处） |
 | `validate_url` | `http://`、`https://`、`ftp://`、空串 |
 | `validate_regex_class` | `，。,.` 通过；`""` / `\` / `^` / `[` 各返回一条错误；再对 31 个中日韩/全角标点（`，。、；：？！…—～·「」『』（）【】《》〈〉“”‘’｡､｢｣`）断言全部通过，防止把禁用集开得过大 |
 | `validate_ip_port` | `192.168.3.127:10101` 通过；纯 `192.168.3.127` 通过（消费端补 `:5555`）；`host:70000` / `host:abc` / 空串各自返回对应错误 |
-| `validate_file` | 存在/不存在/目录当文件/后缀不符 |
-| `dynamic_table_replace` | 增删 `additional_special_apps` 项后，表头/表头注释/表尾注释/未触及项的**行尾注释**全部仍在，且行数只增减 1 |
+| `validate_file_and_dir` | 存在/不存在/目录当文件/后缀不符/真实目录通过 `DirExist` |
+| `dynamic_table_add_remove` | 增删 `additional_special_apps` 项后，表头/表头注释/表尾注释/未触及项的**行尾注释**全部仍在，且行数只增减 1；新增的 `VLC.exe`/`App.exe` 这类键**保留原大小写**不被小写化 |
 | `array_prefix_normalized` | 删除 `enter_apps` 首元素后输出 `[["hexin.exe", 0.5]]`（无多余空格）；重建后与原文逐字符相同 |
 | `config_location_precedence` | 命令行参数 > exe 同目录 > cwd；三者都无时返回 `NotFound` 且**不创建**文件 |
-| `empty_string_list_roundtrip` | `disable_exe_list = [""]` 读入为空列表显示，原样保存后文本仍是 `[""]`，不做 `[]` |
-| `dynamic_table_key_case_preserved` | 动态表键 `VLC.exe` 保存后仍是 `VLC.exe`，不被小写化 |
-| `numeric_out_of_range_warns_only` | 把 `client.mic_seg_duration` 手工改成 `120`（超 60）后打开，字段标黄但仍可保存，保存后回读仍是 `120` |
-| `numeric_range_applied_on_edit` | 承接上例，用户把该字段改值后新值落在 min/max 内（控件夹取），不会被写成 120 以外的越界值 |
+| `empty_string_list_placeholder_roundtrip` | `disable_exe_list = [""]` 读入为空列表显示，原样保存后文本仍是 `[""]`，不做 `[]` |
+| `int 字段接受超范围既有值`（vitest，Task 13） | 把 `client.mic_seg_duration` 手工改成 `120`（超 60）后打开，`initialValues` 原样保留 `120` 不夹取，其它字段仍可编辑保存 |
+| `int 控件编辑时夹取到 min/max` + `int 控件首次渲染不改写超范围既有值`（vitest，Task 14） | 承接上例：用户主动改值（`onchange` 失焦/回车）时新值被夹取到 min/max 内；首次渲染**不**夹取既有值 |
 
-**黄金测试**：遍历 `schema_paths.json` 全部 162 个 segments → 各写一个类型正确的探针值 → 重新解析 → 断言「只有被写键变化」「注释与顺序无损」「每个值回读等于写入值」。这是防回归的核心。
+**黄金测试**：遍历 `leaf_fields()` 的全部 162 个叶子 segments（`schema_paths.json` 里的 160 条 = 162 减去动态表的 2 条）→ 各写一个类型正确的探针值 → 重新解析 → 断言「只有被写键变化」「注释与顺序无损」「每个值回读等于写入值」。这是防回归的核心。
 
 ### 10.2 覆盖测试
 
@@ -1443,22 +1452,27 @@ export interface SearchEntry {
 
 | 测试 | 断言 |
 |---|---|
-| `dirty_tracking` | 改字段后 dirty 含该 path，改回后不含 |
-| `revert_all` | 「放弃」后 current == original，dirty 为空 |
-| `revert_field` | 单字段恢复默认只改该字段 |
-| `visibleWhen` | `use_online_translate_function=false` 时在线翻译字段不渲染 |
-| `search_exact_title_wins` | 查询「端口」时标题含「端口」的条目排在仅注释命中「端口」的前面（验证 §9.7.2 打分表） |
-| `search_hidden_field_found` | `client.enable_adb_control=false` 时搜「adb」仍能搜到 `client.adb_addr`，结果带 `已隐藏` 标记 |
-| `search_readonly_has_jump_target` | 搜「encoder_onnx_path」返回只读条目，其 `derivedFrom` 指向 `model_paths.funasr_encoder_adaptor_path` 且在 schema 中存在 |
-| `search_secret_value_not_matched` | 把 `client.zhipuai.api_key` 设为 `sk-abc123` 后搜 `abc123` **不返回**该字段；搜「智谱」仍返回 |
-| `search_pinyin_full_and_abbr` | 搜 `duankou` 与 `dk` 都能命中标题含「端口」的条目 |
-| `search_pinyin_polyphonic` | 搜 `chongmingming` 与 `zhongmingming` 都能命中「重命名」（多音字变体展开） |
-| `search_no_match_falls_back_to_path` | 搜一个完整 TOML 路径（含 `vlc.exe` 这类带点段）能精确命中 |
-| `search_ranking_stable` | 同分结果按 schema 顺序排列，连续两次过滤结果顺序一致 |
-| `search_result_cap` | 构造 60 条全命中查询时返回 50 条并置 `truncated` 标记 |
-| `pinyin_map_covers_all_titles` | 所有 `FieldMeta.title` 里的汉字都在 `pinyin-map.json` 的键集合中（漏字即失败，防止新增字段没重跑生成脚本） |
-| `error_aggregation` | 3 个字段非法时返回 3 条错误 |
-| `pair_list_roundtrip` | `enter_apps` 表格编辑后序列化为 `[["exe", 0.5]]` |
+| `dirty_tracking` | 改字段后进脏集合，**改回原值后自动移出**，且 `patches()` 归零 |
+| `revert_all` | 「全部还原」后 values 回到基线、脏集合与错误表都清空 |
+| `revert_field` | 单字段恢复默认只改该字段，其它脏字段保持脏 |
+| `visibleWhen 不满足时整行不渲染` / `visibleWhen 满足时整行渲染` | `client.enable_adb_control=false` 时 `adb_addr` 整行不渲染 |
+| `有错误时渲染文案并标记 aria-invalid` | 注入一条错误 → 文案出现且控件带 `aria-invalid="true"` |
+| `脏字段显示「已修改」标记` | 修改后 Field 上出现「已修改」 |
+| `note 与 title 同时可见` | TOML 注释原文（`note`）与标题同时渲染 |
+| `中文子串命中` / `拼音全拼命中` / `首字母命中` / `段路径命中也算` / `空查询返回空数组` | 分别验证 `端口` / `duankou` / `dk` / `speech_recognition_port` / 空白查询 |
+| `结果按分数降序且 title 精确命中排最前` / `同一查询两次结果顺序一致` | 验证 §9.7.2 打分表与稳定排序（显式 tie-breaker，不依赖引擎） |
+| `secret 的值不参与匹配` | `client.zhipuai.api_key` 值形如 `sk-abcdef` 时搜它返回 **0 条**；搜「智谱」（title）仍返回 |
+| `隐藏字段仍进结果并带 hidden 徽标与 dependOn` | 默认 `enable_adb_control=false`，搜 `adb_addr` 命中且 `badge='hidden'`、`dependOn=['client','enable_adb_control']` |
+| `派生只读键带 readonly 徽标与 derivedFrom` | 搜 `encoder_onnx_path` 命中且 `badge='readonly'`、`derivedFrom=['model_paths','funasr_encoder_adaptor_path']` |
+| `动态表条目按进程名补一条 dynamicKey 命中` | 搜 `vlc` 额外命中一条 `dynamicKey='vlc.exe'` |
+| `多音字：重 的两种读法都能命中` | `chongmingming` 与 `zhongmingming` 命中的 fieldId 序列相等（多音字变体展开） |
+| `结果截断到 50 条并暴露 truncated 标记` | `searchAll` 的 `hits` 封顶 50 且 `truncated=true`；未超限时 `truncated=false` |
+| `pinyin_map_covers_all_titles` / `多音字保留全部读音` | 所有 `title`/`note`/`segments` 里的汉字都在 `pinyin-map.json` 键集合中（漏字即失败，防止新增字段没重跑生成脚本）；`率` 同时有 `lü`/`lv`/`lu` |
+| `与构建期生成的 schema_paths.json 完全一致` / `segments 全局唯一` / `派生字段的 from 指向真实字段` / `同段内 title 不重复，且每个字段都有 title` / `选项型控件的每个 default 都在 options 里` | schema 自检（Task 12） |
+| `只产出脏字段` / `字符串型整数键仍发 str` / `真假布尔发 bool` / `int 字段接受超范围既有值` / `不可见字段不下发规则` / `可见字段会下发规则` | 补丁与规则生成（Task 13） |
+| `text 控件透传输入` / `int 控件编辑时夹取到 min/max` / `int 控件首次渲染不改写超范围既有值` / `hotkey 控件录制后回填` | 控件行为（Task 14） |
+| `无脏字段时保存按钮禁用` / `preview 返回错误时不进入 confirm 态，并把错误写进 configStore` / `只有 warnings 时仍可确认保存` / `冲突时进入 conflict 态，且不重试写盘` / `强制覆盖时带 force=true 重发` / `保存成功后清空脏状态并带出备份路径` / `冲突后点重新加载会丢弃本地改动` | 保存状态机（Task 18） |
+| `服务端在跑时显示运行指示` / `点重启并确认后调用 restartService` / `取消确认时不调用 restartService` / `degraded=true 时提示降权失败` / `onboarding 态只渲染 Onboarding，不渲染页面` / `引导态选择文件后调用 openConfig` | 状态栏与引导态（Task 19） |
 
 ### 10.4 手工验收
 
