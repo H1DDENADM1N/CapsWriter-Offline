@@ -157,4 +157,14 @@ export const bridge = {
   restartService(target: 'server' | 'client'): Promise<{ degraded: boolean }> {
     return call<{ degraded: boolean }>('restart_service', { target });
   },
+
+  /**
+   * 用系统默认浏览器打开链接（「关于」页的项目主页等）。
+   *
+   * Rust 侧只放行 `https://`——`file://` 与 `ms-settings:` 之类的协议能拉起本地程序，
+   * 而这个命令的入参最终来自渲染进程。
+   */
+  openUrl(url: string): Promise<void> {
+    return call<void>('open_url', { url });
+  },
 };

@@ -1,8 +1,18 @@
 <script lang="ts">
   import { allFields, fieldId, pageOfSegments, pages } from '../schema/index.ts';
+  import type { PageMeta } from '../schema/types.ts';
   import { configStore } from '../stores/config.svelte.ts';
   import { navStore } from '../stores/nav.svelte.ts';
+  import { uiStore } from '../stores/ui.svelte.ts';
   import Icon from './Icon.svelte';
+
+  /**
+   * 「关于」不放主列表：它不配置任何东西，混在 12 个配置页里会让人以为也是必填项。
+   * 固定到最下方，用分隔线与配置页区分开。
+   */
+  const aboutPage = $derived(pages.find((p) => p.id === 'about'));
+  const configPages = $derived(pages.filter((p) => p.id !== 'about'));
+  const collapsed = $derived(uiStore.sidebarCollapsed());
 
   /**
    * 该页有几个脏字段。
@@ -25,26 +35,46 @@
   }
 </script>
 
-<div class="sidebar" role="tablist" aria-label="配置页导航">
-  {#each pages as page (page.id)}
-    {@const n = dirtyCountOf(page.id)}
-    <button
-      type="button"
-      role="tab"
-      class="item"
-      class:active={navStore.current() === page.id}
-      aria-selected={navStore.current() === page.id}
-      onclick={() => navStore.go(page.id)}
-    >
-      <span class="lead">
-        <Icon name={page.icon} />
-        <span class="title">{page.title}</span>
-      </span>
-      {#if n > 0}
-        <span class="badge" title={`${n} 项改动尚未保存`}>{n}</span>
-      {/if}
-    </button>
-  {/each}
+{#snippet navItem(page: PageMeta)}
+  {@const n = dirtyCountOf(page.id)}
+  <button
+    type="button"
+    role="tab"
+    class="item"
+    class:active={navStore.current() === page.id}
+    aria-selected={navStore.current() === page.id}
+    aria-label={page.title}
+    title={collapsed ? page.title : undefined}
+    onclick={() => navStore.go(page.id)}
+  >
+    <span class="lead">
+      <Icon name={page.icon} />
+      <span class="title">{page.title}</span>
+    </span>
+    {#if n > 0}
+      <span class="badge" title={`${n} 项改动尚未保存`}>{n}</span>
+    {/if}
+  </button>
+{/snippet}
+
+<div
+  class="sidebar"
+  class:collapsed
+  role="tablist"
+  aria-label="配置页导航"
+  aria-orientation="vertical"
+>
+  <div class="list">
+    {#each configPages as page (page.id)}
+      {@render navItem(page)}
+    {/each}
+  </div>
+
+  {#if aboutPage}
+    <div class="foot">
+      {@render navItem(aboutPage)}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -52,14 +82,43 @@
     display: flex;
     flex: 0 0 200px;
     flex-direction: column;
-    gap: 2px;
     width: 200px;
-    padding: 14px 10px;
+    padding: 14px 10px 10px;
     border-right: 1px solid var(--ecg-line, #eceef2);
+    transition:
+      width 0.16s ease,
+      flex-basis 0.16s ease,
+      padding 0.16s ease;
+  }
+
+  .sidebar.collapsed {
+    flex-basis: 56px;
+    width: 56px;
+    padding: 14px 6px 10px;
+  }
+
+  .list {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
     overflow-y: auto;
+    /* 滚动条不该把图标列挤偏 */
+    scrollbar-gutter: stable;
+  }
+
+  .foot {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--ecg-line, #eceef2);
   }
 
   .item {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -74,6 +133,11 @@
     font-size: 13px;
     text-align: left;
     cursor: pointer;
+  }
+
+  .collapsed .item {
+    justify-content: center;
+    padding: 8px 0;
   }
 
   .item:hover {
@@ -105,6 +169,10 @@
     white-space: nowrap;
   }
 
+  .collapsed .title {
+    display: none;
+  }
+
   .badge {
     min-width: 18px;
     padding: 0 5px;
@@ -115,5 +183,16 @@
     font-weight: 600;
     line-height: 18px;
     text-align: center;
+  }
+
+  /* 折叠后没有文字，徽标改成右上角的小圆点，否则会把图标挤扁 */
+  .collapsed .badge {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    min-width: 14px;
+    padding: 0 3px;
+    font-size: 10px;
+    line-height: 14px;
   }
 </style>

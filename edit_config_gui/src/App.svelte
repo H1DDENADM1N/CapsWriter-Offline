@@ -8,6 +8,7 @@
   import PageView from './lib/components/pages/PageView.svelte';
   import Sidebar from './lib/components/Sidebar.svelte';
   import StatusBar from './lib/components/StatusBar.svelte';
+  import TopBar from './lib/components/TopBar.svelte';
   import { configStore } from './lib/stores/config.svelte.ts';
   import { saveStore } from './lib/stores/save.svelte.ts';
 
@@ -50,6 +51,8 @@
       <Sidebar />
 
       <div class="main">
+        <TopBar />
+
         <main class="content">
           {#if phase === 'loading'}
             <p class="hint">正在读取 config.toml…</p>

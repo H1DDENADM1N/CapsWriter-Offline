@@ -451,6 +451,68 @@ pub async fn restart_service(
     process::restart(target, &base_dir, variant.as_deref()).map_err(|e| e.to_string())
 }
 
+/// 「关于」页打开项目主页用。
+///
+/// 安全边界：只放行 `https://`。这个命令把字符串交给系统协议处理器，如果允许任意
+/// scheme，`file://` 能打开本地文件、`ms-settings:`/各类应用自定义协议能拉起别的程序
+/// ——渲染进程一旦被注入，这就是一条现成的命令执行链。关于页只需要打开几个 GitHub
+/// 链接，没有别的需求，所以这里按最窄的形状实现。
+pub fn check_url(url: &str) -> Result<&str, String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("链接为空".to_string());
+    }
+    if !trimmed.starts_with("https://") {
+        return Err("只支持以 https:// 开头的链接".to_string());
+    }
+    if trimmed.len() > 2048 {
+        return Err("链接过长".to_string());
+    }
+    if trimmed.chars().any(|c| c.is_control() || c == '"' || c == ' ') {
+        return Err("链接含有非法字符".to_string());
+    }
+    Ok(trimmed)
+}
+
+#[cfg(windows)]
+fn shell_open(url: &str) -> Result<(), String> {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    let verb: Vec<u16> = "open\0".encode_utf16().collect();
+    let file: Vec<u16> = url.encode_utf16().chain(std::iter::once(0)).collect();
+
+    // SAFETY: 两个指针都指向以 NUL 结尾的 UTF-16 缓冲，且在调用期间存活；
+    // 其余参数为 null，表示不传参数、继承当前工作目录。
+    let ret = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL as i32,
+        )
+    };
+
+    // ShellExecuteW 的返回值约定：> 32 表示成功，<= 32 是错误码（不是 GetLastError）。
+    if ret as isize <= 32 {
+        return Err(format!("系统未能打开链接（ShellExecuteW 返回 {}）", ret as isize));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn shell_open(_url: &str) -> Result<(), String> {
+    Err("当前平台不支持打开链接".to_string())
+}
+
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    let url = check_url(&url)?;
+    shell_open(url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -713,5 +775,38 @@ mod tests {
             .expect("保存后仍应有字段 a");
         assert_eq!(a.value, serde_json::json!(2));
         assert_eq!(view.fingerprint.sha256, disk.sha256);
+    }
+
+    #[test]
+    fn check_url_rejects_non_https_schemes() {
+        // 这几条是真实风险：file:// 能读本地文件，自定义协议能拉起任意已注册程序。
+        for bad in [
+            "http://github.com/H1DDENADM1N/CapsWriter-Offline",
+            "file:///C:/Windows/System32/cmd.exe",
+            "ms-settings:privacy",
+            "javascript:alert(1)",
+            "https:/github.com",
+            "",
+            "   ",
+        ] {
+            assert!(check_url(bad).is_err(), "必须拒绝：{bad}");
+        }
+    }
+
+    #[test]
+    fn check_url_rejects_control_chars_and_spaces() {
+        assert!(check_url("https://example.com/a b").is_err());
+        assert!(check_url("https://example.com/a\nb").is_err());
+        assert!(check_url("https://example.com/a\tb").is_err());
+        assert!(check_url(&format!("https://example.com/{}", "a".repeat(2048))).is_err());
+    }
+
+    #[test]
+    fn check_url_accepts_project_links_and_trims() {
+        let url = "https://github.com/H1DDENADM1N/CapsWriter-Offline";
+        assert_eq!(check_url(url).unwrap(), url);
+        // 从别处复制来的链接常带首尾空白
+        assert_eq!(check_url("  https://example.com/x  ").unwrap(), "https://example.com/x");
+        assert!(check_url("https://github.com/H1DDENADM1N/CapsWriter-Offline/issues").is_ok());
     }
 }

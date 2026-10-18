@@ -1,14 +1,20 @@
 import { fireEvent, render } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { fieldId, pages } from '../schema/index.ts';
 import { configStore } from '../stores/config.svelte.ts';
 import { navStore } from '../stores/nav.svelte.ts';
+import { paletteStore } from '../stores/palette.svelte.ts';
+import { uiStore } from '../stores/ui.svelte.ts';
 import Sidebar from './Sidebar.svelte';
+import TopBar from './TopBar.svelte';
 
 beforeEach(() => {
   configStore.__resetForTest();
   navStore.__resetForTest();
+  paletteStore.__resetForTest();
+  uiStore.__resetForTest();
   navStore.go(pages[0]!.id);
 });
 
@@ -72,5 +78,64 @@ describe('Sidebar', () => {
 
     navStore.go(pages[1]!.id);
     expect(navStore.highlight()).toBeNull();
+  });
+
+  it('「关于」固定在最后，且不混在配置页列表里', () => {
+    const { getAllByRole, container } = render(Sidebar);
+    const tabs = getAllByRole('tab');
+
+    expect(tabs).toHaveLength(13);
+    expect(tabs.at(-1)!.getAttribute('aria-label')).toBe('关于');
+    // 结构上也得分开：主列表只放配置页
+    const list = container.querySelector('.list')!;
+    expect(list.querySelectorAll('[role="tab"]')).toHaveLength(12);
+    expect(container.querySelector('.foot')!.textContent).toContain('关于');
+  });
+
+  it('折叠后隐藏文字但保留图标与可访问名', async () => {
+    const { getAllByRole, container } = render(Sidebar);
+
+    expect(container.querySelector('.sidebar')!.classList.contains('collapsed')).toBe(false);
+
+    uiStore.toggleSidebar();
+    // store 是模块级 $state：改完必须让 Svelte 冲刷一次，否则 DOM 还是旧的
+    await tick();
+
+    expect(container.querySelector('.sidebar')!.classList.contains('collapsed')).toBe(true);
+    const tabs = getAllByRole('tab');
+    // 文字节点还在 DOM 里（CSS 隐藏），但可访问名必须仍然完整
+    expect(tabs[0]!.getAttribute('aria-label')).toBe(pages[0]!.title);
+    expect(tabs[0]!.getAttribute('title')).toBe(pages[0]!.title);
+    expect(tabs[0]!.querySelector('svg')).not.toBeNull();
+  });
+});
+
+describe('TopBar', () => {
+  it('显示当前页标题', async () => {
+    const { getByRole } = render(TopBar);
+    expect(getByRole('heading', { level: 1 }).textContent).toBe(pages[0]!.title);
+
+    navStore.go('debug');
+    await Promise.resolve();
+    expect(getByRole('heading', { level: 1 }).textContent).toBe('调试');
+  });
+
+  it('右上角搜索按钮打开命令面板', async () => {
+    const { getByTitle } = render(TopBar);
+
+    expect(paletteStore.open()).toBe(false);
+    await fireEvent.click(getByTitle('搜索配置项（Ctrl + K）'));
+    expect(paletteStore.open()).toBe(true);
+  });
+
+  it('折叠按钮切换侧边栏状态并写进 aria-expanded', async () => {
+    const { getByLabelText } = render(TopBar);
+
+    const btn = getByLabelText('折叠侧边栏');
+    expect(btn.getAttribute('aria-expanded')).toBe('true');
+
+    await fireEvent.click(btn);
+    expect(uiStore.sidebarCollapsed()).toBe(true);
+    expect(getByLabelText('展开侧边栏').getAttribute('aria-expanded')).toBe('false');
   });
 });

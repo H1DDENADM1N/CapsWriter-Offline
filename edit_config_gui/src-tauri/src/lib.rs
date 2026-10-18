@@ -16,7 +16,7 @@ pub mod testutil;
 ///
 /// `generate_handler!` 是命令的**注册表**，不是派生宏：`#[tauri::command]` 只生成包装函数，
 /// 没写进这里的命令前端 invoke 时会直接报 "command not found"，而 Rust 侧连警告都没有。
-/// 所以七个命令必须与 `AppState` 的 manage 注册保持一致。
+/// 所以八个命令必须与 `AppState` 的 manage 注册保持一致。
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -30,7 +30,8 @@ pub fn run() {
             commands::commit_save,
             commands::reload_config,
             commands::running_processes,
-            commands::restart_service
+            commands::restart_service,
+            commands::open_url
         ])
         .run(tauri::generate_context!())
         .expect("运行 Tauri 应用失败");
