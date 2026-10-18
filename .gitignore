@@ -14,3 +14,7 @@ __pycache__
 /util/fun_asr_gguf/bin
 configs/my config.toml
 dev/tools/es.exe
+edit_config_gui/node_modules
+edit_config_gui/dist
+edit_config_gui/src-tauri/target
+edit_config_gui/src-tauri/gen
