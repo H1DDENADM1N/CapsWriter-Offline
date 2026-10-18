@@ -20,7 +20,15 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
+/// 文件指纹：用来发现「配置文件在我们打开之后被别人改过」。
+///
+/// `rename_all = "camelCase"` 不能省。前端 `bridge.ts` 按 `mtimeMs` 读、按
+/// `{mtimeMs, size, sha256}` 回传；没有这行属性时 Rust 下发的是 `mtime_ms`，
+/// 前端取到 `undefined`，而 `commit_save` 收参数会直接失败在
+/// `missing field mtime_ms`——表现为「点保存没反应」，且报错信息里根本不提
+/// 指纹，很难定位。
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct FileFingerprint {
     pub mtime_ms: i64,
     pub size: u64,
@@ -245,6 +253,26 @@ mod tests {
     const S2: &str = "a = 2\r\n# 注释\r\nb = \"x\"\r\n";
     const S3: &str = "a = 3\r\n# 注释\r\nb = \"x\"\r\n";
     const S4: &str = "a = 4\r\n# 注释\r\nb = \"x\"\r\n";
+
+    #[test]
+    fn fingerprint_serializes_as_camel_case() {
+        let fp = FileFingerprint {
+            mtime_ms: 1729200000123,
+            size: 7,
+            sha256: "ab".into(),
+        };
+
+        let text = serde_json::to_string(&fp).unwrap();
+        assert!(text.contains("\"mtimeMs\""), "下发键名必须是 mtimeMs：{text}");
+        assert!(!text.contains("mtime_ms"), "不得漏出 snake_case：{text}");
+
+        // 反向：前端 bridge.ts 就是按 mtimeMs 回传的，必须能解回来
+        let back: FileFingerprint = serde_json::from_str(
+            r#"{"mtimeMs":1729200000123,"size":7,"sha256":"ab"}"#,
+        )
+        .unwrap();
+        assert_eq!(back, fp);
+    }
 
     #[test]
     fn writes_and_fingerprints() {
