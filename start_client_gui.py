@@ -25,7 +25,6 @@ from PySide6.QtGui import (
     QFont,
     QIcon,
     QPalette,
-    QTextCursor,
     QWheelEvent,
 )
 from PySide6.QtWidgets import (
@@ -51,6 +50,12 @@ from tomlkit import dumps, parse
 
 from util.check_process import check_process
 from util.client.check_microphone_usage import is_microphone_in_use
+from util.client.multi_cursor_font import (
+    apply_mono_font,
+    mono_font_stylesheet,
+    mono_font_stylesheet_with_alpha,
+)
+from util.client.multicursor_edit import MultiCursorTextEdit
 from util.config import ClientConfig as Config
 from util.config import DebugConfig
 from util.explorer_token_downgrade import downgraded_via_explorer_token
@@ -446,7 +451,7 @@ class InputDialog_Api_Key:
         dialog.move(frame_geometry.topLeft())
 
 
-class CustomTextEdit(QTextEdit):
+class CustomTextEdit(MultiCursorTextEdit):
     def __init__(self, parent=None, logger: Optional[Logger] = None):
         super().__init__(parent)
         self.logger = logger if logger is not None else default_logger
@@ -455,24 +460,41 @@ class CustomTextEdit(QTextEdit):
         self.max_font_size = 45
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # 等宽字体（MapleMono-NF-CN-Regular）。字体不可用时保持原字体，
+        # 不静默换成 Tahoma 之类的替代品，见 multi_cursor_font 模块说明。
+        apply_mono_font(self, self.font_size)
+
+    def apply_font_size(self, size: int) -> None:
+        """应用字号，同时保证等宽字体族不丢失。
+
+        Ctrl+滚轮缩放会重设 stylesheet；族名一并写进去，避免只改字号后
+        字体退回系统默认。
+        """
+        self.font_size = max(self.min_font_size, min(self.max_font_size, int(size)))
+        self.setStyleSheet(mono_font_stylesheet(self.font_size))
+
+    def apply_background(self, alpha: int) -> None:
+        """只改背景透明度，保留等宽字体族。
+
+        ``show_time_label`` 模式下鼠标进出窗口会切换背景不透明度；原先
+        这里是一句裸 ``setStyleSheet("background-color: ...")``，会把上一步
+        写进去的 ``font-family`` 整段冲掉，进出一次窗口字体就退回系统默认。
+        """
+        self.setStyleSheet(mono_font_stylesheet_with_alpha(self.font_size, alpha))
 
     def wheelEvent(self, event: QWheelEvent):
         # 检测Ctrl键是否被按下
         if event.modifiers() == Qt.ControlModifier:
             # 获取当前字体大小
             if self.font().pointSize() < 0:
-                self.font_size = 12
+                size = self.font_size
             else:
-                self.font_size = self.font().pointSize()
+                size = self.font().pointSize()
             if event.angleDelta().y() > 0:  # 滚轮向上滚动
-                self.font_size = min(self.max_font_size, self.font_size + 1)
+                size += 1
             else:  # 滚轮向下滚动
-                self.font_size = max(self.min_font_size, self.font_size - 1)
-            # 更新字体大小
-            self.setStyleSheet(f"""
-                font-size: {self.font_size}pt;
-                background-color: rgba(46, 50, 54, 255);
-            """)
+                size -= 1
+            self.apply_font_size(size)
         else:
             super().wheelEvent(event)
 
@@ -1566,6 +1588,11 @@ class GUI(QMainWindow):
                 self.update_timer.stop()
         except AttributeError:
             pass  # 'GUI' object has no attribute 'update_timer' # 忽略该错误，因为初始化时还没有创建update_timer
+        # 停止监听后不再自动把光标拉到末尾，避免抢走用户正在编辑的位置
+        try:
+            self.text_box_client.set_follow_caret(state == 2)
+        except AttributeError:
+            pass
 
     def window_stay_on_top_toggled(self):
         # 切换窗口置顶状态
@@ -1733,7 +1760,7 @@ class GUI(QMainWindow):
             self.time_label.stop_timer()
             self.time_label.hide()  # 隐藏时间标签
         self.resize(425, 425)
-        self.text_box_client.setStyleSheet("background-color: rgba(46, 50, 54, 255);")
+        self.text_box_client.apply_background(255)
         self.setStyleSheet("background-color: rgba(35, 38, 41, 255);")
         self.text_box_client.setVisible(True)  # 显示文本框
         for i in range(self.title_bar.count()):  # 显示标题栏
@@ -1744,7 +1771,7 @@ class GUI(QMainWindow):
             widget = self.layout2.itemAt(i).widget()
             if widget is not None:
                 widget.setVisible(True)
-        self.text_box_client.moveCursor(QTextCursor.End)  # 滚动到最下行
+        self.text_box_client.scroll_to_bottom_if_follow()  # 仅在跟随时滚动到最下行
 
     def quit_app(self):
         # Terminate core_client.py process
@@ -1899,9 +1926,9 @@ class GUI(QMainWindow):
         while not self.output_queue_client.empty():
             try:
                 line = self.output_queue_client.get()
-                self.text_box_client.append(line)
+                self.text_box_client.append_line(line)
             except Exception as e:
-                self.text_box_client.append(e)
+                self.text_box_client.append_line(str(e))
                 break
 
     def checkWindowActive(self):
@@ -1966,9 +1993,7 @@ class GUI(QMainWindow):
             self.create_time_label()  # 确保时间标签存在
             self.time_label.stop_timer()  # 停止定时器
             self.text_box_client.setVisible(True)
-            self.text_box_client.setStyleSheet(
-                "background-color: rgba(46, 50, 54, 255);"
-            )
+            self.text_box_client.apply_background(255)
             self.time_label.setVisible(False)
             self.adjust_time_label_position()
             self.setStyleSheet("background-color: rgba(35, 38, 41, 255);")
@@ -1991,7 +2016,7 @@ class GUI(QMainWindow):
             widget = self.layout2.itemAt(i).widget()
             if widget is not None:
                 widget.setVisible(True)
-        self.text_box_client.moveCursor(QTextCursor.End)  # 滚动到最下行
+        self.text_box_client.scroll_to_bottom_if_follow()  # 仅在跟随时滚动到最下行
         x, y, width, height, screenWidth, screenHeight, currentScreen = (
             self.checkWindowInfo()
         )
@@ -2028,7 +2053,7 @@ class GUI(QMainWindow):
             self.create_time_label()  # 确保时间标签存在
             self.time_label.start_timer()  # 启动定时器
             self.text_box_client.setVisible(False)
-            self.text_box_client.setStyleSheet("background-color: rgba(46, 50, 54, 0);")
+            self.text_box_client.apply_background(0)
             self.time_label.setVisible(True)
             self.adjust_time_label_position()
             self.setStyleSheet("background-color: rgba(35, 38, 41, 0);")

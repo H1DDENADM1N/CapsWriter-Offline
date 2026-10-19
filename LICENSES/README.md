@@ -17,6 +17,7 @@
 | [PSF-2.0.txt](PSF-2.0.txt) | `PSF-2.0` | 嵌入式 CPython 3.14.8（`runtime/`）、pywin32、typing_extensions |
 | [Unicode-3.0.txt](Unicode-3.0.txt) | `Unicode-3.0` | Rust 侧 icu4x 系列、unicode-ident、zerovec 等 18 个 crate |
 | [CC-BY-4.0.txt](CC-BY-4.0.txt) | `CC-BY-4.0` | 离线中译英模型 `models/Helsinki-NLP--opus-mt-zh-en/`（需署名 Helsinki-NLP / OPUS-MT / Tatoeba） |
+| [../assets/fonts/LICENSE.txt](../assets/fonts/LICENSE.txt) | `OFL-1.1` | **`assets/fonts/MapleMono-NF-CN-Regular.ttf`**（Maple Mono NF CN 7.900，Copyright 2022 The Maple Mono Project Authors）。**该许可原文不复制到本目录**：OFL-1.1 §2 要求每份字体副本都自带版权声明与许可，因此它与字体二进制放在同一目录随包分发，详见 [docs/开源许可.md §9](../docs/开源许可.md) |
 | [LLVM-exception.txt](LLVM-exception.txt) | `Apache-2.0 WITH LLVM-exception` | `util/fun_asr_gguf/bin/libomp.dll`（LLVM OpenMP 运行时） |
 | [Zlib.txt](Zlib.txt) | `Zlib` | Rust 侧 adler2、miniz_oxide 等 |
 | [CC0-1.0.txt](CC0-1.0.txt) | `CC0-1.0` | mdn-data；numpy / torch 的许可组合之一；tinyvec |

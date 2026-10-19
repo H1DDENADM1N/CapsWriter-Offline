@@ -305,6 +305,44 @@
 > > - 监听：监听客户端输出 / 不监听，仅用作笔记本
 > > - 字符数、字节数统计：光标已选中字符数 / 总字符数 | 字节数
 
+> 不监听时文本框只作笔记本使用：客户端仍会把新日志写进文本框，但**不再自动把光标和滚动条拉到末尾**，你把光标放到哪里就留在哪里。重新勾上「监听」后恢复自动跟随。
+
+### 文本框多光标与快捷键
+
+文本框支持 VS Code 风格的多光标编辑，快捷键也与 VS Code 默认键位一致：
+
+| 快捷键 | 作用 |
+| --- | --- |
+| `Ctrl+鼠标滚轮` | 调整字体大小 |
+| `Alt+点击` | 在点击处加 / 减一个副光标 |
+| `Alt+拖拽` | 矩形列选（多行同一列） |
+| `Ctrl+Alt+↑ / ↓` | 在上 / 下一行同列加光标 |
+| `Ctrl+D` | 选中光标下的单词；再按一次选中下一个相同内容 |
+| `Ctrl+Shift+L` | 选中全文所有相同内容 |
+| `Ctrl+U` | 撤销最后添加的一个副光标 |
+| `Esc` | 收敛回单光标（无副光标时仍然是隐藏窗口） |
+| `Ctrl+/` | 注释 / 取消注释涉及的行 |
+| `Ctrl+Shift+K` | 删除整行 |
+| `Alt+↑ / ↓` | 上移 / 下移当前行 |
+| `Shift+Alt+↑ / ↓` | 向上 / 向下复制当前行 |
+| `Ctrl+F` | 打开查找栏（回车找下一个，`Esc` 关闭） |
+
+> 多光标下的输入、退格、删除、回车会同时作用于所有光标；一次输入只占一步撤销，`Ctrl+Z` 可整体撤回。
+
+> `Ctrl+Shift+K` 删除整行、`Shift+Alt+↑ / ↓` 复制行后，光标停在**新行同一列**（与 VS Code 一致），不会跳到行首。
+
+### 文本框字体
+
+文本框默认使用 **Maple Mono NF CN**（文件 `MapleMono-NF-CN-Regular.ttf`，Version 7.900），一款带 Nerd Font 图标与中文全宽的等宽字体，日志列对齐不会错位。
+
+字体查找顺序：程序目录 `assets/fonts/MapleMono-NF-CN-Regular.ttf` → `C:\Windows\Fonts` → 用户字体目录 `%LOCALAPPDATA%\Microsoft\Windows\Fonts`。
+
+- 便携包已内置 ttf，免安装即可生效
+- 都找不到时**保持系统默认字体**，不会静默替换成 Tahoma 一类的替代字体
+- `Ctrl+鼠标滚轮` 缩放字号时字体族不丢失
+
+> 📜 该字体以 **SIL Open Font License 1.1（OFL-1.1）** 授权，`Copyright 2022 The Maple Mono Project Authors`，上游为 [subframe7536/maple-font](https://github.com/subframe7536/maple-font)。许可原文随包放在 `assets/fonts/LICENSE.txt`，义务清单见 [开源许可.md](docs/开源许可.md) 第 9 节。
+
 </details>
 
 ---
@@ -411,6 +449,7 @@ Copyright (c) 2026 H1DDENADM1N, JoanthanWu (graphical interface package branch)
 | 前端依赖（pnpm，`edit_config_gui/`） | 121 个包 | MIT 为主 | lightningcss（MPL-2.0） |
 | Rust 依赖（`Cargo.lock`） | 441 个 crate | MIT / Apache-2.0 双许可为主 | MPL-2.0 ×5（文件级弱 copyleft），**无 GPL/LGPL/AGPL** |
 | 随包分发的原生二进制 | 7 个 | MIT、Apache-2.0 | **FFmpeg / FFplay（GPL-2.0-or-later）** |
+| 随包分发的字体 | 1 套（`assets/fonts/`，约 19.6 MB） | **OFL-1.1（SIL Open Font License 1.1）** | 无代码传染性（但须随包附许可原文、不得单独售卖） |
 | 内嵌 / 移植的第三方脚本 | 4 个 | MIT、未声明 | **GetCaretPosEx.ahk、app-list.ahk（派生自 AGPL-3.0 的 InputTip）** |
 | 离线 AI 模型权重 | 6 套 | Apache-2.0、CC-BY-4.0、FunASR 模型协议 | 无（但含署名义务） |
 
@@ -425,15 +464,22 @@ Copyright (c) 2026 H1DDENADM1N, JoanthanWu (graphical interface package branch)
 3. **输入状态提示脚本（AGPL-3.0）**
    `util/ahk/GetCaretPosEx.ahk`、`util/ahk/app-list.ahk` 移植自 [abgox/InputTip](https://github.com/abgox/InputTip)（AGPL-3.0，Copyright (C) 2023-present abgox），以明文源码随包分发，许可全文见 <https://www.gnu.org/licenses/agpl-3.0.html>。
 
-4. **离线 AI 模型**
+4. **文本框字体（OFL-1.1）**
+   `assets/fonts/MapleMono-NF-CN-Regular.ttf` 为 **Maple Mono NF CN 7.900**，来自 [subframe7536/maple-font](https://github.com/subframe7536/maple-font)，`Copyright 2022 The Maple Mono Project Authors`，以 **SIL Open Font License 1.1** 授权。许可原文与字体同目录随包（`assets/fonts/LICENSE.txt`），OFL-1.1 全文见 <https://openfontlicense.org>。
+   - 字体**未经修改**（与公开发布的 Maple Mono 原版字节一致），因此沿用原族名合法（OFL-1.1 §3 保留字体名条款）
+   - 字体作为**独立资源**随包，不被链接进任何二进制；OFL-1.1 只约束字体本身，**不影响**本项目 MIT 代码
+   - 你可以用同族字体替换它；若**修改**字体，则须改用非保留族名并标注为修改版
+   - 详细义务清单见 [开源许可.md](docs/开源许可.md) 第 9 节
+
+5. **离线 AI 模型**
    - SenseVoice / Paraformer / 标点模型：Apache-2.0，来自 ModelScope `iic` 系列与 [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)。
    - Fun-ASR 权重：适用 [FunASR Model Open Source License Agreement v1.1](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE)，允许自由使用与修改，但**必须标注来源并保留模型名称**。
    - 中译英模型 [Helsinki-NLP/opus-mt-zh-en](https://huggingface.co/Helsinki-NLP/opus-mt-zh-en)：**CC-BY-4.0**，再分发需署名 Helsinki-NLP / OPUS-MT / Tatoeba。
 
-5. **在线翻译服务**
+6. **在线翻译服务**
    [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate)（AGPL-3.0）仅通过 HTTP API 调用，本项目**不复制其代码**，故 AGPL 不传染；[DeepLX](https://github.com/OwO-Network/DeepLX) 以 MIT 许可发布，其 `deeplx_windows_amd64.exe` 随包分发。
 
-> 若你要**二次分发**本项目的发布包（含整合包），请先阅读 [开源许可.md](docs/开源许可.md) 第 11 节的合规风险清单与第 12 节的再发布检查清单。
+> 若你要**二次分发**本项目的发布包（含整合包），请先阅读 [开源许可.md](docs/开源许可.md) 第 12 节的合规风险清单与第 13 节的再发布检查清单。
 
 ---
 
