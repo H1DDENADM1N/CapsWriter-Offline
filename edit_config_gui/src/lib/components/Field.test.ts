@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Field → widgets/index → m3-svelte 的 barrel 会连带求值 Slider，而 svelte/motion
@@ -160,6 +161,61 @@ describe('Field 只读派生', () => {
 
     expect(navStore.current()).toBe('modelPaths');
     expect(navStore.highlight()).toBe(fieldId(['model_paths', 'funasr_llm_path']));
+  });
+});
+
+describe('Field 跳转定位', () => {
+  const scrollSpy = vi.fn();
+
+  beforeEach(() => {
+    scrollSpy.mockClear();
+    // jsdom 没有实现 scrollIntoView，跳转定位只能靠打桩观察
+    Element.prototype.scrollIntoView = scrollSpy as unknown as Element['scrollIntoView'];
+  });
+
+  it('focus() 到本行时把它滚到视口中部并闪一次', async () => {
+    const { container } = render(Field, { field: addrField });
+    const row = container.querySelector('.field')!;
+
+    expect(row.classList.contains('flash')).toBe(false);
+
+    navStore.focus(['server', 'addr']);
+    await tick();
+
+    expect(scrollSpy).toHaveBeenCalledTimes(1);
+    expect(scrollSpy.mock.calls[0]![0]).toMatchObject({ block: 'center' });
+    expect(row.classList.contains('flash')).toBe(true);
+  });
+
+  it('跳到别的字段时本行不滚动也不闪', async () => {
+    const { container } = render(Field, { field: addrField });
+
+    navStore.focus(['server', 'model']);
+    await tick();
+
+    expect(scrollSpy).not.toHaveBeenCalled();
+    expect(container.querySelector('.field')!.classList.contains('flash')).toBe(false);
+  });
+
+  it('同一项连跳两次要再滚一次（highlight 没变也得重跑 effect）', async () => {
+    const { container } = render(Field, { field: addrField });
+
+    navStore.focus(['server', 'addr']);
+    await tick();
+    navStore.focus(['server', 'addr']);
+    await tick();
+
+    expect(scrollSpy).toHaveBeenCalledTimes(2);
+    // 高亮窗口内类一直挂着，动画只播一次；highlight 清掉后类才消失
+    expect(container.querySelector('.field')!.classList.contains('flash')).toBe(true);
+  });
+
+  it('没跳转过时任何行都不闪', async () => {
+    const { container } = render(Field, { field: addrField });
+    await tick();
+
+    expect(scrollSpy).not.toHaveBeenCalled();
+    expect(container.querySelector('.field')!.classList.contains('flash')).toBe(false);
   });
 });
 

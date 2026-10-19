@@ -37,7 +37,7 @@ pnpm install
 pnpm dev          # 只起 Vite，浏览器里看 UI（IPC 会提示「不在 Tauri 窗口中运行」）
 pnpm dev:tauri    # 起完整窗口，可读写配置
 
-pnpm test         # 前端 181 个用例 / 13 个文件（schema 12 · 拼音 8 · 搜索 15 · 主题 14 · 缩放 13 · 翻页键 14 · stores 27 · 字段行 9 · 控件 22 · 保存 9 · 导航 13 · 面板 7 · 状态 18）
+pnpm test         # 前端 187 个用例 / 13 个文件（schema 12 · 拼音 8 · 搜索 15 · 主题 14 · 缩放 13 · 翻页键 14 · stores 27 · 字段行 13 · 控件 22 · 保存 9 · 导航 15 · 面板 7 · 状态 18）
 pnpm check        # svelte-check，必须 0 error 0 warning
 pnpm gen:schema-paths   # 改了 schema 后重新生成 Rust 侧的键清单
 
@@ -114,6 +114,14 @@ cargo test --release   # lib 119 + tests/coverage.rs 2
   用快捷键或滚轮缩回 100% 也会消失，因为按钮看的是状态而不是某一次点击。
 - **翻页键**在焦点位于 `input`/`textarea`/`select`/可编辑区里时**不接管**，命令面板或保存预览
   对话框开着时也不接管——那些地方的方向键归控件自己。判定逻辑在 `lib/scrollKeys.ts`，是纯函数。
+
+## 跳转定位与高亮
+
+从搜索结果（`Ctrl+F`）跳转，或点只读派生键的「跳转到『…』」，都会切到目标键所在的页，**并把那一行滚到视口中部**，同时让该行闪一次。
+
+- 跳转只经过 `stores/nav.svelte.ts` 的 `focus(segments)`：它负责切页、记下要高亮的 `fieldId`，并在 1.5 秒后自己清掉。页 id 靠 `pageOfSegments()` 反查而不是拿 `segments[0]` 猜——`client.zhipuai` 属于「AI 服务商」页、`client.prompt_style` 属于「提示风格」页，按段名猜会跳错页。
+- 真正滚动的是 `Field.svelte` 里的 `$effect`：它读 `navStore.pulse()`（每次 `focus()` 自增的计数器）而不是只读 `highlight`，否则连着跳同一项时 `highlight` 的值没变，`$effect` 不重跑，滚动会停在上一轮。滚动用 `block: 'center'`，系统开了「减少动画」时用 `behavior: 'auto'`。
+- 闪烁是**声明式**的 `class:flash`，由 `highlight === id && pulse > 0` 推导，动画 1.4 秒播一次。**不能**用 `classList.add('flash')`：这一行的 `class` 属性里有 `class:wide` / `class:bool` 动态指令，Svelte 会在后续更新时整串重写 class 属性，手加的类当场被抹掉（症状是「怎么都不闪」）。同理，`@keyframes` 只改背景与描边、不做位移，免得把正在读的行推走。
 
 ## 改 schema 的注意事项
 

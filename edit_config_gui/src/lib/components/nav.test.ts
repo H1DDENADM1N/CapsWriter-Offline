@@ -132,6 +132,25 @@ describe('Sidebar', () => {
   });
 });
 
+describe('navStore.pulse', () => {
+  it('每次 focus() 自增，同一项连跳两次也自增（闪烁靠它重播）', () => {
+    const before = navStore.pulse();
+
+    navStore.focus(['server', 'addr']);
+    expect(navStore.pulse()).toBe(before + 1);
+
+    // highlight 值没变，靠 pulse 才能让「再闪一次」成立
+    navStore.focus(['server', 'addr']);
+    expect(navStore.pulse()).toBe(before + 2);
+  });
+
+  it('普通切页不参与计数', () => {
+    const before = navStore.pulse();
+    navStore.go(pages[1]!.id);
+    expect(navStore.pulse()).toBe(before);
+  });
+});
+
 describe('TopBar', () => {
   it('显示当前页标题', async () => {
     const { getByRole } = render(TopBar);

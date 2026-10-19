@@ -12,6 +12,15 @@ let current = $state(pages[0]?.id ?? 'server');
 let highlight = $state<string | null>(null);
 
 /**
+ * 每次 `focus()` 自增的计数器。
+ *
+ * 高亮本身是个字符串：连着两次跳同一项时它的值不变，`$effect` 不会重跑，
+ * 于是「再闪一次」不成立。计数器把「又跳了一次」这个事件单独表达出来，
+ * 消费方（`Field`）靠它重播滚动与闪烁动画。
+ */
+let pulse = $state(0);
+
+/**
  * 高亮持续时间。
  *
  * 1.5 秒是「肉眼能跟上、又不至于挡着看」的折中；太短会以为没跳，太长下一跳会打架。
@@ -31,6 +40,9 @@ export const navStore = {
   current: (): string => current,
 
   highlight: (): string | null => highlight,
+
+  /** 跳转事件计数：每 `focus()` 一次 +1，见 `pulse` 变量的注释 */
+  pulse: (): number => pulse,
 
   /** 切页并清掉残留高亮（用户主动切页时不该还亮着上一页的字段） */
   go(id: string): void {
@@ -55,6 +67,7 @@ export const navStore = {
 
     clearHighlightTimer();
     highlight = fieldId(segments);
+    pulse += 1;
     timer = setTimeout(() => {
       highlight = null;
       timer = null;
@@ -66,5 +79,6 @@ export const navStore = {
     clearHighlightTimer();
     current = pages[0]?.id ?? 'server';
     highlight = null;
+    pulse = 0;
   },
 };
