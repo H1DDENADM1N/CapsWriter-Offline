@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@ktibow/iconset-material-symbols':
+        specifier: 0.0.1764827375
+        version: 0.0.1764827375
       '@ktibow/material-color-utilities-nightly':
         specifier: ^0.4.1772748028000
         version: 0.4.1772748028000
@@ -18,6 +21,9 @@ importers:
         specifier: 7.2.1
         version: 7.2.1(@ktibow/material-color-utilities-nightly@0.4.1772748028000)(svelte@5.57.2)(vite-plugin-functions-mixins@0.4.1(vite@8.3.4(@types/node@24.19.2)))
     devDependencies:
+      '@iconify/types':
+        specifier: ^2.0.0
+        version: 2.0.0
       '@sveltejs/vite-plugin-svelte':
         specifier: 7.3.1
         version: 7.3.1(svelte@5.57.2)(vite@8.3.4(@types/node@24.19.2))

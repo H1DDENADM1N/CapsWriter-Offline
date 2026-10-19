@@ -38,7 +38,9 @@
 >
 > `edit_config_gui` 前端从手写样式迁移到 [m3-svelte](https://kendell.dev/m3-svelte/) 的 MD3 组件：侧栏、顶栏、状态栏、表单控件、下拉、保存预览与搜索面板全部换成 MD3 外观。深浅色与主题色来自注册表（`AppsUseLightTheme` 定深浅，`ColorizationColor` 与 `Control Panel\Colors\Hilight` 给主题色候选），前端每 3 秒轮询一次，在 Windows 设置里改完界面自己跟着变，没有额外开关。
 >
-> 同期：枚举下拉列表改为页面内渲染的 MD3 菜单（此前在 WebView2 里是永远浅色的系统菜单，主题管不到）；新增 `Ctrl+=`／`Ctrl+-`／`Ctrl+滚轮` 缩放与顶栏「还原」按钮；搜索快捷键由 `Ctrl+K` 改为 `Ctrl+F`；`PageUp`/`PageDown`/`↑`/`↓` 可滚动页面；初始窗口宽度 1000 → 1122px。
+> 同期：枚举下拉列表改为页面内渲染的 MD3 菜单（此前在 WebView2 里是永远浅色的系统菜单，主题管不到）；新增 `Ctrl+=`／`Ctrl+-`／`Ctrl+滚轮` 缩放与顶栏「还原」按钮；搜索快捷键由 `Ctrl+K` 改为 `Ctrl+F`；`PageUp`/`PageDown`/`↑`/`↓` 可滚动页面；初始窗口宽度 1000 → 1188px。
+>
+> 每个配置项左侧配了一张 24px 的 Material Symbols 图形标志，标题与说明整体右移、与图标分两列对齐（参照 Windows 设置的排版），搜索面板的结果行用同一个图标。161 个键逐项登记在 `lib/fieldIcons.ts`，新增字段忘了配图标会在测试里红。
 
 ## 使用 `Tauri 2` + `Svelte 5` 重构 `edit_config_gui` 
 
@@ -496,11 +498,12 @@ pnpm build:dist
 
 产物有两份：`edit_config_gui/src-tauri/target/release/edit_config_gui.exe`（构建产物）与仓库根的 `edit_config_gui.exe`（约 10 MB，前端资源已内嵌，旁边不需要 `dist/`）。
 
-**改了配置项之后必须同步两处索引**，否则 Rust 侧的覆盖断言会失败：
+**改了配置项之后必须同步三处索引**，否则覆盖断言或图标测试会失败：
 
 ```powershell
 pnpm gen:schema-paths               # -> src-tauri/tests/schema_paths.json
 node scripts/gen-pinyin-map.mjs     # -> src/lib/pinyin-map.json（搜索用的拼音表）
+# src/lib/fieldIcons.ts 的 FIELD_ICONS 补一行（配置项图标）
 pnpm test
 ```
 

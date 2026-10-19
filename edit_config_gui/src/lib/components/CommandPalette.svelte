@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { TextField } from 'm3-svelte';
+  import { Icon, TextField } from 'm3-svelte';
 
+  import { ICONS } from '../fieldIcons.ts';
   import { SEARCH_LIMIT, landingSegments, searchAll } from '../search.ts';
   import type { SearchHit } from '../search.ts';
   import { navStore } from '../stores/nav.svelte.ts';
@@ -125,6 +126,7 @@
                 choose(hit);
               }}
             >
+              <Icon class="mark" icon={ICONS[hit.icon] ?? ICONS.info} size={16} aria-hidden="true" />
               <span class="title">{hit.title}</span>
               <span class="path">{hit.segments.join('.')}</span>
               {#if badgeText(hit)}
@@ -228,6 +230,17 @@
     flex: 0 1 auto;
     color: var(--m3c-on-surface);
     font-size: 13px;
+  }
+
+  /* 结果行前面的图形标志：和配置项行上的是同一个图标，找起来对得上号 */
+  .row :global(.mark) {
+    flex: 0 0 auto;
+    color: var(--m3c-on-surface-variant);
+    fill: currentColor;
+  }
+
+  .row.active :global(.mark) {
+    color: var(--m3c-on-secondary-container);
   }
 
   .path {

@@ -7,11 +7,12 @@ CapsWriter-Offline 的图形化配置编辑器。Tauri 2 + Svelte 5，前端资�
 ## 它做什么
 
 - 覆盖 `config.toml` 的全部 **162 个叶子键**：151 个可编辑 + 9 个由 `model_paths` 派生的只读占位键（可一键跳转到真正生效的那一行）+ 2 个动态表条目。
+- 每个配置项左侧有 Material Symbols 图形标志，`Ctrl+F` 打开搜索面板按标题、路径、拼音或当前值找键，回车跳到目标行并闪一次高亮。
 - 保存前**预览 unified diff**，确认后才写盘；写入用 `ReplaceFileW` 原子替换，原文件备份为 `config.toml.bak`。
 - 注释、键序、行尾注释、CRLF、值类型（字符串型的端口、浮点、布尔）全部保持原样——`toml_edit` 在保留装饰的前提下改值，不重新序列化整份文件。
 - 打开后如果文件被外部改过，保存时会报冲突，给「重新加载」与「强制覆盖」两个选择，不会静默覆盖。
 - 客户端/服务端进程是否在跑会显示在底部状态栏，可直接重启（管理员会话下会尝试降权启动）。若检测到服务端或客户端**以管理员权限运行**，对应的圆点会从绿色变**紫色**（`src/app.css` 的 `--ecg-elevated`，浅色 `#7b3fa0` / 深色 `#d0a8f5`；`aria-label` 为「服务端以管理员权限运行」/「客户端以管理员权限运行」）；此时若管理器自身不是管理员，重启会先在确认框里提示，点「以管理员权限重启」才会弹 UAC 走提权助手。
-- 默认窗口 **1122×760**（最小 760×520，可自由缩放）；缩放比例不记忆，每次打开都是 100%。
+- 默认窗口 **1188×760**（最小 760×520，可自由缩放）；缩放比例不记忆，每次打开都是 100%。
 
 ## 前置工具链
 
@@ -37,7 +38,7 @@ pnpm install
 pnpm dev          # 只起 Vite，浏览器里看 UI（IPC 会提示「不在 Tauri 窗口中运行」）
 pnpm dev:tauri    # 起完整窗口，可读写配置
 
-pnpm test         # 前端 187 个用例 / 13 个文件（schema 12 · 拼音 8 · 搜索 15 · 主题 14 · 缩放 13 · 翻页键 14 · stores 27 · 字段行 13 · 控件 22 · 保存 9 · 导航 15 · 面板 7 · 状态 18）
+pnpm test         # 前端 202 个用例 / 14 个文件（schema 12 · 拼音 8 · 搜索 17 · 主题 14 · 缩放 13 · 翻页键 14 · stores 27 · 字段行 18 · 控件 22 · 保存 9 · 导航 15 · 面板 8 · 状态 18 · 图标 7）
 pnpm check        # svelte-check，必须 0 error 0 warning
 pnpm gen:schema-paths   # 改了 schema 后重新生成 Rust 侧的键清单
 
@@ -92,6 +93,30 @@ cargo test --release   # lib 119 + tests/coverage.rs 2
   走包名 `m3-svelte/etc/styles.css` 会被 Vite 8 拒绝（该子路径只声明在 exports 的 `style` 条件下），
   而给 `resolve.conditions` 加 `style` 又会把 Svelte 的**服务端**渲染树拉进浏览器产物。
 
+## 配置项图标
+
+每个配置项左边有一个 24px 的 Material Symbols 图形标志，标题与说明文字整体右移、与图标分两列对齐（像 Windows 设置那样），搜索面板的结果行用的是同一个图标，靠图形认行比只靠标题快。
+
+- 图标数据来自 `@ktibow/iconset-material-symbols`（Iconify 格式，每个图标一个 `.js`）。**必须逐个具名导入**
+  （`import translate from '@ktibow/iconset-material-symbols/translate.js'`）：整包一万五千多个图标，
+  `import * as` 命名空间导入摇不掉树，产物会直接涨十几 MB。渲染交给 `m3-svelte` 的 `Icon`
+  （`{ icon, size }`，内部 `{@html icon.body}`），尺寸 24px、颜色取 `--m3c-on-surface-variant`——
+  图标是索引，标题才是正文，不抢层级。搜索面板是密集列表，那里仍是 16px。
+- 布局是 `图标列 + 文字列`（`.label { display:flex; gap:12px }`，`.text` 里放标题与说明），
+  不是把图标塞进标题行——塞进标题行时说明文字会从图标下面绕过去，多行说明看着像掉了一级缩进。
+  图标对标题中线用 `margin-top:-2px` 校正（24px 图标与 20px 行高的标题以顶边对齐时，图标中心会低 2px）。
+- 哪一行用哪个图标，全在 `lib/fieldIcons.ts` 里一张 `FIELD_ICONS` 表（键是字段的 `path`，161 条逐项登记），
+  **不写进 schema 字段对象**：schema 里大量字段由 `dirField()`/`fileField()`/`mkField()` 工厂批量生成，
+  逐条塞图标会让工厂签名变吵，而集中成表加字段时只改一处。161 条里用到 **91 个不同图形**——
+  同一概念才共用（端口一律 `settings-ethernet`、热键一律 `keyboard` 系、模型文件 `file-present`、
+  目录 `folder`、顶层开关用它开启的那件事的图标），没有为了凑「每个都不重样」硬换图形。
+- 没登记的新字段不会空白，按控件类型兜底（`FALLBACK_BY_WIDGET`：布尔 `toggle-on`、路径 `folder`、
+  长文本 `subject`……）。`fieldIcons.test.ts` 会断言「`allFields()` 里每一条都登记过」「没有指向已删除字段的陈旧条目」
+  「映射里的名字都真的 import 进来了」「每张图标都是可渲染的 Iconify 数据」，所以加字段忘了配图标会在
+  `pnpm test` 里红，而不会悄悄退化成兜底。
+- 代价是前端包 **+38 kB**（285 → 323 kB），换来的是不用联网取图标、也不受系统字体里图形子集的影响。
+  逐图标导入时 Vite 只打包真正 import 的那几十个；换成 `import * as` 会直接涨到十几 MB。
+
 ## 缩放与键盘
 
 | 快捷键 | 作用 |
@@ -127,11 +152,12 @@ cargo test --release   # lib 119 + tests/coverage.rs 2
 
 字段元数据在 `src/lib/schema/*.ts`，是**唯一**的界面来源：控件、校验器、显隐条件、搜索关键词都由它驱动。
 
-改完必须同步三处，否则测试会红：
+改完必须同步四处，否则测试会红：
 
 1. `pnpm gen:schema-paths` —— 生成 `src-tauri/tests/schema_paths.json`；
 2. `node scripts/gen-pinyin-map.mjs` —— 新增标题里的汉字要进拼音表，否则 `Ctrl+F` 搜不到；
-3. `pnpm test` —— `coverage.test.ts`（前端）与 `tests/coverage.rs`（Rust）会双向核对「模板里的键」与「schema 里的键」是否一致。
+3. `src/lib/fieldIcons.ts` 的 `FIELD_ICONS` 补一行 —— 新字段没有图标会让 `fieldIcons.test.ts` 红；
+4. `pnpm test` —— `coverage.test.ts`（前端）与 `tests/coverage.rs`（Rust）会双向核对「模板里的键」与「schema 里的键」是否一致。
 
 `pinyin-pro` 只在生成脚本里用，运行期不加载。
 
@@ -165,6 +191,7 @@ edit_config_gui/
 │  ├─ lib/stores/        # 配置状态、保存状态机、导航、命令面板、主题、缩放
 │  ├─ lib/theme.ts       # 种子色 → MD3 色板（纯函数，可测试）
 │  ├─ lib/scrollKeys.ts  # 翻页/方向键该不该接管（纯函数，可测试）
+│  ├─ lib/fieldIcons.ts  # 配置项 → Material Symbols 图标（一张表 + 控件兜底）
 │  └─ bridge.ts          # 唯一 import invoke 的地方
 ├─ src-tauri/src/        # Rust
 │  ├─ config_doc.rs      # 解析 / CRLF 归一化 / 叶子枚举

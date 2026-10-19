@@ -13,6 +13,7 @@
 
 import { allFields, fieldById, fieldId, pages } from './schema/index.ts';
 import type { FieldMeta, JsonValue } from './schema/types.ts';
+import { iconNameForField } from './fieldIcons.ts';
 import { fullPinyinCandidates, hanRuns, initialCandidates } from './pinyin.ts';
 import { configStore, isVisible } from './stores/config.svelte.ts';
 
@@ -24,6 +25,8 @@ export interface SearchHit {
   page: string;
   score: number;
   matchedBy: 'title' | 'segment' | 'pinyin' | 'initial' | 'note';
+  /** MD3 图形标志名（kebab），与配置项行上的图标一致 */
+  icon: string;
   /** `visibleWhen` 不满足 → 'hidden'；派生只读键 → 'readonly' */
   badge?: 'hidden' | 'readonly';
   /** 仅 `badge === 'hidden'`：需要先开启哪个控制字段 */
@@ -41,6 +44,8 @@ interface Prep {
   id: string;
   order: number;
   page: string;
+  /** 图标名只在建索引时算一次：161 项 × 每次按键的搜索都查一遍表没有必要 */
+  icon: string;
   runs: string[];
   full: string[];
   initials: string[];
@@ -64,6 +69,7 @@ function prepAll(): Prep[] {
           id: fieldId(meta.segments),
           order: order++,
           page: page.title,
+          icon: iconNameForField(meta),
           runs,
           full: runs.flatMap((r) => fullPinyinCandidates(r)),
           initials: runs.flatMap((r) => initialCandidates(r)),
@@ -144,6 +150,7 @@ function dynamicHits(q: string, values: Record<string, JsonValue>): SearchHit[] 
         segments: [...prep.meta.segments, key],
         title: key,
         page: prep.page,
+        icon: prep.icon,
         score: 700,
         matchedBy: 'title',
         dynamicKey: key,
@@ -180,6 +187,7 @@ export function searchAll(q: string): { hits: SearchHit[]; truncated: boolean } 
       segments: [...p.meta.segments],
       title: p.meta.title,
       page: p.page,
+      icon: p.icon,
       score: s.score,
       matchedBy: s.matchedBy,
     };

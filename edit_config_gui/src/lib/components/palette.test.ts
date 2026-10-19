@@ -103,6 +103,17 @@ describe('命令面板', () => {
     expect(navStore.highlight()).toBe(fieldId(['server', 'speech_recognition_port']));
   });
 
+  it('每条结果前面带 MD3 图形标志', async () => {
+    render(CommandPalette);
+    await openWith('adb_addr');
+
+    const row = document.querySelector('[role="option"]')!;
+    const mark = row.querySelector('.mark');
+    expect(mark).toBeTruthy();
+    expect(mark!.querySelector('path')).not.toBeNull();
+    expect(mark!.getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('点击遮罩关闭，点击面板本身不关闭', async () => {
     render(CommandPalette);
     await openWith();

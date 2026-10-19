@@ -11,7 +11,7 @@
   },
   "app": {
     "windows": [
-      { "title": "配置编辑器", "width": 1122, "height": 760,
+      { "title": "配置编辑器", "width": 1188, "height": 760,
         "minWidth": 760, "minHeight": 520, "resizable": true }
     ],
     "security": { "csp": null }

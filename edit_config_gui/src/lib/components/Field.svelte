@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { Icon } from 'm3-svelte';
+
+  import { iconForField } from '../fieldIcons.ts';
   import { fieldId } from '../schema/index.ts';
   import type { FieldMeta } from '../schema/types.ts';
   import { configStore } from '../stores/config.svelte.ts';
@@ -11,6 +14,9 @@
   const value = $derived(configStore.values()[id]);
   const error = $derived(configStore.errorOf(id));
   const dirty = $derived(configStore.dirtyIds().has(id));
+
+  /** MD3 图形标志：按 `field.path` 查表（表在 `lib/fieldIcons.ts`） */
+  const icon = $derived(iconForField(field));
 
   let row = $state<HTMLDivElement | null>(null);
 
@@ -71,15 +77,18 @@
 
   <div class="field" bind:this={row} class:wide={field.widget === 'longText' || field.widget === 'dynamicTable'} class:bool={field.widget === 'bool'} class:flash={flashing}>
     <div class="label">
-      <span class="row">
-        <span class="title">{field.title}</span>
-        {#if dirty}
-          <span class="dirty">已修改</span>
+      <Icon class="mark" {icon} size={24} aria-hidden="true" />
+      <div class="text">
+        <span class="row">
+          <span class="title">{field.title}</span>
+          {#if dirty}
+            <span class="dirty">已修改</span>
+          {/if}
+        </span>
+        {#if field.note}
+          <p class="note">{field.note}</p>
         {/if}
-      </span>
-      {#if field.note}
-        <p class="note">{field.note}</p>
-      {/if}
+      </div>
     </div>
 
     <div class="control">
@@ -154,15 +163,39 @@
   }
 
   .label {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
     min-width: 0;
     /* 说明文字不要跟着宽窗口拉成一整行，读起来会串行 */
     max-width: 46em;
   }
 
+  /*
+   * 配置项的 MD3 图形标志，24px（参照 Windows 设置的图标尺寸）。
+   *
+   * 图标独立成列、标题与说明整体右移，像 Windows 设置那样「一列图标 + 一列文字」——
+   * 图标不挤在标题行里，说明文字也和标题左对齐，多行时不会绕到图标下面。
+   *
+   * 用 on-surface-variant 而不是正文色：图标是「索引」，标题才是要读的字。
+   * `margin-top: -2px` 是把 24px 的图标在视觉上压到 20px 行高的标题中线上
+   * （两者都以顶边为基准时，图标中心比标题中心低 2px）。
+   */
   .row {
     display: flex;
     gap: 8px;
     align-items: center;
+  }
+
+  .label :global(.mark) {
+    flex: 0 0 auto;
+    margin-top: -2px;
+    color: var(--m3c-on-surface-variant);
+    fill: currentColor;
+  }
+
+  .text {
+    min-width: 0;
   }
 
   /* titleSmall：13px/500，是 MD3 表单里字段标签的层级 */

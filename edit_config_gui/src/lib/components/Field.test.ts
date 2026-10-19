@@ -219,6 +219,65 @@ describe('Field 跳转定位', () => {
   });
 });
 
+describe('Field 图标', () => {
+  it('渲染该配置项的 MD3 图形标志（按 path 查表）', () => {
+    const { container } = render(Field, { field: addrField });
+
+    // server.addr 在表里登记的是 lan
+    const mark = container.querySelector('.label svg');
+    expect(mark).toBeTruthy();
+    expect(mark!.getAttribute('viewBox')).toBe('0 0 24 24');
+    // Iconify 数据是把 path 塞进 body，所以内容里一定有 <path>
+    expect(mark!.innerHTML).toContain('<path');
+  });
+
+  it('图标是 24px，独立成列且排在标题之前', () => {
+    const { container } = render(Field, { field: addrField });
+
+    const label = container.querySelector('.label')!;
+    const mark = label.querySelector('svg')!;
+    const text = label.querySelector('.text')!;
+
+    // 参照 Windows 设置：图标一列、文字一列，不是一个图标挤在标题前面
+    expect(mark.getAttribute('width')).toBe('24');
+    expect(mark.getAttribute('height')).toBe('24');
+    expect(mark.nextElementSibling).toBe(text);
+    expect(text.contains(label.querySelector('.title'))).toBe(true);
+  });
+
+  it('说明文字和标题在同一列里（不会绕到图标下面去）', () => {
+    const withNote = meta({
+      widget: 'text',
+      segments: ['server', 'addr'],
+      title: '服务端监听地址',
+      note: '服务端启动时绑定的网卡地址',
+    });
+
+    const { container } = render(Field, { field: withNote });
+    const text = container.querySelector('.text')!;
+
+    expect(text.querySelector('.title')).toBeTruthy();
+    expect(text.querySelector('.note')).toBeTruthy();
+  });
+
+  it('未登记的字段按控件类型兜底，不会渲染成空白', () => {
+    const unknownBool = meta({
+      widget: 'bool',
+      type: 'boolean',
+      segments: ['client', '没登记过的开关'],
+      title: '没登记过的开关',
+    });
+
+    const { container } = render(Field, { field: unknownBool });
+    expect(container.querySelector('.label svg')!.innerHTML).toContain('<path');
+  });
+
+  it('图标对读屏软件不可见（标题已经说明了一切）', () => {
+    const { container } = render(Field, { field: addrField });
+    expect(container.querySelector('.label svg')!.getAttribute('aria-hidden')).toBe('true');
+  });
+});
+
 describe('Section', () => {
   it('渲染标题、说明与全部字段', () => {
     const section: SectionMeta = {

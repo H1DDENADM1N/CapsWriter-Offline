@@ -106,6 +106,21 @@ describe('动态表', () => {
   });
 });
 
+describe('命中结果携带 MD3 图标名', () => {
+  it('普通字段使用为该配置项登记的图标', () => {
+    expect(searchFields('adb_addr')[0]!.icon).toBe('wifi-tethering');
+  });
+
+  it('动态表条目沿用其所属字段的图标', () => {
+    configStore.setValue(fieldId(['client', 'additional_special_apps']), {
+      'vlc.exe': { name: 'VLC' },
+    });
+
+    const dyn = searchFields('vlc').find((h) => h.dynamicKey === 'vlc.exe');
+    expect(dyn!.icon).toBe('apps');
+  });
+});
+
 describe('secret 与截断', () => {
   it('secret 的值不参与匹配', () => {
     configStore.setValue(fieldId(['client', 'openai', 'api_key']), 'sk-abcdef');
