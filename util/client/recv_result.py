@@ -35,7 +35,7 @@ async def recv_result(logger: Optional[Logger] = None):
     if not await check_websocket():
         return
 
-    with console.resize(width=49):
+    with console.resize(width=41):
         console.rule("[green]连接成功")
 
     console.print(
@@ -234,12 +234,12 @@ async def recv_result(logger: Optional[Logger] = None):
             online_translate_done = False
             Cosmic.opposite_state = False
     except websockets.ConnectionClosedError:
-        with console.resize(width=49):
+        with console.resize(width=41):
             console.rule("[red]连接断开")
 
         _logger.error("连接断开，WebSocket连接关闭错误。")
     except websockets.ConnectionClosedOK:
-        with console.resize(width=49):
+        with console.resize(width=41):
             console.rule("[red]连接断开")
 
         _logger.error("连接断开，WebSocket连接正常关闭。")

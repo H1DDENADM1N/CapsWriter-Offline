@@ -7,7 +7,7 @@ from util.config import ClientConfig as Config
 
 
 def show_mic_tips():
-    with console.resize(width=55):
+    with console.resize(width=40):
         console.rule("[bold #d55252]CapsWriter Offline Client")
     # console.print(f'\n项目地址：[cyan underline]https://github.com/HaujetZhao/CapsWriter-Offline', end='\n\n')
     markdown = f"""
@@ -42,7 +42,7 @@ def show_mic_tips():
 3. 当前快捷键是 {Config.speech_recognition_shortcut}，你可以打开 `config.toml` 进行修改
     """
     console.print(Markdown(markdown), highlight=True)
-    with console.resize(width=45):
+    with console.resize(width=41):
         console.rule()
     console.print(f"\n当前基文件夹：[cyan underline]{os.getcwd()}")
     console.print(
