@@ -548,7 +548,7 @@ pnpm build:dist
 ```toml
 # 调试
 [debug]
-logger_level = "DEBUG" # 调试日志级别
+logger_level = "ERROR" # 调试日志级别
 # 级别名称
 # TRACE           5
 # DEBUG           10
