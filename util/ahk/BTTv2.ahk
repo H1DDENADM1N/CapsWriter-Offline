@@ -4,6 +4,11 @@
   ;BTT作者v1：https://github.com/telppa/BeautifulToolTip
   ;这里只是删除了开头的例子, 所以跟`https://github.com/liuyi91`有那么一点点不同。可能需要手动导入BTTv2.ahk文件
   ;修正1104行的报错.(浮点数转换为整数) 2024.11.26
+  ;
+  ;许可 / License: 上游 telppa/BeautifulToolTip 与 liuyi91 的 v2 移植版
+  ;均未声明开源许可证（无 LICENSE 文件），因此本文件默认视为「保留所有权利」。
+  ;它随本项目分发仅用于满足功能依赖；如需再分发或商用，请先联系原作者取得授权。
+  ;详见 docs/开源许可.md 第 7 节与第 11 节第 4 条。
   btt(Text:="", X:="", Y:="", WhichToolTip:="", BulitInStyleOrStyles:="", BulitInOptionOrOptions:="")
   {
     static BTT

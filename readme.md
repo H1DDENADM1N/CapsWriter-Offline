@@ -25,6 +25,7 @@
 - [✨ 特性](#-特性)
 - [⬇️ 下载地址](#-下载地址)
 - [❗ 注意事项](#-注意事项)
+- [📜 开源许可](#-开源许可)
 - [🤓 源码运行](#-源码运行)
 - [🔧 修改配置](#-修改配置)
 - [🪳 提交 Bug](https://github.com/H1DDENADM1N/CapsWriter-Offline/issues)
@@ -383,6 +384,58 @@
 13. 如果把本项目放在 **DSH 等“受代理工作区保护”的目录**（工作区登记表里的 workspace 路径，例如 `Documents\CapsWriter-Offline`）里直接运行，客户端会出现“程序正常启动、无任何报错，但托盘图标不显示”的现象。原因：这类目录被宿主统一打了 **Low 完整性沙箱标签**（目录 ACL 含 Low 标签 + 每目录独立的 S-1-4 沙箱标识 + Everyone 禁止删除子目录），从该目录启动的进程会继承 Low 完整性，它向任务栏 explorer（Medium 完整性）注册托盘图标时会被 UIPI 静默拦截。使用管理员权限（如 `gsudo`）启动可以把进程提到 High 完整性从而“绕过”这一个拦截，但代价是客户端整体以管理员权限运行，会带来与第 8 条相反的输入/UIPI 副作用，不推荐作为日常用法。正确做法：把本项目复制到受保护工作区**之外的普通目录**（例如 `C:\CapsWriter-Offline`）后运行，用普通权限即可正常显示托盘图标。开发、调试脚本请留在工作区内；日常运行 GUI 请在普通目录中进行。
 
     13.1 如果在 DSH 中删除了工作区，**不会自动恢复目录 ACL**——DSH 的登记表（`workspaces.json`）只记录 `id / path / sessionIds`，不保存加沙箱前的 ACL 快照，取消登记后 Low 标签、S-1-4 沙箱标识、Everyone 禁止删除子目录这三条 ACL 仍原样留在磁盘上。如需还原，请在管理员终端执行：`icacls "<目录>" /setintegritylevel M` 把完整性标签改回 Medium，再 `icacls "<目录>" /reset /t /c` 把 DACL 重置为从父目录继承的默认值，从而清掉 S-1-4 沙箱标识和 Everyone 禁止删除。注意：这是破坏性修改，等于亲手拆掉该目录的隔离，仅在确认目录已不再作为 DSH 工作区使用、且不会再被重新登记之后才执行。
+
+# 📜 开源许可
+
+本项目以 **MIT License** 发布，许可证全文见仓库根目录的 [LICENSE](LICENSE)。
+
+```text
+MIT License
+
+Copyright (c) 2026 Haujet Zhao
+Copyright (c) 2026 H1DDENADM1N, JoanthanWu (graphical interface package branch)
+```
+
+- 原版 [CapsWriter-Offline](https://github.com/HaujetZhao/CapsWriter-Offline) 由 [HaujetZhao](https://github.com/HaujetZhao) 以 MIT 许可发布，本图形界面包分支在其基础上衍生，同样遵循 MIT。
+- 你可以自由使用、复制、修改、合并、发布、再许可和/或销售本软件的副本，但**必须保留上述版权声明与本许可声明**。
+- 本软件按“原样”提供，不附带任何明示或暗示的担保。
+
+## 第三方组件与开源协议
+
+本项目使用了大量优秀的开源项目，完整清单（含版本、许可证、用途、合规风险）请见 **[开源许可.md](docs/开源许可.md)**。以下为摘要：
+
+| 类别 | 数量 | 主要许可证 | 需注意的传染性（copyleft）组件 |
+| --- | --- | --- | --- |
+| Python 运行时（嵌入式 CPython 3.14.8） | 1 套 | PSF-2.0 | 无 |
+| Python 三方依赖（`site-packages/`） | 94 个发行版 | MIT、BSD、Apache-2.0 | **PySide6 / shiboken6（LGPL-3.0）**、certifi / clipman（MPL-2.0） |
+| 前端依赖（pnpm，`edit_config_gui/`） | 121 个包 | MIT 为主 | lightningcss（MPL-2.0） |
+| Rust 依赖（`Cargo.lock`） | 441 个 crate | MIT / Apache-2.0 双许可为主 | MPL-2.0 ×5（文件级弱 copyleft），**无 GPL/LGPL/AGPL** |
+| 随包分发的原生二进制 | 7 个 | MIT、Apache-2.0 | **FFmpeg / FFplay（GPL-2.0-or-later）** |
+| 内嵌 / 移植的第三方脚本 | 4 个 | MIT、未声明 | **GetCaretPosEx.ahk、app-list.ahk（派生自 AGPL-3.0 的 InputTip）** |
+| 离线 AI 模型权重 | 6 套 | Apache-2.0、CC-BY-4.0、FunASR 模型协议 | 无（但含署名义务） |
+
+### 重点声明
+
+1. **FFmpeg / FFplay（GPL-2.0-or-later）**
+   打包版内置的 `ffmpeg.exe`、`ffplay.exe` 以 `--enable-gpl --enable-libmp3lame` 构建，整体为 GPL-2.0-or-later。本项目通过**子进程**调用它们，不与之链接，因此 GPL **不会**传染到本项目自身的 Python / Rust 代码。两个可执行文件可在 <https://ffmpeg.org/download.html> 免费获取，其源代码获取方式与完整 `./configure` 编译参数见本文档末尾的 [FFmpeg & FFplay](#ffmpeg--ffplay) 章节；许可条文见 <https://ffmpeg.org/legal.html>。
+
+2. **PySide6 / shiboken6（LGPL-3.0）**
+   以动态链接（`.pyd` / `.dll`）方式使用，未做任何修改。你可以用自编译或官方发布的同版本 PySide6 替换 `site-packages/` 中的对应文件；LGPL-3.0 全文见 <https://www.gnu.org/licenses/lgpl-3.0.html>。
+
+3. **输入状态提示脚本（AGPL-3.0）**
+   `util/ahk/GetCaretPosEx.ahk`、`util/ahk/app-list.ahk` 移植自 [abgox/InputTip](https://github.com/abgox/InputTip)（AGPL-3.0，Copyright (C) 2023-present abgox），以明文源码随包分发，许可全文见 <https://www.gnu.org/licenses/agpl-3.0.html>。
+
+4. **离线 AI 模型**
+   - SenseVoice / Paraformer / 标点模型：Apache-2.0，来自 ModelScope `iic` 系列与 [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)。
+   - Fun-ASR 权重：适用 [FunASR Model Open Source License Agreement v1.1](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE)，允许自由使用与修改，但**必须标注来源并保留模型名称**。
+   - 中译英模型 [Helsinki-NLP/opus-mt-zh-en](https://huggingface.co/Helsinki-NLP/opus-mt-zh-en)：**CC-BY-4.0**，再分发需署名 Helsinki-NLP / OPUS-MT / Tatoeba。
+
+5. **在线翻译服务**
+   [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate)（AGPL-3.0）仅通过 HTTP API 调用，本项目**不复制其代码**，故 AGPL 不传染；[DeepLX](https://github.com/OwO-Network/DeepLX) 以 MIT 许可发布，其 `deeplx_windows_amd64.exe` 随包分发。
+
+> 若你要**二次分发**本项目的发布包（含整合包），请先阅读 [开源许可.md](docs/开源许可.md) 第 11 节的合规风险清单与第 12 节的再发布检查清单。
+
+---
 
 # 🤓 源码运行
 

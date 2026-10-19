@@ -2,8 +2,12 @@
 #
 # 列表里只放「运行时需要的东西」：可执行的 exe、PyStand 要跑的 .py、runtime/、
 # 模型之外的必需数据（keywords.txt、hot-*.txt、configs/）等。
-# 源码树、设计稿、构建中间产物一律不进包——edit_config_gui 的源码、docs/、dev/
-# 都不该出现在这里；发布包里多一份源码只会增大体积并泄露开发内容。
+# 源码树、设计稿、构建中间产物一律不进包——edit_config_gui 的源码、dev/、
+# docs/superpowers/ 都不该出现在这里；发布包里多一份源码只会增大体积并泄露开发内容。
+#
+# 合规文件是例外：LICENSES/（第三方许可原文）与 docs/开源许可.md（清单与再发布
+# 检查清单）是再分发时必须随包附带的文件，readme.md 的「📜 开源许可」章节也指向它们，
+# 所以它们显式列在 archive_list.txt 里，不要因为「在 docs/ 下」就删掉。
 #
 # 依赖:
 #   7-Zip        C:\Program Files\7-Zip\7z.exe
@@ -53,23 +57,39 @@ if ($rawEntries.Count -eq 0) {
     exit 1
 }
 
-# 4. 把每个条目解析为绝对路径
-#    相对路径以脚本所在目录（项目根目录）为基准
+# 4. 把每个条目解析成绝对路径（用于校验与 __pycache__ 检索），
+#    同时算出「相对项目根目录」的写法——传给 7z 的必须是后者。
+#
+#    原因：7z 对「绝对路径的单文件」会丢掉中间目录、直接平铺到包根，
+#    对目录则保留目录名。也就是说 `docs\开源许可.md` 若以绝对路径传入，
+#    在包里会变成根目录下的 `开源许可.md`，readme.md 里的相对链接就断了。
+#    传相对路径并让 7z 以项目根为工作目录，包内层级才与仓库一致。
+#
+#    条目基准目录顺序：项目根 → 当前目录 → 脚本所在目录（dev\）
 $files = @()
+$resolvedPairs = @()
 foreach ($entry in $rawEntries) {
-    $resolved = Resolve-Path -Path $entry -ErrorAction SilentlyContinue
-    if ($resolved) {
-        $files += $resolved.Path
-    } else {
-        # 相对脚本目录再试一次
-        $candidate = Join-Path $PSScriptRoot $entry
-        $resolved2 = Resolve-Path -Path $candidate -ErrorAction SilentlyContinue
-        if ($resolved2) {
-            $files += $resolved2.Path
-        } else {
-            Write-Warning "找不到条目，已跳过: $entry"
-        }
+    $abs = $null
+    foreach ($base in @($projectRoot, (Get-Location).Path, $PSScriptRoot)) {
+        $candidate = if ([System.IO.Path]::IsPathRooted($entry)) { $entry } else { Join-Path $base $entry }
+        $r = Resolve-Path -LiteralPath $candidate -ErrorAction SilentlyContinue
+        if ($r) { $abs = $r.Path; break }
     }
+    if (-not $abs) {
+        Write-Warning "找不到条目，已跳过: $entry"
+        continue
+    }
+
+    $files += $abs
+
+    # 项目根下的条目转成相对路径；根外的条目只能传绝对路径（7z 会平铺，给出告警）
+    if ($abs.StartsWith($projectRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $rel = $abs.Substring($projectRoot.Length).TrimStart('\')
+    } else {
+        $rel = $abs
+        Write-Warning "条目不在项目根目录下，7z 会将其平铺到包根: $entry"
+    }
+    $resolvedPairs += [pscustomobject]@{ Abs = $abs; Rel = $rel }
 }
 
 Write-Host "有效文件数: $($files.Count)"
@@ -164,22 +184,33 @@ if ($SkipPycacheCleanup) {
     }
 }
 
-# 6. 组装 7-Zip 参数，文件以绝对路径逐个传入
+# 6. 组装 7-Zip 参数
+#    条目一律用「相对项目根目录」的写法，并把项目根设为工作目录，
+#    这样包内层级与仓库一致（详见第 4 步注释：绝对路径的单文件会被平铺到包根）。
+#    压缩包本身的路径也要先转成绝对路径，否则工作目录切到项目根后就找不到了。
+$archiveAbs = if ([System.IO.Path]::IsPathRooted($ArchiveName)) { $ArchiveName } else { Join-Path (Get-Location).Path $ArchiveName }
+
 $arguments = @(
     "a", "-t7z", "-mx=9", "-m0=LZMA2",
     "-md=64m", "-mfb=64",
     # -mcu 不是有效的 7-Zip 参数，会让 7z 以 "System ERROR: 参数错误" 失败，切勿加回
     "-mmt=on", "-sccUTF-8",
-    $ArchiveName
-) + $files
+    $archiveAbs
+) + ($resolvedPairs | ForEach-Object { $_.Rel })
 
 Write-Host "执行: 7z $($arguments -join ' ')"
-& $sevenZip @arguments
+Push-Location $projectRoot
+try {
+    & $sevenZip @arguments
+    $sevenZipExit = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
 
 # 7. 检查 7z 退出码
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "7-Zip 执行失败，退出码: $LASTEXITCODE"
-    exit $LASTEXITCODE
+if ($sevenZipExit -ne 0) {
+    Write-Error "7-Zip 执行失败，退出码: $sevenZipExit"
+    exit $sevenZipExit
 }
 
 Write-Host "压缩完成: $ArchiveName"
@@ -190,8 +221,8 @@ Write-Host "压缩完成: $ArchiveName"
 #      > #️⃣ SHA-256 `<SHA-256值>`
 #    7z 生成的是工作目录下的相对路径，这里统一解析成绝对路径再取文件名
 #    -ArchiveName 不带扩展名时 7z 会自动补 .7z，所以先按原名找，再按 <名>.7z 找一次
-$archivePath = $ArchiveName
-foreach ($candidate in @($ArchiveName, "$ArchiveName.7z")) {
+$archivePath = $archiveAbs
+foreach ($candidate in @($archiveAbs, "$archiveAbs.7z")) {
     if (Test-Path -LiteralPath $candidate -PathType Leaf) {
         $archivePath = (Resolve-Path -LiteralPath $candidate).Path
         break

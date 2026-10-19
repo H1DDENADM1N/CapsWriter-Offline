@@ -2,6 +2,12 @@
  * @link https://github.com/abgox/InputTip/blob/main/src/v2/InputTip.ahk
  * 
  * @link https://github.com/Tebayaki/AutoHotkeyScripts/blob/main/lib/GetCaretPosEx/GetCaretPosEx.ahk
+ *
+ * 许可 / License: AGPL-3.0
+ * 本文件移植自 abgox/InputTip（Copyright (C) 2023-present abgox，
+ * https://github.com/abgox/InputTip ），以 AGPL-3.0 许可发布。
+ * 许可全文见仓库根目录 LICENSES/AGPL-3.0.txt 或
+ * https://www.gnu.org/licenses/agpl-3.0.html
  */
 
 #Include app-list.ahk

@@ -1,8 +1,10 @@
 assets
 configs
+LICENSES
 runtime
 site-packages
 util
+docs\开源许可.md
 config.toml
 config_selector.exe
 config_selector.py

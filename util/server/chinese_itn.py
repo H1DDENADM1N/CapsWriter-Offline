@@ -1,6 +1,11 @@
 # coding: utf-8
 
 # https://github.com/HaujetZhao/Chinese-ITN/blob/master/chinese_itn.py
+#
+# 许可 / License: 上游 HaujetZhao/Chinese-ITN 仓库未放置 LICENSE 文件。
+# 该仓库与本项目（CapsWriter-Offline）为同一作者（HaujetZhao），
+# 本项目整体以 MIT 许可发布，故本文件的使用遵循项目 MIT 许可。
+# 若需单独再分发本文件，请以 MIT 许可处理并保留本注释与作者信息。
 
 """
 中文数字转阿拉伯数字 (Chinese ITN - Inverse Text Normalization)
