@@ -34,6 +34,12 @@
 <details>
 <summary><h1">展开最近更新</h1></summary>
 
+## 配置编辑器改用 Material Design 3（m3-svelte），自动跟随 Windows 深浅色与主题色
+>
+> `edit_config_gui` 前端从手写样式迁移到 [m3-svelte](https://kendell.dev/m3-svelte/) 的 MD3 组件：侧栏、顶栏、状态栏、表单控件、下拉、保存预览与搜索面板全部换成 MD3 外观。深浅色与主题色来自注册表（`AppsUseLightTheme` 定深浅，`ColorizationColor` 与 `Control Panel\Colors\Hilight` 给主题色候选），前端每 3 秒轮询一次，在 Windows 设置里改完界面自己跟着变，没有额外开关。
+>
+> 同期：枚举下拉列表改为页面内渲染的 MD3 菜单（此前在 WebView2 里是永远浅色的系统菜单，主题管不到）；新增 `Ctrl+=`／`Ctrl+-`／`Ctrl+滚轮` 缩放与顶栏「还原」按钮；搜索快捷键由 `Ctrl+K` 改为 `Ctrl+F`；`PageUp`/`PageDown`/`↑`/`↓` 可滚动页面；初始窗口宽度 1000 → 1122px。
+
 ## 使用 `Tauri 2` + `Svelte 5` 重构 `edit_config_gui` 
 
 > 优化交互逻辑，更方便且安全地修改 服务端、客户端的配置。 抛弃现有 pyside6 + siui 架构 ，toml注释保留，结构保留

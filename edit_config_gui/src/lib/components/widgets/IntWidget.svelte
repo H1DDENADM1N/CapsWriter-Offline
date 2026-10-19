@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { TextFieldOutlined } from 'm3-svelte';
   import type { WidgetProps } from './props.ts';
 
   let { field, value, error, onChange }: WidgetProps = $props();
@@ -6,7 +7,7 @@
   // 输入过程中不改写用户正在打的字：只在 change（失焦/回车）时才夹取并上报。
   // 首次渲染也**不**夹取既有值——磁盘上本来就可能存着超范围的历史值
   // （比如有人手改过 config.toml），一打开就被静默改成别的数字是数据损坏。
-  // 放在闭包里取初值：直接在 $state(...) 里写 alue 会被编译器判成
+  // 放在闭包里取初值：直接在 $state(...) 里写 value 会被编译器判成
   // 「只捕获初始值」的可疑写法并给出 state_referenced_locally 警告；
   // 这里就是**刻意**只取一次的初值，后续变化由下面的 $effect 同步。
   const initialText = (): string => (value == null ? '' : String(value));
@@ -48,33 +49,39 @@
   }
 </script>
 
-<input
-  class="w-mono"
-  type="number"
-  step="1"
-  min={field.min}
-  max={field.max}
-  aria-label={field.title}
-  aria-invalid={error ? 'true' : undefined}
-  value={text}
-  oninput={(e) => (text = e.currentTarget.value)}
-  onchange={commit}
-/>
+<!-- type=number 保留原生步进与 spinbutton 语义；m3 的 outlined 只负责外观 -->
+<div class="w-num">
+  <TextFieldOutlined
+    label=""
+    type="number"
+    step="1"
+    min={field.min}
+    max={field.max}
+    inputmode="numeric"
+    aria-label={field.title}
+    error={Boolean(error)}
+    aria-invalid={error ? 'true' : undefined}
+    value={text}
+    oninput={(e) => (text = e.currentTarget.value)}
+    onchange={commit}
+  />
+</div>
 
 <style>
-  .w-mono {
+  .w-num {
     width: 100%;
-    box-sizing: border-box;
-    padding: 6px 8px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: var(--ecg-input-bg, #fff);
-    color: inherit;
-    font: inherit;
-    font-variant-numeric: tabular-nums;
+    min-width: 0;
   }
 
-  .w-mono[aria-invalid='true'] {
-    border-color: var(--ecg-danger, #d33);
+  .w-num :global(.m3-container) {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+  }
+
+  .w-num :global(input) {
+    padding: 0 12px;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
   }
 </style>

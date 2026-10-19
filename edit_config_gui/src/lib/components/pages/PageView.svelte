@@ -33,11 +33,11 @@
    */
   .page {
     width: 100%;
-    padding: 18px 26px 80px;
+    padding: 24px 32px 96px;
   }
 
   .empty {
-    color: var(--ecg-muted, #888);
+    color: var(--m3c-on-surface-variant);
     font-size: 13px;
     line-height: 1.8;
   }

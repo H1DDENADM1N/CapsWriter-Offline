@@ -13,7 +13,8 @@
    * - done：告知备份路径 —— 这是用户唯一的后悔药入口；
    * - failed：原样显示后端文案（Rust 的错误消息带文件名和失败原因）。
    */
-  import { configStore } from '../stores/config.svelte.ts';
+  import { Button, Divider, LoadingIndicator } from 'm3-svelte';
+
   import { saveStore } from '../stores/save.svelte.ts';
 
   const phase = $derived(saveStore.phase());
@@ -65,6 +66,11 @@
 
 {#if open}
   <div class="backdrop" role="presentation" onclick={onBackdrop}>
+    <!--
+      继续用自定义遮罩 + 面板，而不是 m3 `Dialog`：Dialog 自带居中、进出场动画与
+      焦点陷阱，会和这里的窗口级 Esc、`e.target === e.currentTarget` 的遮罩点击
+      关闭语义抢事件（尤其在 committing 态，Esc 是被刻意禁掉的）。
+    -->
     <div
       class="dialog"
       role="dialog"
@@ -74,6 +80,7 @@
     >
       {#if phase.kind === 'confirm'}
         <h2 id="save-dialog-title">确认保存</h2>
+        <Divider />
         <p class="lead">以下改动将写入 config.toml（原文件会备份为 .bak）：</p>
         <section class="diff" aria-label="配置差异">
           {#each diffLines as line, i (i)}
@@ -93,44 +100,60 @@
         {/if}
 
         <div class="actions">
-          <button type="button" onclick={close}>取消</button>
-          <button type="button" class="primary" onclick={() => void saveStore.confirm(false)}>
+          <Button variant="text" onclick={close}>取消</Button>
+          <Button variant="filled" onclick={() => void saveStore.confirm(false)}>
             写入文件
-          </button>
+          </Button>
         </div>
       {:else if phase.kind === 'committing'}
         <h2 id="save-dialog-title">正在写入…</h2>
-        <p class="lead">正在替换 config.toml，请勿关闭窗口。</p>
+        <Divider />
+        <div class="committing">
+          <LoadingIndicator size={36} aria-label="正在写入配置文件" />
+          <p class="lead">正在替换 config.toml，请勿关闭窗口。</p>
+        </div>
       {:else if phase.kind === 'conflict'}
         <h2 id="save-dialog-title">配置文件已被外部修改</h2>
+        <Divider />
         <p class="lead">
           磁盘上的 config.toml 在你打开之后被改过（可能是 config_selector、其它编辑器
           或上一次会话）。为了避免覆盖别人的改动，这次保存没有执行。
         </p>
         <div class="actions">
-          <button type="button" onclick={close}>取消</button>
-          <button type="button" onclick={() => void saveStore.reloadAndReset()}>
+          <Button variant="text" onclick={close}>取消</Button>
+          <Button variant="tonal" onclick={() => void saveStore.reloadAndReset()}>
             重新加载（丢弃我的改动）
-          </button>
-          <button type="button" class="danger" onclick={() => void saveStore.confirm(true)}>
+          </Button>
+          <!--
+            危险操作用 MD3 的 filled 按钮形状，但把 primary 这组令牌在按钮内部
+            改指向 error 色：比写死一个红色背景更稳，hover/disabled 等状态仍由
+            Button 自己算。
+          -->
+          <Button
+            variant="filled"
+            style="--m3c-primary: var(--ecg-danger); --m3c-on-primary: var(--m3c-on-error);"
+            onclick={() => void saveStore.confirm(true)}
+          >
             强制覆盖
-          </button>
+          </Button>
         </div>
       {:else if phase.kind === 'done'}
         <h2 id="save-dialog-title">已保存</h2>
+        <Divider />
         <p class="lead">
           配置已写入并通过回读校验。原文件备份在 <code>{phase.backupPath}</code>。
         </p>
         <p class="lead muted">重启相关的服务进程后新配置才会生效。</p>
         <div class="actions">
-          <button type="button" class="primary" onclick={close}>关闭</button>
+          <Button variant="filled" onclick={close}>关闭</Button>
         </div>
       {:else if phase.kind === 'failed'}
         <h2 id="save-dialog-title">保存失败</h2>
+        <Divider />
         <p class="lead">config.toml 没有被改动。原始错误：</p>
         <pre class="error">{phase.error}</pre>
         <div class="actions">
-          <button type="button" onclick={close}>关闭</button>
+          <Button variant="text" onclick={close}>关闭</Button>
         </div>
       {/if}
     </div>
@@ -145,98 +168,107 @@
     align-items: center;
     justify-content: center;
     padding: 24px;
-    background: rgb(0 0 0 / 32%);
+    background: color-mix(in oklab, var(--m3c-scrim) 32%, transparent);
     z-index: 40;
   }
 
+  /* MD3 对话框：28px 圆角、24px 内边距、surface-container-high + elevation-3 */
   .dialog {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 16px;
     width: min(760px, 100%);
     max-height: 100%;
-    padding: 18px 20px;
-    border-radius: 10px;
-    background: var(--ecg-bg, #fff);
-    box-shadow: 0 18px 48px rgb(0 0 0 / 22%);
+    padding: 24px;
+    border-radius: var(--m3-shape-extra-large);
+    background: var(--m3c-surface-container-high);
+    box-shadow: var(--m3-elevation-3);
+    overflow: auto;
   }
 
   h2 {
     margin: 0;
-    font-size: 15px;
+    color: var(--m3c-on-surface);
+    font-size: 24px;
+    font-weight: 400;
+    line-height: 1.33;
   }
 
   .lead {
     margin: 0;
-    color: var(--ecg-muted, #666);
-    font-size: 12px;
+    color: var(--m3c-on-surface-variant);
+    font-size: 14px;
     line-height: 1.7;
   }
 
   .muted {
-    color: var(--ecg-muted, #888);
+    color: var(--ecg-muted);
   }
 
   code {
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: var(--ecg-hover, #f0f1f4);
-    font-family: Consolas, 'Cascadia Mono', monospace;
+    padding: 1px 6px;
+    border-radius: var(--m3-shape-extra-small);
+    background: var(--ecg-hover);
+    font-family: var(--ecg-mono);
   }
 
+  /* diff 是这屏的主角：等宽、紧凑、行与行之间不留缝，才看得出真正的增删 */
   .diff {
     flex: 1 1 auto;
     min-height: 120px;
     max-height: 46vh;
     padding: 8px 0;
     overflow: auto;
-    border: 1px solid var(--ecg-border, #dcdfe6);
-    border-radius: 6px;
-    background: var(--ecg-panel, #fafbfc);
-    font-family: Consolas, 'Cascadia Mono', monospace;
+    border: 1px solid var(--m3c-outline-variant);
+    border-radius: var(--m3-shape-medium);
+    background: var(--m3c-surface-container);
+    font-family: var(--ecg-mono);
     font-size: 12px;
     line-height: 1.55;
   }
 
   .ln {
-    padding: 0 12px;
+    padding: 0 16px;
     white-space: pre;
   }
 
   .ln.add {
-    background: var(--ecg-add-bg, rgb(47 158 68 / 12%));
+    background: var(--ecg-add-bg);
   }
 
   .ln.del {
-    background: var(--ecg-del-bg, rgb(192 57 43 / 10%));
+    background: var(--ecg-del-bg);
   }
 
   .ln.hunk {
-    color: var(--ecg-hunk-fg, #7c5cbf);
+    color: var(--ecg-hunk-fg);
   }
 
   .ln.meta {
-    color: var(--ecg-muted, #888);
+    color: var(--ecg-muted);
   }
 
   .error {
     max-height: 30vh;
     margin: 0;
-    padding: 10px 12px;
+    padding: 12px 16px;
     overflow: auto;
-    border-radius: 6px;
-    background: var(--ecg-hover, #f3f4f7);
-    font-family: Consolas, 'Cascadia Mono', monospace;
+    border: 1px solid color-mix(in oklab, var(--ecg-danger) 35%, transparent);
+    border-radius: var(--m3-shape-medium);
+    background: color-mix(in oklab, var(--ecg-danger) 10%, transparent);
+    color: var(--ecg-danger);
+    font-family: var(--ecg-mono);
     font-size: 12px;
     white-space: pre-wrap;
     word-break: break-all;
   }
 
   .warn {
-    padding: 8px 10px;
-    border-radius: 6px;
-    background: var(--ecg-warn-bg, #fff8e6);
-    color: var(--ecg-warn-fg, #8a6100);
+    padding: 12px 16px;
+    border: 1px solid color-mix(in oklab, var(--ecg-warn) 30%, transparent);
+    border-radius: var(--m3-shape-medium);
+    background: var(--ecg-warn-bg);
+    color: var(--ecg-warn-fg);
     font-size: 12px;
   }
 
@@ -246,34 +278,29 @@
 
   .warn ul {
     margin: 0;
-    padding-left: 18px;
+    padding-left: 20px;
+  }
+
+  .committing {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .committing .lead {
+    flex: 1 1 auto;
   }
 
   .actions {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
   }
 
-  button {
-    padding: 6px 14px;
-    border: 1px solid var(--ecg-border, #dcdfe6);
-    border-radius: 5px;
-    background: var(--ecg-bg, #fff);
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-  }
-
-  .primary {
-    border-color: var(--ecg-accent, #2f6feb);
-    background: var(--ecg-accent, #2f6feb);
-    color: #fff;
-  }
-
-  .danger {
-    border-color: var(--ecg-danger, #c0392b);
-    background: var(--ecg-danger, #c0392b);
-    color: #fff;
+  /* 按钮高度固定成 MD3 的 2.5rem（40px，等于 --m3-density 的 s 号按钮），
+     保证同一行里的实心/描边按钮高低完全一致。 */
+  .actions :global(.m3-container) {
+    height: 40px;
   }
 </style>

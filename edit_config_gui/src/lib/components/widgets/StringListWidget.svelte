@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button, TextFieldOutlined } from 'm3-svelte';
   import type { JsonValue } from '../../schema/types.ts';
   import type { WidgetProps } from './props.ts';
 
@@ -43,71 +44,85 @@
   }
 </script>
 
-<div class="w-list" class:invalid={error}>
+<div class="w-list" class:invalid={Boolean(error)}>
   {#if rows.length === 0}
     <p class="empty">暂未添加</p>
   {:else}
     {#each rows as row, i (i)}
       <div class="row">
-        <input
-          type="text"
-          aria-label={`${field.title} 第 ${i + 1} 项`}
-          value={row}
-          spellcheck="false"
-          oninput={(e) => setId(i, e.currentTarget.value)}
-        />
-        <button type="button" aria-label={`删除第 ${i + 1} 项`} onclick={() => emit(rows.filter((_, j) => j !== i))}>
+        <div class="field">
+          <TextFieldOutlined
+            label=""
+            type="text"
+            aria-label={`${field.title} 第 ${i + 1} 项`}
+            error={Boolean(error)}
+            value={row}
+            spellcheck="false"
+            oninput={(e) => setId(i, e.currentTarget.value)}
+          />
+        </div>
+        <Button
+          variant="text"
+          size="s"
+          aria-label={`删除第 ${i + 1} 项`}
+          style="color: var(--ecg-danger)"
+          onclick={() => emit(rows.filter((_, j) => j !== i))}
+        >
           删除
-        </button>
+        </Button>
       </div>
     {/each}
   {/if}
-  <button type="button" class="add" onclick={() => emit([...rows, ''])}>添加一项</button>
+  <Button variant="tonal" size="s" onclick={() => emit([...rows, ''])}>添加一项</Button>
 </div>
 
 <style>
   .w-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     align-items: flex-start;
+    width: 100%;
+    min-width: 0;
   }
 
   .row {
     display: flex;
-    gap: 6px;
+    gap: 8px;
+    align-items: center;
     width: 100%;
-  }
-
-  .row input {
-    flex: 1;
     min-width: 0;
-    padding: 6px 8px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: var(--ecg-input-bg, #fff);
-    color: inherit;
-    font: inherit;
   }
 
-  .invalid .row input {
-    border-color: var(--ecg-danger, #d33);
+  /* 基数为 0：输入框吃掉删除按钮之外的全部空间 */
+  .field {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
-  button {
-    padding: 6px 10px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    font: inherit;
+  .w-list :global(.m3-container) {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+  }
+
+  .w-list :global(input) {
+    padding: 0 12px;
+    font-size: 13px;
+    font-family: var(--ecg-mono);
+  }
+
+  /* 上面那条也命中 Button，不恢复自适应宽度会把输入框挤成 0 宽 */
+  .w-list :global(button.m3-container) {
+    flex: 0 0 auto;
+    width: auto;
+    height: 40px;
     white-space: nowrap;
   }
 
   .empty {
     margin: 0;
-    color: var(--ecg-muted, #888);
+    color: var(--ecg-muted);
     font-size: 13px;
   }
 </style>

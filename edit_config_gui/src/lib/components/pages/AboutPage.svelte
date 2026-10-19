@@ -6,6 +6,7 @@
    * 该目录在 Vite root（edit_config_gui/）之内，构建时会被当成资源打包进 dist。
    */
   import appIcon from '../../../../src-tauri/icons/icon.ico';
+  import { Card, Divider, ListItem } from 'm3-svelte';
 
   import { bridge } from '../../../bridge.ts';
   import { configStore } from '../../stores/config.svelte.ts';
@@ -61,49 +62,56 @@
   const configPath = $derived(configStore.path() ?? '（尚未打开）');
 </script>
 
+{#snippet linkIcon()}
+  <!-- 本地 Icon 是 stroke + currentColor，会跟着 ListItem 的 on-surface-variant 走 -->
+  <Icon name="link" size={16} />
+{/snippet}
+
 <article class="about">
-  <section class="hero">
-    <img class="mark" src={appIcon} alt="" width="52" height="52" aria-hidden="true" />
-    <div class="intro">
-      <h2>配置编辑器</h2>
-      <p class="tagline">
-        CapsWriter-Offline 的图形化配置工具 —— 安全地改写服务端与客户端共用的
-        <code>config.toml</code>
-      </p>
-      <p class="meta">Tauri 2 + Svelte 5 · 写入基于 Rust <code>toml_edit</code></p>
+  <Card variant="elevated">
+    <div class="hero">
+      <img class="mark" src={appIcon} alt="" width="52" height="52" aria-hidden="true" />
+      <div class="intro">
+        <h2>配置编辑器</h2>
+        <p class="tagline">
+          CapsWriter-Offline 的图形化配置工具 —— 安全地改写服务端与客户端共用的
+          <code>config.toml</code>
+        </p>
+        <p class="meta">Tauri 2 + Svelte 5 · 写入基于 Rust <code>toml_edit</code></p>
+      </div>
     </div>
-  </section>
+  </Card>
 
   <section>
     <h3>它能做什么</h3>
-    <ul class="facts">
-      {#each CAPABILITIES as item (item)}
-        <li>{item}</li>
-      {/each}
-    </ul>
+    <Card variant="outlined">
+      <ul class="facts">
+        {#each CAPABILITIES as item (item)}
+          <li>{item}</li>
+        {/each}
+      </ul>
+    </Card>
   </section>
 
-  <section>
+  <section class="links-section">
     <h3>项目主页</h3>
-    <div class="links">
-      {#each LINKS as link (link.url)}
-        <button
-          type="button"
-          class="link"
-          disabled={opening !== null}
-          onclick={() => void open(link.url)}
-        >
-          <span class="link-main">
-            <span class="link-label">
-              {link.label}
-              <Icon name="link" size={13} />
-            </span>
-            <span class="link-note">{link.note}</span>
-            <code class="link-url">{link.url}</code>
-          </span>
-        </button>
-      {/each}
-    </div>
+    <Card variant="outlined">
+      <ul class="links">
+        {#each LINKS as link, i (link.url)}
+          {#if i > 0}
+            <li class="sep" aria-hidden="true"><Divider /></li>
+          {/if}
+          <ListItem
+            headline={link.label}
+            supporting={`${link.note} · ${link.url}`}
+            trailing={linkIcon}
+            lines={3}
+            disabled={opening !== null}
+            onclick={() => void open(link.url)}
+          />
+        {/each}
+      </ul>
+    </Card>
     {#if error}
       <p class="error">{error}</p>
     {/if}
@@ -111,26 +119,30 @@
 
   <section>
     <h3>当前配置</h3>
-    <dl class="kv">
-      <dt>文件</dt>
-      <dd><code>{configPath}</code></dd>
-      <dt>备份</dt>
-      <dd>每次保存前，旧内容会写到同目录的 <code>config.toml.bak</code></dd>
-      <dt>生效方式</dt>
-      <dd>保存后需重启对应的服务端 / 客户端进程才会读取新配置</dd>
-    </dl>
+    <Card variant="outlined">
+      <dl class="kv">
+        <dt>文件</dt>
+        <dd><code>{configPath}</code></dd>
+        <dt>备份</dt>
+        <dd>每次保存前，旧内容会写到同目录的 <code>config.toml.bak</code></dd>
+        <dt>生效方式</dt>
+        <dd>保存后需重启对应的服务端 / 客户端进程才会读取新配置</dd>
+      </dl>
+    </Card>
   </section>
 
   <section>
     <h3>快捷键</h3>
-    <dl class="kv">
-      <dt><kbd>Ctrl</kbd> + <kbd>K</kbd></dt>
-      <dd>全局搜索配置项（支持中文标题、键名、拼音全拼与首字母）</dd>
-      <dt><kbd>Ctrl</kbd> + <kbd>S</kbd></dt>
-      <dd>预览并保存改动</dd>
-      <dt><kbd>Esc</kbd></dt>
-      <dd>关闭搜索面板或确认对话框</dd>
-    </dl>
+    <Card variant="outlined">
+      <dl class="kv">
+        <dt><kbd>Ctrl</kbd> + <kbd>K</kbd></dt>
+        <dd>全局搜索配置项（支持中文标题、键名、拼音全拼与首字母）</dd>
+        <dt><kbd>Ctrl</kbd> + <kbd>S</kbd></dt>
+        <dd>预览并保存改动</dd>
+        <dt><kbd>Esc</kbd></dt>
+        <dd>关闭搜索面板或确认对话框</dd>
+      </dl>
+    </Card>
   </section>
 </article>
 
@@ -138,16 +150,35 @@
   .about {
     display: flex;
     flex-direction: column;
-    gap: 22px;
+    gap: 24px;
     width: 100%;
-    padding: 20px 26px 80px;
+    padding: 24px 32px 96px;
+  }
+
+  /* m3 的 Card 默认 16px 内边距 + medium 圆角；hero 里有 52px 图标，给大一号
+     的圆角与内边距，才和 MD3 里「主卡片」的比例对上。
+     不用 class 传参覆盖：Card 把 {...extra} 展开在静态 class 之后，传 class 会把
+     m3-container / elevated 整套样式顶掉。 */
+  .about > :global(.m3-container) {
+    padding: 24px;
+    border-radius: var(--m3-shape-large);
+  }
+
+  .about section > :global(.m3-container) {
+    padding: 16px 20px;
+    border-radius: var(--m3-shape-large);
+  }
+
+  /* 列表卡片让 ListItem 的通栏 hover 一直到卡片边缘 */
+  .about section.links-section > :global(.m3-container) {
+    padding: 8px;
   }
 
   section > h3 {
-    margin: 0 0 10px;
+    margin: 0 0 12px;
+    color: var(--m3c-on-surface-variant);
     font-size: 13px;
     font-weight: 600;
-    color: var(--ecg-muted-strong, #4b5563);
     letter-spacing: 0.02em;
   }
 
@@ -165,98 +196,67 @@
      * ico 里带 256/128/64/48/32/24/16 七种尺寸，浏览器会挑最合适的一档，
      * 52px 下不会糊；`image-rendering` 保持默认的平滑插值即可。
      */
-    border-radius: 10px;
+    border-radius: var(--m3-shape-medium);
   }
 
   .intro h2 {
     margin: 0 0 4px;
-    font-size: 18px;
-    font-weight: 600;
+    color: var(--m3c-on-surface);
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 28px;
   }
 
   .tagline {
     margin: 0 0 6px;
-    color: var(--ecg-fg, #1c1f23);
+    color: var(--m3c-on-surface);
     font-size: 13px;
     line-height: 1.7;
   }
 
   .meta {
     margin: 0;
-    color: var(--ecg-muted, #888);
+    color: var(--m3c-on-surface-variant);
     font-size: 12px;
   }
 
   .facts {
     margin: 0;
-    padding-left: 18px;
-    color: var(--ecg-fg, #1c1f23);
+    padding-left: 20px;
+    color: var(--m3c-on-surface);
     font-size: 13px;
     line-height: 1.85;
   }
 
+  .facts li + li {
+    margin-top: 4px;
+  }
+
   .links {
-    display: grid;
-    gap: 8px;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 
-  .link {
-    display: block;
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid var(--ecg-border, #dcdfe6);
-    border-radius: 8px;
-    background: var(--ecg-input-bg, #fff);
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
+  .sep {
+    padding: 0 8px;
   }
 
-  .link:hover:not(:disabled) {
-    border-color: var(--ecg-accent, #1a56c4);
+  /* ListItem 自带 ripple 但没有 hover 底色与禁用态：补齐这两项，否则鼠标移
+     上去只有指针变化，而打开链接期间（opening）看不出「暂时点不动」。 */
+  .links :global(li > button:hover:not(:disabled)) {
+    background: var(--ecg-hover);
   }
 
-  .link:disabled {
+  .links :global(li > button:disabled) {
     opacity: 0.6;
     cursor: default;
   }
 
-  .link-main {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    /*
-     * 没有这一行，`.link-url` 的 `white-space: nowrap` 会把卡片的最小内容宽度
-     * 撑到整条 URL 那么长，网格只能排下两列、第三张孤零零掉到第二行。
-     * 置 0 之后省略号才真的生效。
-     */
-    min-width: 0;
-  }
-
-  .link-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ecg-accent, #1a56c4);
-  }
-
-  .link-note {
-    color: var(--ecg-muted, #888);
+  .error {
+    margin: 12px 0 0;
+    color: var(--m3c-error);
     font-size: 12px;
-    line-height: 1.6;
-  }
-
-  .link-url {
-    overflow: hidden;
-    min-width: 0;
-    color: var(--ecg-muted, #888);
-    font-size: 11px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .kv {
@@ -269,7 +269,7 @@
   }
 
   .kv dt {
-    color: var(--ecg-muted-strong, #4b5563);
+    color: var(--m3c-on-surface-variant);
     white-space: nowrap;
   }
 
@@ -281,24 +281,22 @@
 
   code {
     padding: 1px 4px;
-    border-radius: 4px;
-    background: var(--ecg-hover, #f3f4f7);
-    font-family: var(--ecg-mono, ui-monospace, Consolas, monospace);
-    font-size: 12px;
+    border-radius: var(--m3-shape-extra-small);
+    background: var(--ecg-hover);
+    font-family: var(--ecg-mono);
   }
 
   kbd {
-    padding: 1px 5px;
-    border: 1px solid var(--ecg-border, #dcdfe6);
-    border-radius: 4px;
-    background: var(--ecg-hover, #f3f4f7);
-    font-family: inherit;
+    display: inline-block;
+    min-width: 20px;
+    padding: 0 6px;
+    border: 1px solid var(--m3c-outline-variant);
+    border-radius: var(--m3-shape-extra-small);
+    background: var(--ecg-hover);
+    color: var(--m3c-on-surface);
+    font-family: var(--ecg-mono);
     font-size: 11px;
-  }
-
-  .error {
-    margin: 8px 0 0;
-    color: var(--ecg-danger, #d33);
-    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
   }
 </style>

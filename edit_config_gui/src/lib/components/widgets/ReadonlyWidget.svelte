@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from 'm3-svelte';
   import { configStore } from '../../stores/config.svelte.ts';
   import { navStore } from '../../stores/nav.svelte.ts';
   import { fieldById, fieldId } from '../../schema/index.ts';
@@ -41,7 +42,9 @@
 <div class="w-readonly">
   <code class="value" title={shown}>{shown}</code>
   {#if source}
-    <button type="button" onclick={() => navStore.focus(source)}>跳转到「{sourceTitle}」</button>
+    <Button variant="tonal" size="xs" onclick={() => navStore.focus(source)}>
+      跳转到「{sourceTitle}」
+    </Button>
   {/if}
   <p class="note">
     此项由「{sourceTitle}」决定，改那里立即生效；本文件里的值为占位符（
@@ -55,41 +58,38 @@
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
+    width: 100%;
+    min-width: 0;
   }
 
+  /* 只读值用虚线框 + 只读底色，和可编辑的描边输入框一眼区分开 */
   .value {
-    padding: 5px 8px;
-    border: 1px dashed var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: var(--ecg-readonly-bg, #f4f5f7);
-    color: var(--ecg-muted-strong, #555);
-    font-family: var(--ecg-mono, ui-monospace, Consolas, monospace);
-    font-size: 12px;
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px dashed var(--m3c-outline-variant);
+    border-radius: var(--m3-shape-small);
+    background: var(--ecg-readonly-bg);
+    color: var(--ecg-muted-strong);
+    font-family: var(--ecg-mono);
+    font-size: 12px;
     overflow-wrap: anywhere;
   }
 
-  button {
-    padding: 5px 10px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: transparent;
-    color: var(--ecg-accent, #3b82f6);
-    cursor: pointer;
-    font: inherit;
-    font-size: 12px;
+  .w-readonly :global(button.m3-container) {
+    height: 32px;
   }
 
   .note {
     flex-basis: 100%;
     margin: 0;
-    color: var(--ecg-muted, #888);
+    color: var(--ecg-muted);
     font-size: 12px;
+    line-height: 1.55;
   }
 
   .note code {
-    font-family: var(--ecg-mono, ui-monospace, Consolas, monospace);
+    font-family: var(--ecg-mono);
   }
 </style>

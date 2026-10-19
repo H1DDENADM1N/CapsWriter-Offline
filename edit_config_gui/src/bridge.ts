@@ -126,6 +126,17 @@ export interface RestartOutcome {
 }
 
 /**
+ * 与 Rust `system_theme::SystemAppearance` 对应：Windows 当前外观。
+ *
+ * `accents` 是**候选**种子色而不是一个定值：DWM 色和系统强调色各自都不总是
+ * 可信（自动取色时 DWM 色可能接近纯黑），彩度判断放在前端 `lib/theme.ts`。
+ */
+export interface SystemAppearance {
+  dark: boolean;
+  accents: string[];
+}
+
+/**
  * 不在 Tauri 窗口里就立刻给出可读的错误。
  *
  * 否则 `invoke` 会在 `window.__TAURI_INTERNALS__` 上抛 `Cannot read properties of
@@ -212,5 +223,25 @@ export const bridge = {
    */
   openUrl(url: string): Promise<void> {
     return call<void>('open_url', { url });
+  },
+
+  /**
+   * 读系统外观（深浅色 + 主题色候选）。
+   *
+   * 主题是「用户随时可能在设置里改」的状态，没有变更通知可订阅，所以前端定时轮询
+   * 本命令；它只读两个注册表值，成本远低于一次文件 IO。
+   */
+  systemAppearance(): Promise<SystemAppearance> {
+    return call<SystemAppearance>('system_appearance');
+  },
+
+  /**
+   * 设置页面缩放比例（1 = 100%）。
+   *
+   * 用 webview 缩放而不是 CSS `zoom`：`vw`/`vh`、媒体查询、固定定位都会跟着重算。
+   * Rust 侧只做 0.25–5 的范围兜底，档位由 `lib/stores/zoom.svelte.ts` 决定。
+   */
+  setZoom(scale: number): Promise<void> {
+    return call<void>('set_zoom', { scale });
   },
 };

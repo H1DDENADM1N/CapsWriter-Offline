@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button, TextFieldOutlined } from 'm3-svelte';
   import type { WidgetProps } from './props.ts';
 
   let { field, value, error, onChange }: WidgetProps = $props();
@@ -10,55 +11,65 @@
 </script>
 
 <div class="w-secret">
-  <input
-    type={shown ? 'text' : 'password'}
-    aria-label={field.title}
-    aria-invalid={error ? 'true' : undefined}
-    value={text}
-    autocomplete="off"
-    spellcheck="false"
-    oninput={(e) => onChange(e.currentTarget.value)}
-  />
-  <button
-    type="button"
-    class="eye"
+  <div class="field">
+    <TextFieldOutlined
+      label=""
+      type={shown ? 'text' : 'password'}
+      aria-label={field.title}
+      error={Boolean(error)}
+      aria-invalid={error ? 'true' : undefined}
+      value={text}
+      autocomplete="off"
+      spellcheck="false"
+      oninput={(e) => onChange(e.currentTarget.value)}
+    />
+  </div>
+  <!-- 可见文案保持「显示 / 隐藏」，读屏名称带上宾语说明点的是什么 -->
+  <Button
+    variant="text"
+    size="s"
     aria-label={shown ? '隐藏内容' : '显示内容'}
     title={shown ? '隐藏内容' : '显示内容'}
     onclick={() => (shown = !shown)}
   >
     {shown ? '隐藏' : '显示'}
-  </button>
+  </Button>
 </div>
 
 <style>
   .w-secret {
     display: flex;
-    gap: 6px;
-    align-items: stretch;
-  }
-
-  .w-secret input {
-    flex: 1;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
     min-width: 0;
-    padding: 6px 8px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: var(--ecg-input-bg, #fff);
-    color: inherit;
-    font: inherit;
   }
 
-  .w-secret input[aria-invalid='true'] {
-    border-color: var(--ecg-danger, #d33);
+  /* 基数为 0：输入框吃掉按钮之外的全部空间（m3 输入框里的 <input> 是绝对定位的，
+     基数用 auto 会算成约 0 宽，整行就被按钮占满）。 */
+  .field {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
-  .eye {
-    padding: 0 10px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    font: inherit;
+  .w-secret :global(.m3-container) {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+  }
+
+  .w-secret :global(input) {
+    padding: 0 12px;
+    font-size: 13px;
+    font-family: var(--ecg-mono);
+  }
+
+  /* 上面那条 .m3-container 规则同样命中 Button（它也带 m3-container 类），
+     按钮会拿到 width:100% 把输入框挤成 0 宽；这里恢复自适应宽度，
+     高度给 40px 是为了和输入框底边对齐（m3 的 s 号按钮主要靠 density 定高）。 */
+  .w-secret :global(button.m3-container) {
+    flex: 0 0 auto;
+    width: auto;
+    height: 40px;
   }
 </style>

@@ -26,7 +26,7 @@ use std::sync::{Mutex, MutexGuard};
 use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 
-use crate::{config_doc, elevate, file_io, patch, process, validate};
+use crate::{config_doc, elevate, file_io, patch, process, system_theme, validate};
 
 /// 约定的配置文件名。定位、备份槽都以它为准。
 const CONFIG_FILE: &str = "config.toml";
@@ -550,6 +550,38 @@ pub fn open_url(url: String) -> Result<(), String> {
     shell_open(url)
 }
 
+/// 系统外观：深色还是浅色、主题色种子候选。
+///
+/// 同步命令：只读两个注册表值（微秒级），不值得为它开异步任务；也不碰会话状态，
+/// 因此不需要会话锁。前端拿它生成 MD3 配色令牌，用户在 Windows 设置里改主题后
+/// 前端轮询本命令即可跟上，不需要额外的「主题变更」事件通道。
+#[tauri::command]
+pub fn system_appearance() -> Result<system_theme::SystemAppearance, String> {
+    Ok(system_theme::appearance())
+}
+
+/// 页面缩放。
+///
+/// 用 webview 自己的缩放而不是 CSS `zoom`：只有前者会连 `vw`/`vh`、媒体查询和
+/// 固定定位一起重算，观感才和浏览器里按 Ctrl+滚轮一致。档位（50%–200%）由前端
+/// 算好再传进来，这里只做范围兜底——WebView2 收到 0 或负数会直接把整页缩没。
+#[tauri::command]
+pub fn set_zoom(window: tauri::WebviewWindow, scale: f64) -> Result<(), String> {
+    check_zoom_range(scale)?;
+    window
+        .set_zoom(scale)
+        .map_err(|e| format!("设置缩放失败：{e}"))
+}
+
+/// 合法缩放区间。单独提出来的原因只有一个：不依赖窗口就能测。
+pub fn check_zoom_range(scale: f64) -> Result<(), String> {
+    if (0.25..=5.0).contains(&scale) {
+        Ok(())
+    } else {
+        Err(format!("缩放比例超出范围：{scale}"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -845,5 +877,23 @@ mod tests {
         // 从别处复制来的链接常带首尾空白
         assert_eq!(check_url("  https://example.com/x  ").unwrap(), "https://example.com/x");
         assert!(check_url("https://github.com/H1DDENADM1N/CapsWriter-Offline/issues").is_ok());
+    }
+
+    #[test]
+    fn check_zoom_range_accepts_the_frontend_steps() {
+        // 前端档位表的两端与 100%
+        for ok in [0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0] {
+            assert!(check_zoom_range(ok).is_ok(), "应当接受：{ok}");
+        }
+    }
+
+    #[test]
+    fn check_zoom_range_rejects_zero_negative_and_absurd() {
+        // 0 / 负数会让 WebView2 把整页缩没，NaN 则根本不构成比例
+        for bad in [0.0, -1.0, 0.1, 5.1, f64::NAN, f64::INFINITY] {
+            assert!(check_zoom_range(bad).is_err(), "必须拒绝：{bad}");
+        }
+        assert!(check_zoom_range(0.25).is_ok());
+        assert!(check_zoom_range(5.0).is_ok());
     }
 }

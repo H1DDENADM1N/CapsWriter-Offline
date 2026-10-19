@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button, TextFieldOutlined } from 'm3-svelte';
   import type { JsonValue } from '../../schema/types.ts';
   import type { WidgetProps } from './props.ts';
 
@@ -51,7 +52,7 @@
   }
 </script>
 
-<div class="w-pairs" class:invalid={error}>
+<div class="w-pairs" class:invalid={Boolean(error)}>
   {#if rows.length === 0}
     <p class="empty">暂未添加</p>
   {:else}
@@ -62,31 +63,46 @@
     </div>
     {#each rows as row, i (i)}
       <div class="row">
-        <input
-          type="text"
-          aria-label={`进程名 第 ${i + 1} 项`}
-          placeholder="happ.exe"
-          value={row.name}
-          spellcheck="false"
-          oninput={(e) => patch(i, { name: e.currentTarget.value })}
-        />
-        <input
-          type="number"
-          step="0.1"
-          min="0"
-          aria-label={`延迟 第 ${i + 1} 项`}
-          value={row.delay}
-          oninput={(e) => patch(i, { delay: e.currentTarget.value })}
-        />
-        <button type="button" aria-label={`删除第 ${i + 1} 项`} onclick={() => emit(rows.filter((_, j) => j !== i))}>
+        <div class="field">
+          <TextFieldOutlined
+            label=""
+            type="text"
+            aria-label={`进程名 第 ${i + 1} 项`}
+            placeholder="happ.exe"
+            error={Boolean(error)}
+            value={row.name}
+            spellcheck="false"
+            oninput={(e) => patch(i, { name: e.currentTarget.value })}
+          />
+        </div>
+        <div class="field delay">
+          <TextFieldOutlined
+            label=""
+            type="number"
+            min="0"
+            step="0.1"
+            inputmode="decimal"
+            aria-label={`延迟 第 ${i + 1} 项`}
+            error={Boolean(error)}
+            value={row.delay}
+            oninput={(e) => patch(i, { delay: e.currentTarget.value })}
+          />
+        </div>
+        <Button
+          variant="text"
+          size="s"
+          aria-label={`删除第 ${i + 1} 项`}
+          style="color: var(--ecg-danger)"
+          onclick={() => emit(rows.filter((_, j) => j !== i))}
+        >
           删除
-        </button>
+        </Button>
       </div>
     {/each}
   {/if}
-  <button type="button" class="add" onclick={() => emit([...rows, { name: '', delay: '0.5' }])}>
+  <Button variant="tonal" size="s" onclick={() => emit([...rows, { name: '', delay: '0.5' }])}>
     添加一项
-  </button>
+  </Button>
   <p class="note">进程名要和任务管理器里看到的一致（小写）；留空数组则不启用。</p>
 </div>
 
@@ -94,58 +110,52 @@
   .w-pairs {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     align-items: flex-start;
     width: 100%;
+    min-width: 0;
   }
 
   .row {
     display: grid;
-    grid-template-columns: 1fr 8em auto;
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) 8em auto;
+    gap: 8px;
     width: 100%;
     align-items: center;
   }
 
   .row.head {
-    color: var(--ecg-muted, #888);
+    color: var(--ecg-muted);
     font-size: 12px;
   }
 
-  input {
+  .w-pairs :global(.m3-container) {
     width: 100%;
-    padding: 6px 8px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: var(--ecg-input-bg, #fff);
-    color: inherit;
-    font: inherit;
+    min-width: 0;
+    height: 40px;
   }
 
-  .invalid input {
-    border-color: var(--ecg-danger, #d33);
+  .w-pairs :global(input) {
+    padding: 0 12px;
+    font-size: 13px;
   }
 
-  button {
-    padding: 6px 10px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    font: inherit;
+  /* 上面那条也命中 Button（同一套 m3-container 类），这里恢复自适应宽度 */
+  .w-pairs :global(button.m3-container) {
+    width: auto;
+    height: 40px;
     white-space: nowrap;
   }
 
   .empty {
     margin: 0;
-    color: var(--ecg-muted, #888);
+    color: var(--ecg-muted);
     font-size: 13px;
   }
 
   .note {
     margin: 0;
-    color: var(--ecg-muted, #888);
+    color: var(--ecg-muted);
     font-size: 12px;
   }
 </style>

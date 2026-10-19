@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { TextFieldOutlined } from 'm3-svelte';
   import type { WidgetProps } from './props.ts';
 
   let { field, value, error, onChange }: WidgetProps = $props();
@@ -44,33 +45,38 @@
   }
 </script>
 
-<input
-  class="w-mono"
-  type="number"
-  {step}
-  min={field.min}
-  max={field.max}
-  aria-label={field.title}
-  aria-invalid={error ? 'true' : undefined}
-  value={text}
-  oninput={(e) => (text = e.currentTarget.value)}
-  onchange={commit}
-/>
+<div class="w-num">
+  <TextFieldOutlined
+    label=""
+    type="number"
+    {step}
+    min={field.min}
+    max={field.max}
+    inputmode="decimal"
+    aria-label={field.title}
+    error={Boolean(error)}
+    aria-invalid={error ? 'true' : undefined}
+    value={text}
+    oninput={(e) => (text = e.currentTarget.value)}
+    onchange={commit}
+  />
+</div>
 
 <style>
-  .w-mono {
+  .w-num {
     width: 100%;
-    box-sizing: border-box;
-    padding: 6px 8px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: var(--ecg-input-bg, #fff);
-    color: inherit;
-    font: inherit;
-    font-variant-numeric: tabular-nums;
+    min-width: 0;
   }
 
-  .w-mono[aria-invalid='true'] {
-    border-color: var(--ecg-danger, #d33);
+  .w-num :global(.m3-container) {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+  }
+
+  .w-num :global(input) {
+    padding: 0 12px;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
   }
 </style>

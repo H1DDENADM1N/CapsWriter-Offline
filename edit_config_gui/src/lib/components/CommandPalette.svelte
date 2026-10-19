@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { TextField } from 'm3-svelte';
+
   import { SEARCH_LIMIT, landingSegments, searchAll } from '../search.ts';
   import type { SearchHit } from '../search.ts';
   import { navStore } from '../stores/nav.svelte.ts';
@@ -34,13 +36,17 @@
    * 不用 `autofocus` 属性：Svelte 会报 a11y_autofocus，而且真实 Tauri 窗口里
    * autofocus 与 WebView2 的首次焦点竞争时偶发不生效；用动作在挂载后主动 focus
    * 更可控（面板每次打开都是新挂载的节点）。
+   *
+   * 输入框改由 m3 `TextField` 渲染后，本组件拿不到那个 `<input>` 的引用，所以动作
+   * 挂在字段容器上，挂载后往里找唯一的 input。仍然只 focus 一次，不订阅任何状态。
    */
-  function focusOnMount(node: HTMLInputElement): void {
-    queueMicrotask(() => node.focus());
+  function focusOnMount(node: HTMLElement): void {
+    queueMicrotask(() => node.querySelector('input')?.focus());
   }
 
   function onKeydown(e: KeyboardEvent): void {
-    if (e.key === 'k' && (e.ctrlKey || e.metaKey) && !e.altKey) {
+    // Ctrl+F：和浏览器「页内查找」同一个手指记忆，正好也是「找配置项」
+    if (e.key === 'f' && (e.ctrlKey || e.metaKey) && !e.altKey) {
       e.preventDefault();
       paletteStore.show();
       return;
@@ -80,21 +86,22 @@
       if (e.key === 'Escape') paletteStore.hide();
     }}
   >
-    <div
-      class="panel"
-      role="dialog"
-      aria-modal="true"
-      tabindex="-1"
-      aria-label="搜索配置项"
-    >
-      <input
-        class="query"
-        type="text"
-        use:focusOnMount
-        placeholder="搜配置项：中文、键名、拼音全拼或首字母"
-        value={paletteStore.query()}
-        oninput={(e) => paletteStore.setQuery(e.currentTarget.value)}
-      />
+    <div class="panel" role="dialog" aria-modal="true" tabindex="-1" aria-label="搜索配置项">
+      <div class="field" use:focusOnMount>
+        <!--
+          键盘事件仍然由窗口级处理器统一接管：输入框里的 ↑↓/回车/Esc 会冒泡到
+          window，选中与跳转逻辑只有一份，不会因为换成组件而分裂成两套。
+        -->
+        <TextField
+          class="query"
+          label="搜索配置项"
+          placeholder="搜配置项：中文、键名、拼音全拼或首字母"
+          aria-label="搜索配置项"
+          autocomplete="off"
+          value={paletteStore.query()}
+          oninput={(e) => paletteStore.setQuery(e.currentTarget.value)}
+        />
+      </div>
 
       {#if paletteStore.query().trim() === ''}
         {#if paletteStore.recent().length > 0}
@@ -147,6 +154,8 @@
 {/if}
 
 <style>
+  /* 遮罩用 MD3 的 scrim 令牌调透明度，而不是写死的半透明黑：深浅主题下
+     scrim 本身就是「浮层之后的暗色」，不会出现深色主题里遮罩反而发灰的问题。 */
   .backdrop {
     position: fixed;
     inset: 0;
@@ -154,67 +163,78 @@
     display: flex;
     justify-content: center;
     padding-top: 12vh;
-    background: rgb(0 0 0 / 25%);
+    background: color-mix(in oklab, var(--m3c-scrim) 32%, transparent);
   }
 
   .panel {
     width: min(620px, 88vw);
     max-height: 60vh;
-    padding: 10px;
-    border-radius: 10px;
-    background: var(--ecg-bg, #fff);
-    box-shadow: 0 12px 40px rgb(0 0 0 / 22%);
+    padding: 24px;
+    border-radius: var(--m3-shape-extra-large);
+    background: var(--m3c-surface-container-high);
+    box-shadow: var(--m3-elevation-3);
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    gap: 8px;
   }
 
-  .query {
+  /* TextField 的容器是 inline-flex 且带 min-width，不撑满面板会在宽面板里显得很窄。
+     高度取 MD3 单行字段的 3.5rem（56px，与 --m3-density 的标准值一致），
+     这样即使 app.css 的 density 函数被改动，搜索框也保持单行字段的标准高度。 */
+  .field :global(.m3-container) {
     width: 100%;
-    padding: 9px 10px;
-    border: 1px solid var(--ecg-line, #dfe2e8);
-    border-radius: 7px;
-    background: none;
-    color: inherit;
-    font: inherit;
-    font-size: 14px;
+    min-width: 0;
+    height: 56px;
+  }
+
+  /* 去掉 app.css 给原生 input 的 2px 焦点描边：m3 TextField 有自己的聚焦指示
+     （标签与底线变主色），两套叠在一起会像输入框套了个框。 */
+  .field :global(input:focus-visible) {
     outline: none;
   }
 
-  .query:focus {
-    border-color: var(--ecg-accent, #1a56c4);
-  }
-
   .list {
-    margin: 8px 0 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
     padding: 0;
     list-style: none;
     overflow-y: auto;
   }
 
+  /* MD3 单行 list item：56px 高、左右 16px。hover 用状态层颜色，选中用
+     secondary-container —— 与 m3 组件自身的选中态是同一个语义。 */
   .row {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
-    padding: 7px 9px;
-    border-radius: 6px;
+    height: 56px;
+    padding: 0 16px;
+    border-radius: var(--m3-shape-medium);
     cursor: pointer;
   }
 
+  .row:hover {
+    background: var(--ecg-hover);
+  }
+
   .row.active {
-    background: var(--ecg-active, #e8eefb);
+    background: var(--ecg-active);
+    color: var(--m3c-on-secondary-container);
   }
 
   .title {
     flex: 0 1 auto;
+    color: var(--m3c-on-surface);
     font-size: 13px;
   }
 
   .path {
     flex: 1 1 auto;
     min-width: 0;
-    color: var(--ecg-muted, #888);
-    font-family: ui-monospace, Consolas, monospace;
+    color: var(--ecg-muted);
+    font-family: var(--ecg-mono);
     font-size: 11px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -223,27 +243,36 @@
 
   .badge {
     flex: 0 0 auto;
-    padding: 0 5px;
-    border-radius: 4px;
-    background: var(--ecg-hover, #f3f4f7);
-    color: var(--ecg-muted, #888);
+    padding: 2px 8px;
+    border-radius: var(--m3-shape-full);
+    background: var(--ecg-tag-bg);
+    color: var(--ecg-tag-fg);
     font-size: 11px;
   }
 
   .page {
     flex: 0 0 auto;
-    color: var(--ecg-muted, #888);
+    color: var(--ecg-muted);
     font-size: 11px;
   }
 
+  .row.active .title,
+  .row.active .path,
+  .row.active .page {
+    color: var(--m3c-on-secondary-container);
+  }
+
   .hint {
-    margin: 8px 2px 2px;
-    color: var(--ecg-muted, #888);
+    margin: 0;
+    color: var(--m3c-on-surface-variant);
     font-size: 12px;
     line-height: 1.6;
   }
 
   code {
-    font-family: ui-monospace, Consolas, monospace;
+    padding: 0 4px;
+    border-radius: var(--m3-shape-extra-small);
+    background: var(--ecg-hover);
+    font-family: var(--ecg-mono);
   }
 </style>

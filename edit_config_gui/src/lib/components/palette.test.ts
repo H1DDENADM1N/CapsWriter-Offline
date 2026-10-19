@@ -1,12 +1,30 @@
 import { fireEvent, render } from '@testing-library/svelte';
 import { tick } from 'svelte';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fieldId } from '../schema/index.ts';
 import { configStore } from '../stores/config.svelte.ts';
 import { navStore } from '../stores/nav.svelte.ts';
 import { paletteStore } from '../stores/palette.svelte.ts';
 import CommandPalette from './CommandPalette.svelte';
+
+/**
+ * jsdom 没有实现 `window.matchMedia`，而 `m3-svelte` 的包入口在求值时会把
+ * Slider 一起带进来，它内部用 Svelte 的 `MediaQuery` 读 `prefers-reduced-motion`。
+ * 这是测试环境的缺口，不是面板的行为；用 `vi.hoisted` 补在静态 import 求值之前。
+ */
+vi.hoisted(() => {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+});
 
 beforeEach(() => {
   configStore.__resetForTest();
@@ -22,10 +40,10 @@ async function openWith(query?: string): Promise<void> {
 }
 
 describe('命令面板', () => {
-  it('Ctrl+K 打开、Esc 关闭', async () => {
+  it('Ctrl+F 打开、Esc 关闭', async () => {
     render(CommandPalette);
 
-    await fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    await fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
     expect(paletteStore.open()).toBe(true);
     await tick();
     expect(document.querySelector('.panel')).not.toBeNull();

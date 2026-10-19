@@ -1,20 +1,42 @@
 import { fireEvent, render } from '@testing-library/svelte';
 import { tick } from 'svelte';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fieldId, pages } from '../schema/index.ts';
 import { configStore } from '../stores/config.svelte.ts';
 import { navStore } from '../stores/nav.svelte.ts';
 import { paletteStore } from '../stores/palette.svelte.ts';
 import { uiStore } from '../stores/ui.svelte.ts';
+import { zoomStore } from '../stores/zoom.svelte.ts';
 import Sidebar from './Sidebar.svelte';
 import TopBar from './TopBar.svelte';
+
+/*
+ * m3-svelte 的入口会连带求值 Slider（→ svelte/motion），后者在模块顶层读
+ * matchMedia 来跟踪 prefers-reduced-motion；jsdom 没实现这个 API。
+ * 用 vi.hoisted 保证补丁先于任何 import 生效。
+ */
+vi.hoisted(() => {
+  if (typeof window === 'undefined' || typeof window.matchMedia === 'function') return;
+  window.matchMedia = (query: string): MediaQueryList =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+});
 
 beforeEach(() => {
   configStore.__resetForTest();
   navStore.__resetForTest();
   paletteStore.__resetForTest();
   uiStore.__resetForTest();
+  zoomStore.__resetForTest();
   navStore.go(pages[0]!.id);
 });
 
@@ -124,7 +146,7 @@ describe('TopBar', () => {
     const { getByTitle } = render(TopBar);
 
     expect(paletteStore.open()).toBe(false);
-    await fireEvent.click(getByTitle('搜索配置项（Ctrl + K）'));
+    await fireEvent.click(getByTitle('搜索配置项（Ctrl + F）'));
     expect(paletteStore.open()).toBe(true);
   });
 
@@ -137,5 +159,24 @@ describe('TopBar', () => {
     await fireEvent.click(btn);
     expect(uiStore.sidebarCollapsed()).toBe(true);
     expect(getByLabelText('展开侧边栏').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('缩放不是 100% 时出现「还原」，点击后消失', async () => {
+    const { queryByLabelText, getByLabelText } = render(TopBar);
+
+    // 100% 时不该有还原按钮：它平时没有信息量，只该在需要时出现
+    expect(queryByLabelText(/恢复默认缩放/)).toBeNull();
+
+    zoomStore.zoomIn();
+    await tick();
+
+    const btn = getByLabelText('恢复默认缩放，当前 110%');
+    expect(btn.textContent).toContain('110%');
+
+    await fireEvent.click(btn);
+    await tick();
+
+    expect(zoomStore.current()).toBe(1);
+    expect(queryByLabelText(/恢复默认缩放/)).toBeNull();
   });
 });

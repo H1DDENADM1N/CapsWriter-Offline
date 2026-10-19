@@ -13,6 +13,37 @@ import App from '../../App.svelte';
 import Onboarding from './Onboarding.svelte';
 import StatusBar from './StatusBar.svelte';
 
+/*
+ * m3-svelte 的入口会连带求值 Slider（→ svelte/motion），后者在模块顶层读
+ * matchMedia 来跟踪 prefers-reduced-motion；jsdom 没实现这个 API。
+ * 用 vi.hoisted 保证补丁先于任何 import 生效。
+ */
+vi.hoisted(() => {
+  if (typeof window === 'undefined' || typeof window.matchMedia === 'function') return;
+  window.matchMedia = (query: string): MediaQueryList =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+});
+
+// jsdom 30 的 HTMLDialogElement 只是个空壳，没有 showModal()/close()，而 m3 的
+// Dialog 一挂载就会调用它们。补一个最小实现，让组件树能挂载、open 属性生效。
+if (typeof HTMLDialogElement !== 'undefined') {
+  HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement): void {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement): void {
+    this.open = false;
+  };
+}
+
 const mocks = vi.hoisted(() => ({
   openConfig: vi.fn(),
   reloadConfig: vi.fn(),
@@ -175,7 +206,9 @@ describe('StatusBar', () => {
     await fireEvent.click(screen.getByRole('button', { name: '确认重启' }));
 
     expect(await screen.findByRole('button', { name: '以管理员权限重启' })).toBeTruthy();
-    expect(screen.getByRole('dialog')).toBeTruthy();
+    // m3 的 Dialog 用 role="alertdialog"：确认框是「必须回应才能继续」的模态，
+    // 比普通 dialog 更准确，读屏软件也会把整个内容念一遍。
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '确认重启' })).toBeNull();
     expect(mocks.restartServiceElevated).not.toHaveBeenCalled();
   });
@@ -191,7 +224,7 @@ describe('StatusBar', () => {
     await fireEvent.click(await screen.findByRole('button', { name: '以管理员权限重启' }));
 
     expect(mocks.restartServiceElevated).toHaveBeenCalledWith('client');
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
   it('提权重启失败时显示重启失败文案', async () => {

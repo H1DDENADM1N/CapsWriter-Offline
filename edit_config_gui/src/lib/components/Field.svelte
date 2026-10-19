@@ -64,16 +64,16 @@
    *
    * 控件列用 clamp 而不是百分比或 1fr：纯百分比在 2560 宽的窗口上会把下拉框
    * 拉到一千多像素，纯 1fr 又会把控件挤到标签旁边、右边留一大片空白。clamp 让
-   * 它在窄窗口下仍有 300px 可用、宽窗口下最多 560px，且**永远右对齐**——
+   * 它在窄窗口下仍有 320px 可用、宽窗口下最多 620px，且**永远右对齐**——
    * 每一行的输入框右边缘都落在同一条竖线上，右边不会再有空档。
    */
   .field {
     display: grid;
     grid-template-columns: minmax(0, 1fr) clamp(320px, 52%, 620px);
     gap: 4px 20px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--ecg-line, #eceef2);
-    align-items: start;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--m3c-outline-variant);
+    align-items: center;
   }
 
   .field:last-child {
@@ -82,6 +82,8 @@
 
   .field.wide {
     grid-template-columns: 1fr;
+    gap: 8px;
+    align-items: start;
   }
 
   .label {
@@ -93,26 +95,32 @@
   .row {
     display: flex;
     gap: 8px;
-    align-items: baseline;
+    align-items: center;
   }
 
+  /* titleSmall：13px/500，是 MD3 表单里字段标签的层级 */
   .title {
+    font-size: 13px;
     font-weight: 500;
+    line-height: 20px;
+    color: var(--m3c-on-surface);
   }
 
+  /* 脏标记用胶囊：它是一枚状态徽章，不该和标签正文争抢注意力 */
   .dirty {
-    padding: 0 6px;
-    border-radius: 999px;
-    background: var(--ecg-accent-weak, #3b82f622);
-    color: var(--ecg-accent, #3b82f6);
+    padding: 2px 8px;
+    border-radius: var(--m3-shape-full);
+    background: var(--ecg-tag-bg);
+    color: var(--ecg-tag-fg);
     font-size: 11px;
-    line-height: 18px;
+    font-weight: 500;
+    line-height: 16px;
     white-space: nowrap;
   }
 
   .note {
     margin: 4px 0 0;
-    color: var(--ecg-muted, #888);
+    color: var(--m3c-on-surface-variant);
     font-size: 12px;
     line-height: 1.55;
     white-space: pre-line;
@@ -121,7 +129,18 @@
   .control {
     display: flex;
     flex-direction: column;
+    justify-content: center;
     min-width: 0;
+    /* 输入框容器高度由各控件自己压到 40px（app.css 的 --m3-density 只是兜住
+       m3 组件的默认高度）；浮动标签的底色要跟行底色一致，否则空 label 会在边框上留一块色斑 */
+    --m3v-background: var(--m3c-surface);
+  }
+
+  /* m3 的 outlined 输入框总会渲染一个浮动 label；这里标题由左列提供，
+     label 传的是空串。空的 label 仍带 4px 左右内边距，会遮住顶部边框一小段，
+     看起来像描边断了个口子，所以直接不渲染它（无障碍名由 aria-label 提供）。 */
+  .control :global(.m3-container > label) {
+    display: none;
   }
 
   /* 开关本身没有宽度可拉伸，靠右放，右边缘才和别的控件对齐 */
@@ -132,8 +151,9 @@
   .error {
     grid-column: 1 / -1;
     margin: 4px 0 0;
-    color: var(--ecg-danger, #d33);
+    color: var(--ecg-danger);
     font-size: 12px;
+    line-height: 1.5;
   }
 
   @media (max-width: 760px) {

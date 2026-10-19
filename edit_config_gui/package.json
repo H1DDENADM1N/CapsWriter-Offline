@@ -18,7 +18,9 @@
   },
   "//": "build:dist 依赖的 scripts/copy-dist.mjs 在 Task 21 创建；Task 1 阶段只用 dev/build/test/check/build:tauri",
   "dependencies": {
-    "@tauri-apps/api": "2.12.4"
+    "@ktibow/material-color-utilities-nightly": "^0.4.1772748028000",
+    "@tauri-apps/api": "2.12.4",
+    "m3-svelte": "7.2.1"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "7.3.1",
@@ -31,6 +33,7 @@
     "svelte-check": "4.7.7",
     "typescript": "5.9.3",
     "vite": "8.3.4",
+    "vite-plugin-functions-mixins": "^0.4.1",
     "vitest": "5.0.5"
   }
 }

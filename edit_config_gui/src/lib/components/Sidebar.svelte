@@ -35,6 +35,10 @@
   }
 </script>
 
+<!--
+  `role="tablist"` 这套语义是测试与读屏共用的接口，视觉按 MD3 NavigationRail 做，
+  但不换成 m3 的 NavigationRail 组件——它的子项没有 tab/tablist 语义。
+-->
 {#snippet navItem(page: PageMeta)}
   {@const n = dirtyCountOf(page.id)}
   <button
@@ -78,13 +82,18 @@
 </div>
 
 <style>
+  /*
+   * MD3 NavigationRail：展开时 200px 显示「图标 + 标题」，折叠时 56px 只剩图标。
+   * 底色用 surface-container-low，与主内容（surface）拉开一档层级。
+   */
   .sidebar {
     display: flex;
     flex: 0 0 200px;
     flex-direction: column;
     width: 200px;
-    padding: 14px 10px 10px;
-    border-right: 1px solid var(--ecg-line, #eceef2);
+    padding: 12px 8px 8px;
+    background: var(--m3c-surface-container-low);
+    border-right: 1px solid var(--m3c-outline-variant);
     transition:
       width 0.16s ease,
       flex-basis 0.16s ease,
@@ -94,14 +103,14 @@
   .sidebar.collapsed {
     flex-basis: 56px;
     width: 56px;
-    padding: 14px 6px 10px;
+    padding: 12px 4px 8px;
   }
 
   .list {
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
     min-height: 0;
     overflow-y: auto;
     /* 滚动条不该把图标列挤偏 */
@@ -111,10 +120,10 @@
   .foot {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
     margin-top: 8px;
     padding-top: 8px;
-    border-top: 1px solid var(--ecg-line, #eceef2);
+    border-top: 1px solid var(--m3c-outline-variant);
   }
 
   .item {
@@ -123,44 +132,50 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    /* 48px 行高保证鼠标/触屏都够按，折叠后同样高度，切换时不会跳 */
+    min-height: 48px;
     width: 100%;
-    padding: 7px 10px;
+    padding: 0 12px;
     border: 0;
-    border-radius: 6px;
-    background: none;
-    color: inherit;
+    border-radius: var(--m3-shape-full);
+    background: transparent;
+    color: var(--m3c-on-surface-variant);
     font: inherit;
     font-size: 13px;
     text-align: left;
     cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      color 0.12s ease;
   }
 
   .collapsed .item {
     justify-content: center;
-    padding: 8px 0;
+    padding: 0;
   }
 
   .item:hover {
-    background: var(--ecg-hover, #f3f4f7);
+    background: var(--ecg-hover);
+    color: var(--m3c-on-surface);
   }
 
+  /* 激活项用胶囊指示器 + secondary-container，是 MD3 的「选中」语义；
+     不再用左侧 2px 竖条——那是桌面列表的旧语言。 */
   .item.active {
-    background: var(--ecg-active, #e8eefb);
-    box-shadow: inset 2px 0 0 var(--ecg-accent, #1a56c4);
+    background: var(--m3c-secondary-container);
+    color: var(--m3c-on-secondary-container);
     font-weight: 600;
-    color: var(--ecg-accent, #1a56c4);
   }
 
   .lead {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     min-width: 0;
   }
 
   .lead :global(svg) {
     flex: 0 0 auto;
-    opacity: 0.85;
   }
 
   .title {
@@ -173,15 +188,16 @@
     display: none;
   }
 
+  /* 未保存数量用 MD3 大徽标（error 色胶囊），比黄底白字更符合状态语义 */
   .badge {
-    min-width: 18px;
-    padding: 0 5px;
-    border-radius: 9px;
-    background: var(--ecg-warn, #e0932f);
-    color: #fff;
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: var(--m3-shape-full);
+    background: var(--m3c-error);
+    color: var(--m3c-on-error);
     font-size: 11px;
     font-weight: 600;
-    line-height: 18px;
+    line-height: 20px;
     text-align: center;
   }
 
@@ -189,10 +205,20 @@
   .collapsed .badge {
     position: absolute;
     top: 2px;
-    right: 4px;
-    min-width: 14px;
-    padding: 0 3px;
+    right: 2px;
+    min-width: 16px;
+    padding: 0 4px;
     font-size: 10px;
-    line-height: 14px;
+    line-height: 16px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar {
+      transition: none;
+    }
+
+    .item {
+      transition: none;
+    }
   }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button, TextFieldOutlined } from 'm3-svelte';
   import type { WidgetProps } from './props.ts';
 
   let { field, value, error, onChange }: WidgetProps = $props();
@@ -96,17 +97,26 @@
 </script>
 
 <div class="w-hotkey" class:recording>
-  <input
-    type="text"
-    aria-label={field.title}
-    aria-invalid={error ? 'true' : undefined}
-    value={text}
-    spellcheck="false"
-    oninput={(e) => onChange(e.currentTarget.value)}
-  />
-  <button type="button" class="rec" aria-label={recording ? '取消录制' : '录制快捷键'} onclick={start}>
+  <div class="field">
+    <TextFieldOutlined
+      label=""
+      type="text"
+      aria-label={field.title}
+      error={Boolean(error)}
+      aria-invalid={error ? 'true' : undefined}
+      value={text}
+      spellcheck="false"
+      oninput={(e) => onChange(e.currentTarget.value)}
+    />
+  </div>
+  <Button
+    variant={recording ? 'filled' : 'tonal'}
+    size="s"
+    aria-label={recording ? '取消录制' : '录制快捷键'}
+    onclick={start}
+  >
     {recording ? '按任意键…' : '录制'}
-  </button>
+  </Button>
   {#if recording}
     <span class="hint">按 Esc 取消</span>
   {/if}
@@ -115,49 +125,45 @@
 <style>
   .w-hotkey {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     align-items: center;
-  }
-
-  .w-hotkey input {
-    flex: 1 1 auto;
     width: 100%;
     min-width: 0;
-    padding: 6px 8px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: var(--ecg-input-bg, #fff);
-    color: inherit;
-    font: inherit;
   }
 
-  .w-hotkey input[aria-invalid='true'] {
-    border-color: var(--ecg-danger, #d33);
+  /* 基数为 0：输入框吃掉按钮与提示文字之外的全部空间 */
+  .field {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
-  .w-hotkey.recording input {
-    border-color: var(--ecg-accent, #3b82f6);
-    box-shadow: 0 0 0 3px var(--ecg-accent-weak, #3b82f633);
+  .w-hotkey :global(.m3-container) {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
   }
 
-  .rec {
-    padding: 6px 10px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    font: inherit;
-    white-space: nowrap;
+  .w-hotkey :global(input) {
+    padding: 0 12px;
+    font-size: 13px;
+    font-family: var(--ecg-mono);
   }
 
-  .recording .rec {
-    border-color: var(--ecg-accent, #3b82f6);
-    color: var(--ecg-accent, #3b82f6);
+  /* 录制中把边框切成主题色，用户一眼能看出「现在按的键会被吃掉」 */
+  .recording .field :global(.m3-container .layer) {
+    border-color: var(--ecg-accent);
+    border-width: 2px;
+  }
+
+  /* 上面那条 .m3-container 规则也命中 Button，会把按钮撑成整行宽、把输入框挤没 */
+  .w-hotkey :global(button.m3-container) {
+    flex: 0 0 auto;
+    width: auto;
+    height: 40px;
   }
 
   .hint {
-    color: var(--ecg-muted, #888);
+    color: var(--ecg-muted);
     font-size: 12px;
     white-space: nowrap;
   }

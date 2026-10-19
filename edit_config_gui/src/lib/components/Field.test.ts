@@ -1,5 +1,22 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Field → widgets/index → m3-svelte 的 barrel 会连带求值 Slider，而 svelte/motion
+// 在模块初始化时就读 matchMedia；jsdom 没有这个 API，不补会在收集阶段直接失败。
+vi.hoisted(() => {
+  if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+  }
+});
 
 import { allFields, fieldId } from '../schema/index.ts';
 import type { FieldMeta, SectionMeta } from '../schema/types.ts';

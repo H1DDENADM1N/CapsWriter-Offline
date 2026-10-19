@@ -10,7 +10,8 @@ CapsWriter-Offline 的图形化配置编辑器。Tauri 2 + Svelte 5，前端资�
 - 保存前**预览 unified diff**，确认后才写盘；写入用 `ReplaceFileW` 原子替换，原文件备份为 `config.toml.bak`。
 - 注释、键序、行尾注释、CRLF、值类型（字符串型的端口、浮点、布尔）全部保持原样——`toml_edit` 在保留装饰的前提下改值，不重新序列化整份文件。
 - 打开后如果文件被外部改过，保存时会报冲突，给「重新加载」与「强制覆盖」两个选择，不会静默覆盖。
-- 客户端/服务端进程是否在跑会显示在底部状态栏，可直接重启（管理员会话下会尝试降权启动）。若检测到服务端或客户端**以管理员权限运行**，对应的圆点会从绿色变**紫色**（浅色 `#8e44ad` / 深色 `#c084fc`，`aria-label` 为「服务端以管理员权限运行」/「客户端以管理员权限运行」）；此时若管理器自身不是管理员，重启会先在确认框里提示，点「以管理员权限重启」才会弹 UAC 走提权助手。
+- 客户端/服务端进程是否在跑会显示在底部状态栏，可直接重启（管理员会话下会尝试降权启动）。若检测到服务端或客户端**以管理员权限运行**，对应的圆点会从绿色变**紫色**（`src/app.css` 的 `--ecg-elevated`，浅色 `#7b3fa0` / 深色 `#d0a8f5`；`aria-label` 为「服务端以管理员权限运行」/「客户端以管理员权限运行」）；此时若管理器自身不是管理员，重启会先在确认框里提示，点「以管理员权限重启」才会弹 UAC 走提权助手。
+- 默认窗口 **1122×760**（最小 760×520，可自由缩放）；缩放比例不记忆，每次打开都是 100%。
 
 ## 前置工具链
 
@@ -36,7 +37,7 @@ pnpm install
 pnpm dev          # 只起 Vite，浏览器里看 UI（IPC 会提示「不在 Tauri 窗口中运行」）
 pnpm dev:tauri    # 起完整窗口，可读写配置
 
-pnpm test         # 前端 133 个用例 / 10 个文件（schema 12 + 拼音 8 + 搜索 15 + stores 27 + 控件 16 + 渲染 9 + 导航 12 + 面板 7 + 保存 9 + 状态 18）
+pnpm test         # 前端 181 个用例 / 13 个文件（schema 12 · 拼音 8 · 搜索 15 · 主题 14 · 缩放 13 · 翻页键 14 · stores 27 · 字段行 9 · 控件 22 · 保存 9 · 导航 13 · 面板 7 · 状态 18）
 pnpm check        # svelte-check，必须 0 error 0 warning
 pnpm gen:schema-paths   # 改了 schema 后重新生成 Rust 侧的键清单
 
@@ -47,7 +48,7 @@ Rust 侧：
 
 ```powershell
 cd edit_config_gui/src-tauri
-cargo test --release   # lib 109 + tests/coverage.rs 2
+cargo test --release   # lib 119 + tests/coverage.rs 2
 ```
 
 ## 产物位置
@@ -59,6 +60,61 @@ cargo test --release   # lib 109 + tests/coverage.rs 2
 
 前端资源由 Tauri 内嵌进 exe，不需要旁边放 `dist/`。
 
+## 外观：MD3 + 跟随 Windows 主题
+
+界面用 [m3-svelte](https://kendell.dev/m3-svelte/)（Material Design 3 组件库）实现，并且**自动跟随 Windows 的深浅色与主题色**，没有自己的开关。
+
+- 深浅色与主题色都来自注册表，由 Rust 的 `system_theme.rs` 读出来交给前端：
+  `HKCU\...\Themes\Personalize\AppsUseLightTheme` 定深浅，
+  `HKCU\...\DWM\ColorizationColor` 与 `HKCU\Control Panel\Colors\Hilight` 给主题色候选
+  （Windows 在「自动从壁纸取色」时 `ColorizationColor` 可能是近黑色，所以这里给的是**有序候选**，
+  由 `lib/theme.ts` 挑第一个 HCT 彩度 ≥ 12 的；都不合格才退回 `#0078d4`）。
+- 前端 `lib/stores/theme.svelte.ts` 每 3 秒轮询一次（窗口隐藏时跳过），
+  把 HCT 种子色展开成 MD3 的动态色板，注入 `<style id="ecg-m3-tokens">`。
+  深浅两套都在同一条 `light-dark()` 里，切哪套只取决于 `color-scheme`——所以
+  **不要在任何 CSS 里写 `@media (prefers-color-scheme: dark)`**，WebView2 的媒体查询来源
+  不保证等于 Windows 的「应用模式」设置，两套判据并存只会互相打架。
+- 组件只认语义令牌 `--ecg-*`（`app.css` 把 `--m3c-*` 翻译过来）：`--ecg-panel`、`--ecg-danger`、
+  `--ecg-add-bg`……组件里不写任何 hex。状态色（绿=在跑、紫=管理员、黄=警告、红=错误）**故意不跟着
+  主题色走**，否则种子色是绿色时警告也变绿，指示意义就没了。
+- `m3-svelte` 的 `Button`/`TextField`/`Select` 用草案 CSS 函数 `@apply --m3-*` 与
+  `--m3-density()`，需要 `vite-plugin-functions-mixins` 在构建期展开；该函数包内没有默认实现，
+  由 `app.css` 里的 `@function --m3-density` 补上（`--ecg-density` 可整体缩放密度）。
+- 枚举下拉的候选列表（`::picker(select)`）**必须由 `app.css` 里不带任何前缀的规则**接管：
+  只有在 picker 自己身上声明 `appearance: base-select`，浏览器才会把列表当成页面内盒子画，
+  否则走平台原生菜单——在 WebView2 里那个菜单固定浅色，主题管不到。而 `m3-svelte` 里那条
+  `::picker(select)` 会被 Svelte 加上作用域类（`.svelte-xxxx::picker(select)`），Chromium 只认
+  挂在 `<select>` 上的 picker 伪元素，于是那条规则等于失效（这就是「下拉列表始终浅色」的成因）。
+  同理，picker 内部只能写普通 `option` 选择器——`::picker(select) option` 这种「伪元素后跟选择器」
+  会被 lightningcss 判为语法错误，构建直接失败。列表用 `right: anchor(right)` 右对齐到选择框，
+  比选择框宽时朝左展开，不会顶出窗口被裁掉。
+- 样式表用相对路径导入：`import '../node_modules/m3-svelte/package/etc/styles.css'`。
+  走包名 `m3-svelte/etc/styles.css` 会被 Vite 8 拒绝（该子路径只声明在 exports 的 `style` 条件下），
+  而给 `resolve.conditions` 加 `style` 又会把 Svelte 的**服务端**渲染树拉进浏览器产物。
+
+## 缩放与键盘
+
+| 快捷键 | 作用 |
+|---|---|
+| `Ctrl` + `=` / `Ctrl` + `+` | 放大一档 |
+| `Ctrl` + `-` | 缩小一档 |
+| `Ctrl` + 滚轮 | 放大 / 缩小（一次手势只算一档） |
+| `Ctrl` + `0` | 回到 100%（顶栏的「还原」按钮同理） |
+| `Ctrl` + `F` | 搜索配置项（早期版本是 `Ctrl+K`） |
+| `Ctrl` + `S` | 预览保存：先看 diff，确认后才写盘 |
+| `PageUp` / `PageDown` | 翻一屏（90% 视口，留一条重叠带） |
+| `↑` / `↓` | 滚动 80px |
+| `Esc` | 关闭搜索面板 / 保存预览对话框 |
+
+几条实现上的取舍：
+
+- **缩放**档位 50%–200%，只在本次会话有效（不写盘，也不进 `config.toml`）。走 Rust 的 `set_zoom`
+  （webview 缩放），不用 CSS `zoom`——后者不参与媒体查询与 `vw`/`vh` 计算，断点行为会和浏览器不一致。
+  不是 100% 时，顶栏「搜索配置」左侧出现 `110% 还原`，点一下回 100% 后按钮自己消失；
+  用快捷键或滚轮缩回 100% 也会消失，因为按钮看的是状态而不是某一次点击。
+- **翻页键**在焦点位于 `input`/`textarea`/`select`/可编辑区里时**不接管**，命令面板或保存预览
+  对话框开着时也不接管——那些地方的方向键归控件自己。判定逻辑在 `lib/scrollKeys.ts`，是纯函数。
+
 ## 改 schema 的注意事项
 
 字段元数据在 `src/lib/schema/*.ts`，是**唯一**的界面来源：控件、校验器、显隐条件、搜索关键词都由它驱动。
@@ -66,7 +122,7 @@ cargo test --release   # lib 109 + tests/coverage.rs 2
 改完必须同步三处，否则测试会红：
 
 1. `pnpm gen:schema-paths` —— 生成 `src-tauri/tests/schema_paths.json`；
-2. `node scripts/gen-pinyin-map.mjs` —— 新增标题里的汉字要进拼音表，否则 `Ctrl+K` 搜不到；
+2. `node scripts/gen-pinyin-map.mjs` —— 新增标题里的汉字要进拼音表，否则 `Ctrl+F` 搜不到；
 3. `pnpm test` —— `coverage.test.ts`（前端）与 `tests/coverage.rs`（Rust）会双向核对「模板里的键」与「schema 里的键」是否一致。
 
 `pinyin-pro` 只在生成脚本里用，运行期不加载。
@@ -85,6 +141,7 @@ cargo test --release   # lib 109 + tests/coverage.rs 2
 | 左下服务端/客户端指示为**紫色** | 对应的服务端/客户端以管理员权限运行（`aria-label` 分别为「服务端以管理员权限运行」/「客户端以管理员权限运行」）。这是正常状态，不是错误；重启它需要提权（绿=普通权限运行中，灰=未运行） |
 | 重启服务端后指示由紫转绿 | 服务端以管理员权限运行时，非管理员管理器重启它同样先提示提权。提权助手对服务端按 `DowngradeWhenAdmin` 策略拉起，所以重启后它会**回到普通权限**（指示转绿）；客户端按 `InheritToken` 保持提权形态（仍紫色） |
 | 重启客户端报「结束进程失败：拒绝访问（需管理员权限）」 | 客户端以管理员权限运行，而管理器自身不是管理员，`taskkill` 被系统拒绝。在确认框里点「以管理员权限重启」并在 UAC 弹窗选「是」；选「否」会得到「已取消管理员授权（UAC），未做任何改动」，此时磁盘与进程零改动 |
+| `pnpm build:dist` 末尾报 `EBUSY: resource busy or locked, copyfile ... edit_config_gui.exe` | 管理器正开着，仓库根的 exe 被占用（Rust 编译其实已经成功）。先关掉 `edit_config_gui.exe`，再单独跑 `node scripts/copy-dist.mjs` |
 
 ## 为什么不用 `std::fs::rename` 做原子替换
 
@@ -97,7 +154,9 @@ edit_config_gui/
 ├─ src/                  # Svelte 前端
 │  ├─ lib/schema/        # 字段元数据（162 键的唯一来源）+ 覆盖断言
 │  ├─ lib/components/    # 字段行、控件、导航、对话框
-│  ├─ lib/stores/        # 配置状态、保存状态机、导航、命令面板
+│  ├─ lib/stores/        # 配置状态、保存状态机、导航、命令面板、主题、缩放
+│  ├─ lib/theme.ts       # 种子色 → MD3 色板（纯函数，可测试）
+│  ├─ lib/scrollKeys.ts  # 翻页/方向键该不该接管（纯函数，可测试）
 │  └─ bridge.ts          # 唯一 import invoke 的地方
 ├─ src-tauri/src/        # Rust
 │  ├─ config_doc.rs      # 解析 / CRLF 归一化 / 叶子枚举
@@ -107,6 +166,7 @@ edit_config_gui/
 │  ├─ hotkey.rs          # 与 Python keyboard 逐字等价的解析器
 │  ├─ process.rs         # 进程检测、服务端/客户端令牌完整性、受限重启（含 taskkill 输出解码）
 │  ├─ elevate.rs         # 提权助手：runas 拉起自身、结果文件回传（一次性、无窗口）
-│  └─ commands.rs        # 9 个 IPC 命令
+│  ├─ system_theme.rs    # 从注册表读 Windows 深浅色与主题色候选
+│  └─ commands.rs        # 11 个 IPC 命令
 └─ scripts/              # 构建期脚本（键清单、拼音表、复制产物）
 ```

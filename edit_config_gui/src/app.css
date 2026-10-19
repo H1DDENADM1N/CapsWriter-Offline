@@ -1,132 +1,127 @@
 /**
- * 设计令牌。这里只有颜色、字号、间距与少量全局基础样式。
+ * 应用外观：把 MD3 令牌（`--m3c-*`）翻译成本程序自己的语义令牌（`--ecg-*`）。
  *
- * 全部走 `--ecg-*` 前缀而不是 `--bg` / `--accent`：Tauri、Vite 的默认模板以及任何
- * 将来贴进来的第三方片段都可能定义同名变量，前缀是唯一可靠的分界。
+ * 为什么还要这一层：组件里想表达的是「面板」「分隔线」「危险」这些**语义**，
+ * 不是「primary-container」这种色板位置。换配色方案（TonalSpot → Vibrant 之类）
+ * 或换种子色时只动 `--m3c-*`，组件一行都不用改。
  *
- * 两套配色都定义在这里，组件里不再写任何 `@media (prefers-color-scheme)`：
- * 深色只允许在令牌层出现一次，否则迟早出现「某一屏在深色下仍是白底」。
+ * `--m3c-*` 不在这里定义：它由 `lib/theme.ts` 按 Windows 当前主题色生成、
+ * 由 theme store 注入 `<style id="ecg-m3-tokens">`，所以本文件里没有任何主题相关的
+ * hex。深浅色由生成 CSS 里的 `light-dark()` 决定，切换哪一套由 `color-scheme` 决定，
+ * 而 `color-scheme` 由 theme store 按注册表写死——**不要**在这里加
+ * `@media (prefers-color-scheme: dark)`：WebView2 的媒体查询来源不保证等于 Windows
+ * 的「应用模式」设置，两套判据并存只会互相打架。
+ *
+ * 前缀用 `--ecg-` 而不是 `--bg`/`--accent`：Tauri/Vite 模板和网上抄来的片段都可能
+ * 定义同名变量，撞车后表现为「某些地方颜色莫名其妙」，很难查。
  */
 
+/**
+ * m3-svelte 7.2.1 的 Button / TextField / Select / ListItem 用 `--m3-density(<标准高度>)`
+ * 取控件高度，但包里并没有实现这个函数（唯一实现的是 `--translucent`）。不补的话
+ * 构建期会刷一屏 `Unknown function --m3-density`，运行期这些声明是无效 CSS，
+ * 控件高度塌成内容高度——MD3 的「40px 触摸目标」就没了。
+ *
+ * 这里给一个恒等实现（默认等于 MD3 标准高度），并留 `--ecg-density` 缩放：
+ * 想让整张表单更紧凑时改这一个数，不必逐个组件兜底高度。
+ * 函数由 vite-plugin-functions-mixins 在构建期展开成普通 calc()。
+ */
+@function --m3-density(--size) {
+  result: calc(var(--ecg-density, 1) * var(--size));
+}
+
 :root {
-  --ecg-bg: #ffffff;
-  --ecg-fg: #1c2024;
-  --ecg-panel: #f7f8fa;
-  --ecg-border: #d8dce3;
-  --ecg-line: #e7eaf0;
-  --ecg-hover: #f0f2f6;
-  --ecg-active: #e6eefc;
-  --ecg-accent: #2563eb;
-  --ecg-accent-weak: #eaf1ff;
-  --ecg-muted: #6b7280;
-  --ecg-ok: #2f9e44;
-  --ecg-warn: #b8860b;
-  /* 紫色：服务端/客户端以管理员权限运行（深色单独调过） */
-  --ecg-elevated: #8e44ad;
-  --ecg-danger: #c0392b;
+  /* JS 还没跑之前先跟随系统，theme store 启动后立即覆盖成注册表里的真实值 */
+  color-scheme: light dark;
+  --ecg-density: 1;
 
-  /*
-   * 控件与只读区必须比页面底色高一档：同色时输入框只剩一根边框，深色下尤其看不出
-   * 哪里能输入。这两组值在深色里单独调过，不能共用浅色值。
-   */
-  --ecg-input-bg: #ffffff;
-  --ecg-readonly-bg: #f4f5f7;
-  --ecg-muted-strong: #4b5563;
+  /* 表面与文字 */
+  --ecg-bg: var(--m3c-surface, light-dark(#fef7ff, #141218));
+  --ecg-fg: var(--m3c-on-surface, light-dark(#1d1b20, #e6e0e9));
+  --ecg-panel: var(--m3c-surface-container-low, light-dark(#f7f2fa, #1d1b20));
+  --ecg-border: var(--m3c-outline, light-dark(#79747e, #938f99));
+  --ecg-line: var(--m3c-outline-variant, light-dark(#cac4d0, #49454f));
+  --ecg-hover: color-mix(in oklab, var(--m3c-on-surface, #1d1b20) 8%, transparent);
+  --ecg-active: var(--m3c-secondary-container, light-dark(#e8def8, #4a4458));
+  --ecg-accent: var(--m3c-primary, light-dark(#6750a4, #d0bcff));
+  --ecg-accent-weak: var(--m3c-primary-container, light-dark(#eaddff, #4f378b));
+  --ecg-muted: var(--m3c-on-surface-variant, light-dark(#49454f, #cac4d0));
+  --ecg-muted-strong: color-mix(in oklab, var(--m3c-on-surface, #1d1b20) 78%, transparent);
 
-  /* 警告块与状态标记 */
-  --ecg-warn-bg: #fff8e6;
-  --ecg-warn-fg: #8a6100;
-  --ecg-tag-bg: #fff3cd;
-  --ecg-tag-fg: #7a5a00;
+  /* 输入区：MD3 里输入框是「比表面高一级的容器」，不是纯白 */
+  --ecg-input-bg: var(--m3c-surface-container-highest, light-dark(#e6e0e9, #36343b));
+  --ecg-readonly-bg: var(--m3c-surface-container, light-dark(#f3edf7, #211f26));
 
-  --ecg-mono: Consolas, 'Cascadia Mono', 'Courier New', monospace;
+  /* 状态色：这四类刻意**不**跟着主题色走。
+     「绿=在跑、紫=管理员、黄=警告、红=错误」是用户已经形成的认知，让它们随
+     主题色变化（比如种子色是绿的，警告也变绿）就丢掉了指示意义。 */
+  --ecg-ok: light-dark(#2f9e44, #6ddc8b);
+  --ecg-warn: light-dark(#8a6100, #f2c352);
+  --ecg-elevated: light-dark(#7b3fa0, #d0a8f5);
+  --ecg-danger: var(--m3c-error, light-dark(#ba1a1a, #ffb4ab));
+  --ecg-warn-bg: color-mix(in oklab, var(--ecg-warn) 14%, transparent);
+  --ecg-warn-fg: var(--ecg-warn);
+  --ecg-tag-bg: var(--m3c-tertiary-container, light-dark(#ffd8e4, #633b48));
+  --ecg-tag-fg: var(--m3c-on-tertiary-container, light-dark(#31111d, #ffd8e4));
+  --ecg-add-bg: color-mix(in oklab, var(--ecg-ok) 16%, transparent);
+  --ecg-del-bg: color-mix(in oklab, var(--ecg-danger) 14%, transparent);
+  --ecg-hunk-fg: var(--m3c-tertiary, light-dark(#7d5260, #efb8c8));
 
-  /* diff 行底色：用独立令牌而不是在组件里 color-mix，深色下才调得动 */
-  --ecg-add-bg: rgb(47 158 68 / 12%);
-  --ecg-del-bg: rgb(192 57 43 / 10%);
-  --ecg-hunk-fg: #7c5cbf;
-
-  color-scheme: light;
+  --ecg-mono: 'Cascadia Mono', Consolas, 'Courier New', monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ecg-bg: #16181c;
-    --ecg-fg: #e7e9ee;
-    --ecg-panel: #1c1f24;
-    --ecg-border: #333842;
-    --ecg-line: #262a31;
-    --ecg-hover: #24282f;
-    --ecg-active: #1e2b45;
-    --ecg-accent: #5b8def;
-    --ecg-accent-weak: #1a2436;
-    --ecg-muted: #9aa1ad;
-    --ecg-ok: #57c277;
-    --ecg-warn: #e0b34a;
-    /* 紫色：服务端/客户端以管理员权限运行（深色单独调过） */
-    --ecg-elevated: #c084fc;
-    --ecg-danger: #e0736a;
-
-    --ecg-input-bg: #1f232a;
-    --ecg-readonly-bg: #1a1d23;
-    --ecg-muted-strong: #c3c9d4;
-
-    --ecg-warn-bg: #332a10;
-    --ecg-warn-fg: #e8c878;
-    --ecg-tag-bg: #3a2f10;
-    --ecg-tag-fg: #e8c878;
-
-    --ecg-add-bg: rgb(87 194 119 / 16%);
-    --ecg-del-bg: rgb(224 115 106 / 16%);
-    --ecg-hunk-fg: #b39ddb;
-
-    color-scheme: dark;
-  }
-}
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 html,
 body {
   height: 100%;
+  margin: 0;
 }
 
 body {
-  margin: 0;
   background: var(--ecg-bg);
   color: var(--ecg-fg);
-  font-family: 'Microsoft YaHei UI', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Microsoft YaHei UI', 'Segoe UI', system-ui, sans-serif;
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
-input,
-select,
-textarea,
-button {
-  font: inherit;
-  color: inherit;
-}
-
+/* 原生文本框/下拉仍是部分控件（热键、路径、动态表格行）的载体：
+   统一成 MD3 的「填充输入框」外观，迁移到 m3 TextField 的控件自带样式，不受这里影响。 */
 input[type='text'],
 input[type='password'],
 input[type='number'],
 select,
 textarea {
-  height: 30px;
-  padding: 0 8px;
+  height: 32px;
+  padding: 0 10px;
   border: 1px solid var(--ecg-border);
-  border-radius: 4px;
-  background: var(--ecg-bg);
+  border-radius: var(--m3-shape-extra-small, 4px);
+  background: var(--ecg-input-bg);
+  color: inherit;
+  font: inherit;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 textarea {
   height: auto;
-  padding: 6px 8px;
+  min-height: 64px;
+  padding: 8px 10px;
   line-height: 1.6;
+  resize: vertical;
+}
+
+input:hover:not(:disabled),
+select:hover,
+textarea:hover {
+  border-color: var(--ecg-muted);
 }
 
 input:disabled,
@@ -134,15 +129,69 @@ select:disabled,
 textarea:disabled {
   background: var(--ecg-panel);
   color: var(--ecg-muted);
+  cursor: not-allowed;
 }
 
+/* 焦点环只给原生控件和没有 m3 样式的普通按钮；m3 组件自带焦点态，
+   在它们身上再套一层 outline 会变成双重描边。 */
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
-button:focus-visible,
-[tabindex]:focus-visible {
+button:not(.m3-container):focus-visible {
   outline: 2px solid var(--ecg-accent);
   outline-offset: 1px;
+}
+
+/* 原生 <select> 的候选列表由浏览器自己画：只有在 picker 自己身上声明
+   `appearance: base-select`，它才会被当成页面里的一个盒子来渲染；
+   否则（Chromium 默认）它走平台原生菜单——在 WebView2 里固定是浅色，
+   页面主题完全管不到，这就是「下拉列表始终浅色」的根因。
+   而 m3-svelte 里那条 `::picker(select)` 规则会被 Svelte 加上作用域类
+   （`.svelte-xxxx::picker(select)`），Chromium 只认挂在 <select> 上的 picker 伪元素，
+   于是那条规则等于失效。这里必须用**不带任何前缀**的 `::picker(select)` 重新声明；
+   同理，picker 内部的选择器不能写成 `::picker(select) option`
+   （伪元素后面不能再跟选择器，lightningcss 会直接报错），只能写成普通的 `option`。 */
+::picker(select) {
+  appearance: base-select;
+  border: none;
+  border-radius: var(--m3-shape-small, 8px);
+  background-color: var(--m3c-surface-container-high, light-dark(#ece6f0, #2b2930));
+  color: var(--m3c-on-surface, light-dark(#1d1b20, #e6e0e9));
+  box-shadow: var(--m3-elevation-2);
+  padding-block: 8px;
+  margin-block: 4px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  /* picker 是单独绘制的盒子，显式继承 <select> 的 color-scheme，
+     否则 light-dark() 会按默认（浅色）解析 */
+  color-scheme: inherit;
+  /* 宽度：默认按最长选项撑开（max-content）。候选列表通常比选择框本身宽，
+     而枚举框就在窗口右边，所以把列表的右缘对齐到 <select> 的右缘——多出来的
+     部分朝左边的文案区展开，不会顶出窗口被裁掉。anchor() 不被支持时会各自退回
+     auto，最坏情况就是回到浏览器的默认摆放，不会更糟。 */
+  width: max-content;
+  max-width: min(420px, calc(100vw - 24px));
+  right: anchor(right);
+}
+
+option {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding-inline: 16px;
+  background-color: transparent;
+  color: var(--m3c-on-surface, light-dark(#1d1b20, #e6e0e9));
+  font: inherit;
+  cursor: pointer;
+}
+
+option:hover {
+  background-color: color-mix(in oklab, var(--m3c-on-surface, #1d1b20) 8%, transparent);
+}
+
+option:checked {
+  background-color: var(--m3c-primary-container, light-dark(#eaddff, #4f378b));
+  color: var(--m3c-on-primary-container, light-dark(#21005d, #eaddff));
 }
 
 /* 控件只负责边框，错误文案由 Field 渲染 */
@@ -151,13 +200,34 @@ button:focus-visible,
 }
 
 ::selection {
-  background: var(--ecg-accent-weak);
+  background: var(--m3c-primary-container, light-dark(#eaddff, #4f378b));
+  color: var(--m3c-on-primary-container, light-dark(#21005d, #eaddff));
 }
 
-/*
- * 只有导航禁选。输入框、diff、错误信息必须能选中复制——贴到 issue 里的那一行
- * 错误文案，往往就是排查的全部线索。
- */
+/* 滚动条：默认灰条在深色主题下会亮得刺眼 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--m3c-on-surface, #1d1b20) 26%, transparent);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--m3c-on-surface, #1d1b20) 40%, transparent);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 只有导航禁选。输入框、diff、错误信息必须能选中复制——贴到 issue 里的那一行
+   错误文案，往往就是排查的全部线索。 */
 [role='tablist'],
 .ecg-noselect {
   user-select: none;

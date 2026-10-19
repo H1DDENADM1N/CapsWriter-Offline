@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button, TextFieldOutlined } from 'm3-svelte';
   import type { JsonValue } from '../../schema/types.ts';
   import type { WidgetProps } from './props.ts';
 
@@ -72,7 +73,7 @@
   });
 </script>
 
-<div class="w-table" class:invalid={error}>
+<div class="w-table" class:invalid={Boolean(error)}>
   {#if rows.length === 0}
     <p class="empty">暂未添加</p>
   {:else}
@@ -84,39 +85,51 @@
     </div>
     {#each rows as row, i (i)}
       <div class="row" class:dup={duplicates.has(row.key.trim())}>
-        <input
+        <TextFieldOutlined
+          label=""
           type="text"
           aria-label={`进程名 第 ${i + 1} 项`}
           placeholder="vlc.exe"
+          error={Boolean(error)}
           value={row.key}
           spellcheck="false"
           oninput={(e) => patch(i, { key: e.currentTarget.value })}
         />
-        <input
+        <TextFieldOutlined
+          label=""
           type="text"
           aria-label={`快捷键 第 ${i + 1} 项`}
           placeholder="ctrl + alt + f9"
+          error={Boolean(error)}
           value={row.hotkey}
           spellcheck="false"
           oninput={(e) => patch(i, { hotkey: e.currentTarget.value })}
         />
-        <input
+        <TextFieldOutlined
+          label=""
           type="text"
           aria-label={`显示名称 第 ${i + 1} 项`}
           placeholder="VLC Media Player"
+          error={Boolean(error)}
           value={row.name}
           oninput={(e) => patch(i, { name: e.currentTarget.value })}
         />
-        <button type="button" aria-label={`删除第 ${i + 1} 项`} onclick={() => emit(rows.filter((_, j) => j !== i))}>
+        <Button
+          variant="text"
+          size="s"
+          aria-label={`删除第 ${i + 1} 项`}
+          style="color: var(--ecg-danger)"
+          onclick={() => emit(rows.filter((_, j) => j !== i))}
+        >
           删除
-        </button>
+        </Button>
       </div>
     {/each}
   {/if}
 
-  <button type="button" class="add" onclick={() => emit([...rows, { key: '', hotkey: '', name: '' }])}>
+  <Button variant="tonal" size="s" onclick={() => emit([...rows, { key: '', hotkey: '', name: '' }])}>
     添加一行
-  </button>
+  </Button>
 
   {#if duplicates.size > 0}
     <p class="warn">进程名重复：{Array.from(duplicates).join('、')}——保存时只会保留最后一行。</p>
@@ -127,62 +140,57 @@
   .w-table {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     align-items: flex-start;
     width: 100%;
+    min-width: 0;
   }
 
   .row {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr auto;
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: 8px;
     width: 100%;
     align-items: center;
   }
 
   .row.head {
-    color: var(--ecg-muted, #888);
+    color: var(--ecg-muted);
     font-size: 12px;
   }
 
-  input {
+  .w-table :global(.m3-container) {
     width: 100%;
-    padding: 6px 8px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: var(--ecg-input-bg, #fff);
-    color: inherit;
-    font: inherit;
+    min-width: 0;
+    height: 40px;
   }
 
-  .invalid input {
-    border-color: var(--ecg-danger, #d33);
+  .w-table :global(input) {
+    padding: 0 12px;
+    font-size: 13px;
   }
 
-  .row.dup input:first-child {
-    border-color: var(--ecg-warn, #d97706);
-  }
-
-  button {
-    padding: 6px 10px;
-    border: 1px solid var(--ecg-border, #c8ccd4);
-    border-radius: 6px;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    font: inherit;
+  /* 上面那条也命中 Button（同一套 m3-container 类），这里恢复自适应宽度 */
+  .w-table :global(button.m3-container) {
+    width: auto;
+    height: 40px;
     white-space: nowrap;
+  }
+
+  /* 重复的进程名保存时会互相覆盖，只把第一列染成警示色，提示落在出错的那格 */
+  .row.dup :global(.m3-container .layer) {
+    border-color: var(--ecg-warn);
   }
 
   .empty {
     margin: 0;
-    color: var(--ecg-muted, #888);
+    color: var(--ecg-muted);
     font-size: 13px;
   }
 
   .warn {
     margin: 0;
-    color: var(--ecg-warn, #d97706);
+    color: var(--ecg-warn);
     font-size: 12px;
   }
 </style>
