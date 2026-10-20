@@ -1594,23 +1594,56 @@ class GUI(QMainWindow):
         except AttributeError:
             pass
 
+    def apply_native_z_order(self):
+        """把窗口的原生 Z-order 归位到与当前置顶状态一致。
+
+        仅调用 setWindowFlag(Qt.WindowStaysOnTopHint, False) 只会清除
+        WS_EX_TOPMOST 样式位、不会改变窗口在 Z-order 中的位置：窗口仍滞留在原先
+        （置顶层）的位置上。此后点/激活别的窗口只会把那个窗口抬到普通窗口层顶端，
+        仍低于客户端滞留的位置，所以表现为「取消置顶后点到别的窗口仍盖在它前面」
+        （用户侧的绕过方式是先点一下客户端窗口、再点别的窗口 —— 因为激活客户端
+        本身就会把它拉回普通窗口层）。
+        实测：清除样式位后再调 HWND_NOTOPMOST 毫无作用（层级完全不动）。
+        所以取消置顶后必须把窗口显式拉回普通窗口层顶端：
+          - 置顶:     移到顶层窗口层（HWND_TOPMOST）
+          - 取消置顶: 激活自身（等同用户点一下这个窗口）—— 窗口仍是当前窗口，
+            看得见、可以继续输入，但已不再永远置顶，此后点/激活任何普通窗口
+            都能正常盖住它。
+            （不用 HWND_BOTTOM：它会把窗口立刻沉到所有普通窗口之后，被其它窗口
+            盖住时客户端看起来像「消失」了。）
+        """
+        hwnd = int(self.winId())
+        try:
+            if self.original_stays_on_top:
+                win32gui.SetWindowPos(
+                    hwnd,
+                    win32con.HWND_TOPMOST,
+                    0,
+                    0,
+                    0,
+                    0,
+                    win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE,
+                )
+            else:
+                # 激活自身即可把它从置顶层位置拉回普通窗口层顶端
+                win32gui.SetForegroundWindow(hwnd)
+        except Exception as e:
+            self.logger.debug(f"重排窗口 Z-order 失败: {e}")
+
     def window_stay_on_top_toggled(self):
         # 切换窗口置顶状态
-        if self.windowFlags() & Qt.WindowStaysOnTopHint:
-            self.setWindowFlags(self.windowFlags() ^ Qt.WindowStaysOnTopHint)
-            self.original_stays_on_top = False  # 更新原始状态
-        else:
-            self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-            self.original_stays_on_top = True  # 更新原始状态
-            global gui
-        window_is_on_top = bool(gui.windowFlags() & Qt.WindowStaysOnTopHint)
-        if window_is_on_top:
+        self.original_stays_on_top = not bool(
+            self.windowFlags() & Qt.WindowStaysOnTopHint
+        )  # 更新原始状态
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, self.original_stays_on_top)
+        if self.original_stays_on_top:
             pin_char = chr(0xE840)
             self.stay_on_top_button.setText(pin_char)
         else:
             unpin_char = " "
             self.stay_on_top_button.setText(unpin_char)
         self.show()  # 重新显示窗口以应用更改
+        self.apply_native_z_order()
 
     def show_time_label_button_toggled(self):
         # 切换是否在鼠标离开客户端界面时 显示数字时钟 以代替 客户端界面
@@ -1880,14 +1913,13 @@ class GUI(QMainWindow):
         self.move(window_geometry.topLeft())
 
         # 恢复原始的置顶状态
-        if not self.original_stays_on_top and was_on_top:
-            # 如果原始状态不是置顶，但现在是置顶的，则取消置顶
-            self.setWindowFlags(self.windowFlags() ^ Qt.WindowStaysOnTopHint)
+        # 居中时可能临时置顶过，这里以当前实际状态与原始状态比较，
+        # 否则「原始不置顶 + 进入时未置顶」的组合会把临时置顶保留下来。
+        currently_on_top = bool(self.windowFlags() & Qt.WindowStaysOnTopHint)
+        if currently_on_top != self.original_stays_on_top:
+            self.setWindowFlag(Qt.WindowStaysOnTopHint, self.original_stays_on_top)
             self.show()
-        elif self.original_stays_on_top and not was_on_top:
-            # 如果原始状态是置顶，但现在不是置顶的，则设置为置顶
-            self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-            self.show()
+            self.apply_native_z_order()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:

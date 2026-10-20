@@ -1084,6 +1084,191 @@ def test_toggle_line_comment_skips_already_commented_lines() -> None:
     assert edit.toPlainText() == "#a\n#b", repr(edit.toPlainText())
 
 
+# -------------------------------------- 行操作：多光标各自成块（回归用例）
+
+
+def spot(edit: MultiCursorTextEdit, position: int) -> tuple[int, str, int]:
+    """把字符位置换算成 (行号, 该行文本, 列号)，便于断言「光标在哪一行」。"""
+    block = edit.document().findBlock(position)
+    return (block.blockNumber(), block.text(), position - block.position())
+
+
+def primary_spot(edit: MultiCursorTextEdit) -> tuple[int, str, int]:
+    return spot(edit, edit.textCursor().position())
+
+
+def extra_spots(edit: MultiCursorTextEdit) -> list[tuple[int, str, int]]:
+    return sorted(spot(edit, cur.position()) for cur in edit.extra_cursors)
+
+
+def place_carets(edit: MultiCursorTextEdit, positions: list[int]) -> None:
+    """主光标放第一个位置，其余加成副光标。"""
+    caret(edit, positions[0])
+    for position in positions[1:]:
+        edit.add_cursor_at(position)
+
+
+@test
+def test_move_line_up_treats_each_cursor_line_as_its_own_block() -> None:
+    """Alt+↑ 多光标：每个光标只移动自己那一行，中间的行必须原地不动。
+
+    根因回归：``_selected_line_range()`` 把所有光标行压成 ``[min, max]``，
+    于是光标在 line1 与 line4 时，line2 也被当成选区一部分一起重排。
+    """
+    edit = make_edit("aa1\nbb2\ncc3\ndd4\nee5\nff6\ngg7\n")
+    place_carets(edit, [5, 17])  # line1 col1, line4 col1
+    assert edit.move_line(-1) is True
+    assert edit.toPlainText() == "bb2\naa1\ncc3\nee5\ndd4\nff6\ngg7\n", repr(
+        edit.toPlainText()
+    )
+    assert primary_spot(edit) == (0, "bb2", 1), primary_spot(edit)
+    assert extra_spots(edit) == [(3, "ee5", 1)], extra_spots(edit)
+
+
+@test
+def test_move_line_down_treats_each_cursor_line_as_its_own_block() -> None:
+    """Alt+↓ 多光标：各自与下一行交换，互不干扰。"""
+    edit = make_edit("aa1\nbb2\ncc3\ndd4\nee5\n")
+    place_carets(edit, [5, 13])  # line1 col1, line3 col1
+    assert edit.move_line(1) is True
+    assert edit.toPlainText() == "aa1\ncc3\nbb2\nee5\ndd4\n", repr(edit.toPlainText())
+    assert primary_spot(edit) == (2, "bb2", 1), primary_spot(edit)
+    assert extra_spots(edit) == [(4, "dd4", 1)], extra_spots(edit)
+
+
+@test
+def test_move_line_up_skips_only_the_cursor_already_on_first_line() -> None:
+    """最上面的光标已在第 0 行时只跳过它，其余光标照常上移。"""
+    edit = make_edit("aa1\nbb2\ncc3\ndd4\n")
+    place_carets(edit, [1, 9])  # line0 col1, line2 col1
+    assert edit.move_line(-1) is True
+    assert edit.toPlainText() == "aa1\ncc3\nbb2\ndd4\n", repr(edit.toPlainText())
+    assert primary_spot(edit) == (0, "aa1", 1), primary_spot(edit)
+    assert extra_spots(edit) == [(1, "cc3", 1)], extra_spots(edit)
+
+
+@test
+def test_move_line_up_returns_false_when_no_cursor_can_move() -> None:
+    """全都在第 0 行（单行文档）时命令应报告未生效。"""
+    edit = make_edit("only")
+    caret(edit, 2)
+    assert edit.move_line(-1) is False
+
+
+@test
+def test_delete_line_relocates_every_cursor_to_its_own_replacement_line() -> None:
+    """Ctrl+Shift+K 多光标：每个光标落到自己那块的接替行，保留列位置。"""
+    edit = make_edit("aa1\nbb2\ncc3\ndd4\nee5\n")
+    place_carets(edit, [5, 13])  # line1 col1, line3 col1
+    assert edit.delete_line() is True
+    assert edit.toPlainText() == "aa1\ncc3\nee5\n", repr(edit.toPlainText())
+    assert primary_spot(edit) == (1, "cc3", 1), primary_spot(edit)
+    assert extra_spots(edit) == [(2, "ee5", 1)], extra_spots(edit)
+
+
+@test
+def test_duplicate_line_down_puts_each_cursor_into_its_own_copy() -> None:
+    """Shift+Alt+↓ 多光标：每个光标进入自己那一行的副本。"""
+    edit = make_edit("aa1\nbb2\ncc3\n")
+    place_carets(edit, [1, 9])  # line0 col1, line2 col1
+    assert edit.duplicate_line(1) is True
+    assert edit.toPlainText() == "aa1\naa1\nbb2\ncc3\ncc3\n", repr(edit.toPlainText())
+    assert primary_spot(edit) == (1, "aa1", 1), primary_spot(edit)
+    assert extra_spots(edit) == [(4, "cc3", 1)], extra_spots(edit)
+
+
+@test
+def test_duplicate_line_up_puts_each_cursor_into_its_own_copy() -> None:
+    """Shift+Alt+↑ 多光标：副本插在各自行之前，光标进入副本。"""
+    edit = make_edit("aa1\nbb2\ncc3\n")
+    place_carets(edit, [1, 9])  # line0 col1, line2 col1
+    assert edit.duplicate_line(-1) is True
+    assert edit.toPlainText() == "aa1\naa1\nbb2\ncc3\ncc3\n", repr(edit.toPlainText())
+    assert primary_spot(edit) == (0, "aa1", 1), primary_spot(edit)
+    assert extra_spots(edit) == [(3, "cc3", 1)], extra_spots(edit)
+
+
+@test
+def test_toggle_line_comment_leaves_lines_between_cursors_alone() -> None:
+    """Ctrl+/ 多光标：只注释各光标所在行，中间行不被波及。"""
+    edit = make_edit("aa1\nbb2\ncc3\n")
+    place_carets(edit, [1, 9])  # line0 col1, line2 col1
+    assert edit.toggle_line_comment("#") is True
+    assert edit.toPlainText() == "#aa1\nbb2\n#cc3\n", repr(edit.toPlainText())
+    # 加前缀后列位置跟着右移一格，与 VS Code 一致
+    assert primary_spot(edit) == (0, "#aa1", 2), primary_spot(edit)
+    assert extra_spots(edit) == [(2, "#cc3", 2)], extra_spots(edit)
+
+
+@test
+def test_line_operation_with_a_multiline_selection_still_covers_it_as_one_block(
+) -> None:
+    """单个光标跨行选中时，仍按一整块处理（不能被拆成逐行）。"""
+    edit = make_edit("aa1\nbb2\ncc3\ndd4\n")
+    cur = edit.textCursor()
+    cur.setPosition(1)
+    cur.setPosition(11, QTextCursor.MoveMode.KeepAnchor)  # 覆盖第 0..2 行
+    edit.setTextCursor(cur)
+    assert edit.toggle_line_comment("#") is True
+    assert edit.toPlainText() == "#aa1\n#bb2\n#cc3\ndd4\n", repr(edit.toPlainText())
+
+
+@test
+def test_delete_line_with_a_multiline_selection_moves_caret_to_replacement() -> None:
+    """跨行选中整块后删除：光标落到替身行的块首，不是逐行的偏移。"""
+    edit = make_edit("aa1\nbb2\ncc3\ndd4\n")
+    cur = edit.textCursor()
+    cur.setPosition(1)
+    cur.setPosition(11, QTextCursor.MoveMode.KeepAnchor)  # 覆盖第 0~2 行
+    edit.setTextCursor(cur)
+    assert edit.delete_line() is True
+    assert "dd4\n" == edit.toPlainText(), repr(edit.toPlainText())
+    # 光标是原先的 position（第 2 行第 3 列），删除后落回替身行同一列
+    assert primary_spot(edit) == (0, "dd4", 3), primary_spot(edit)
+
+
+@test
+def test_move_line_down_with_a_multiline_selection_moves_whole_block() -> None:
+    """跨行选中后 Alt+↓：整块下移一行，光标随块一起下移并保持位置。"""
+    edit = make_edit("aa1\nbb2\ncc3\ndd4\n")
+    cur = edit.textCursor()
+    cur.setPosition(1)
+    cur.setPosition(7, QTextCursor.MoveMode.KeepAnchor)  # 覆盖第 0~1 行
+    edit.setTextCursor(cur)
+    assert edit.move_line(1) is True
+    assert "cc3\naa1\nbb2\ndd4\n" == edit.toPlainText(), repr(edit.toPlainText())
+    # position 端（第 1 行第 3 列）随块下移一行
+    assert primary_spot(edit) == (2, "bb2", 3), primary_spot(edit)
+
+
+@test
+def test_every_line_operation_is_undone_by_a_single_ctrl_z() -> None:
+    """多光标下的行操作必须只占撤销栈的一步。
+
+    实现用 ``beginEditBlock``/``endEditBlock`` 把每个光标的编辑包成一个
+    块；若某个操作把光标编辑留在块外，用户就要连按好几次 Ctrl+Z 才能回到
+    操作前，是典型的「撤销失灵」体验。
+    """
+    body = "aa1\nbb2\ncc3\ndd4\nee5\nff6\ngg7\n"
+    operations = (
+        ("move_line(-1)", lambda e: e.move_line(-1)),
+        ("move_line(1)", lambda e: e.move_line(1)),
+        ("delete_line", lambda e: e.delete_line()),
+        ("duplicate_line(1)", lambda e: e.duplicate_line(1)),
+        ("duplicate_line(-1)", lambda e: e.duplicate_line(-1)),
+        ("toggle_line_comment", lambda e: e.toggle_line_comment("#")),
+    )
+    for name, operation in operations:
+        edit = make_edit(body)
+        place_carets(edit, [5, 13, 21])  # 第 1、3、5 行
+        operation(edit)
+        changed = edit.toPlainText()
+        assert changed != body, (name, "操作没有生效")
+        edit.undo()
+        assert edit.toPlainText() == body, (name, repr(edit.toPlainText()))
+
+
+
 # ------------------------------------------------------------- 查找（Ctrl+F）
 
 

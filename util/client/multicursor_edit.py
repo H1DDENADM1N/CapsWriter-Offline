@@ -930,200 +930,324 @@ class MultiCursorTextEdit(QTextEdit):
 
     # ------------------------------------------------------------- 行操作
 
-    def _selected_line_range(self) -> tuple[int, int]:
-        """返回当前涉及的行号区间 [first, last]。
+    def _line_groups(self) -> list[tuple[int, int]]:
+        """把主光标与副光标覆盖的行归并成互不相邻的连续区间，升序返回。
 
-        有副光标时把它们所在的行一并纳入，保证行操作对整组光标生效。
+        语义对齐 VS Code：单个光标的跨行选区算作**一整块**；相邻的光标行
+        合并成一块（否则两块的行操作区域会互相覆盖）；中间没有光标的行
+        不属于任何块，行操作**不得**波及它们。
+
+        旧实现把所有光标行压成 ``[min, max]`` 一个区间，于是光标在
+        line1 与 line4 时 line2、line3 也被当成选区一起重排——这就是
+        「Alt+↑ 上移当前行导致光标位置错乱」的根因。
         """
         doc = self.document()
-        line_numbers: list[int] = []
-        cur = self.textCursor()
-        line_numbers.append(doc.findBlock(cur.position()).blockNumber())
-        if cur.hasSelection():
-            line_numbers.append(doc.findBlock(cur.anchor()).blockNumber())
-        for extra in self._extra_cursors:
-            line_numbers.append(doc.findBlock(extra.position()).blockNumber())
-            if extra.hasSelection():
-                line_numbers.append(doc.findBlock(extra.anchor()).blockNumber())
-        return min(line_numbers), max(line_numbers)
+        spans: list[tuple[int, int]] = []
+        for cur in self._all_cursors():
+            lo, hi = sorted((cur.position(), cur.anchor()))
+            spans.append(
+                (doc.findBlock(lo).blockNumber(), doc.findBlock(hi).blockNumber())
+            )
+        spans.sort()
+        merged: list[tuple[int, int]] = []
+        for first, last in spans:
+            if merged and first <= merged[-1][1] + 1:
+                prev_first, prev_last = merged[-1]
+                merged[-1] = (prev_first, max(prev_last, last))
+            else:
+                merged.append((first, last))
+        return merged
+
+    def _all_cursors(self) -> list[QTextCursor]:
+        return [self.textCursor()] + list(self._extra_cursors)
+
+    def _cursor_specs(self) -> list[dict]:
+        """记录每个光标（主 + 副）所在的行、列与锚点行列。"""
+        doc = self.document()
+        specs: list[dict] = []
+        for cur in self._all_cursors():
+            pos_block = doc.findBlock(cur.position())
+            anchor_block = doc.findBlock(cur.anchor())
+            specs.append(
+                {
+                    "line": pos_block.blockNumber(),
+                    "column": cur.position() - pos_block.position(),
+                    "anchor_line": anchor_block.blockNumber(),
+                    "anchor_column": cur.anchor() - anchor_block.position(),
+                }
+            )
+        return specs
+
+    @staticmethod
+    def _position_in_line(doc, line: int, column: int) -> int:  # noqa: ANN001
+        """把 (行号, 列号) 换算成字符位置，越界时夹到目标行行尾。
+
+        目标行已不存在（行操作把末尾的行删掉后光标被要求落在其后）时
+        夹到**最后一行**的同一列，而不是夹到整个文档末尾字符——后者会
+        落成「最后一行行尾」，列位置就丢了。
+        """
+        block = doc.findBlockByNumber(max(0, line))
+        if not block.isValid():
+            block = doc.lastBlock()
+        return min(
+            block.position() + max(0, column),
+            block.position() + max(0, block.length() - 1),
+        )
+
+    def _place_cursors(self, specs: list[dict], mapper) -> None:  # noqa: ANN001
+        """按 ``mapper(行号) -> (新行号, 列偏移)`` 重新安放全部光标。
+
+        行操作会改变行号（删除/插入/交换），列也可能因加注释前缀而右移，
+        所以每做完一次行操作都必须把**每一个**光标搬到它应去的新位置；
+        旧实现只处理主光标，副光标就停留在旧字符偏移上漂走。
+        """
+        doc = self.document()
+        cursors: list[QTextCursor] = []
+        seen: set[tuple[int, int]] = set()
+        for spec in specs:
+            line, delta = mapper(spec["line"])
+            anchor_line, anchor_delta = mapper(spec["anchor_line"])
+            target = self._position_in_line(doc, line, spec["column"] + delta)
+            anchor = self._position_in_line(
+                doc, anchor_line, spec["anchor_column"] + anchor_delta
+            )
+            key = (anchor, target)
+            if key in seen:
+                continue
+            seen.add(key)
+            cur = QTextCursor(doc)
+            cur.setPosition(anchor)
+            cur.setPosition(target, QTextCursor.MoveMode.KeepAnchor)
+            cursors.append(cur)
+        if not cursors:
+            return
+        primary, extras = cursors[0], cursors[1:]
+        self.setTextCursor(primary)
+        self._extra_cursors = extras
+        self._sync_extra_cursors()
+
+    @staticmethod
+    def _groups_size_above(groups: list[tuple[int, int]], line: int) -> int:
+        """返回完全位于 ``line`` 之上（更靠前）的块所占行数之和。"""
+        return sum(last - first + 1 for first, last in groups if last < line)
+
+    @staticmethod
+    def _replace_lines(doc, cur, low: int, high: int, texts: list[str]) -> bool:  # noqa: ANN001
+        """用 ``texts`` 替换 [low, high] 这些行（保留块外的换行结构）。"""
+        low_block = doc.findBlockByNumber(low)
+        high_block = doc.findBlockByNumber(high)
+        if not low_block.isValid() or not high_block.isValid():
+            return False
+        start = low_block.position()
+        end = high_block.position() + max(0, high_block.length() - 1)
+        cur.setPosition(start)
+        cur.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+        cur.removeSelectedText()
+        cur.setPosition(start)
+        cur.insertText("\n".join(texts))
+        return True
 
     def _block_text(self, block) -> str:  # noqa: ANN001 - QTextBlock
         return block.text()
 
     def delete_line(self) -> bool:
-        """删除涉及的每一行（含换行符）；光标保持**列位置**。
+        """删除每个光标块涉及的整行（含换行符）；光标保持**列位置**。
 
-        VS Code 语义：删掉整行后，光标落在接替它的那一行的同一列，
-        而不是跳到行首。旧实现直接 ``setPosition(start)``（被删区域的
-        起点，永远是第 0 列），用户看到的就是「光标跑到了下一行行首」。
-
-        列位置在删除**之前**取：删除会改变文档长度，事后算就错位了。
-        末尾若列超出剩余行长度，``setPosition`` 会自动夹到行尾。
+        VS Code 语义：删掉整行后，光标落在接替它的那一行同一列，
+        而不是跳到行首；多光标时每个光标落回**自己**那块被删后接替的行，
+        中间没有光标的行不受影响。
         """
-        first, last = self._selected_line_range()
+        groups = self._line_groups()
         doc = self.document()
-        first_block = doc.findBlockByNumber(first)
-        last_block = doc.findBlockByNumber(last)
-        if not first_block.isValid() or not last_block.isValid():
+        if not groups:
             return False
+        specs = self._cursor_specs()
         cur = self.textCursor()
-        # 取列位置：相对光标所在行的行首偏移
-        caret_block = doc.findBlock(cur.position())
-        column = cur.position() - caret_block.position()
-        start = first_block.position()
-        if last_block.next().isValid():
-            end = last_block.next().position()
-        else:
-            # 最后一行：连同前一个换行符一起删，避免留下空行
-            end = last_block.position() + last_block.length() - 1
-            if first > 0:
-                prev = doc.findBlockByNumber(first - 1)
-                start = prev.position() + prev.length() - 1
+        applied = False
         cur.beginEditBlock()
         try:
-            cur.setPosition(start)
-            cur.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
-            cur.removeSelectedText()
-            # 落到删除位置所在行的同一列；越界时 Qt 自己夹到行尾
-            host = doc.findBlock(start)
-            host_start = host.position() if host.isValid() else start
-            cur.setPosition(min(host_start + column, doc.characterCount() - 1))
+            for first, last in reversed(groups):
+                first_block = doc.findBlockByNumber(first)
+                last_block = doc.findBlockByNumber(last)
+                if not first_block.isValid() or not last_block.isValid():
+                    continue
+                start = first_block.position()
+                if last_block.next().isValid():
+                    end = last_block.next().position()
+                else:
+                    # 末尾没有换行符：连同前一个换行一起删，避免留下空行
+                    end = last_block.position() + max(0, last_block.length() - 1)
+                    if first > 0:
+                        prev = doc.findBlockByNumber(first - 1)
+                        start = prev.position() + max(0, prev.length() - 1)
+                cur.setPosition(start)
+                cur.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+                cur.removeSelectedText()
+                applied = True
         finally:
             cur.endEditBlock()
-        self.setTextCursor(cur)
+        if not applied:
+            return False
+
+        def mapper(line: int) -> tuple[int, int]:
+            removed = 0
+            for first, last in groups:
+                if last < line:
+                    removed += last - first + 1
+                elif first <= line <= last:
+                    # 该行随所在块一起被删：落回这一块的替身行（块首）
+                    return (first - removed, 0)
+            return (line - removed, 0)
+
+        self._place_cursors(specs, mapper)
         return True
 
     def duplicate_line(self, direction: int = 1) -> bool:
-        """向上/向下复制涉及的行；光标落在**副本**的同一列。
-
-        VS Code 语义：副本生成后光标移进副本、保持列位置。
-        旧实现在插入完成后固定 ``movePosition(NextCharacter)``，
-        于是永远停在第 1 列——用户看到的就是「跳到了第一个字符后面」。
-        """
-        first, last = self._selected_line_range()
+        """向上/向下复制每个光标块涉及的行；光标落在**副本**的同一列。"""
+        groups = self._line_groups()
         doc = self.document()
-        first_block = doc.findBlockByNumber(first)
-        last_block = doc.findBlockByNumber(last)
-        if not first_block.isValid() or not last_block.isValid():
+        if not groups:
             return False
-        lines = [doc.findBlockByNumber(i).text() for i in range(first, last + 1)]
+        specs = self._cursor_specs()
         cur = self.textCursor()
-        caret_block = doc.findBlock(cur.position())
-        column = cur.position() - caret_block.position()
+        applied = False
         cur.beginEditBlock()
         try:
-            if direction > 0:
-                anchor_block = last_block
-                insert_pos = anchor_block.position() + anchor_block.length() - 1
+            for first, last in reversed(groups):
+                first_block = doc.findBlockByNumber(first)
+                last_block = doc.findBlockByNumber(last)
+                if not first_block.isValid() or not last_block.isValid():
+                    continue
+                lines = [
+                    doc.findBlockByNumber(i).text() for i in range(first, last + 1)
+                ]
+                if direction > 0:
+                    insert_pos = last_block.position() + max(
+                        0, last_block.length() - 1
+                    )
+                    payload = "\n" + "\n".join(lines)
+                else:
+                    insert_pos = first_block.position()
+                    payload = "\n".join(lines) + "\n"
                 cur.setPosition(insert_pos)
-                cur.insertText("\n" + "\n".join(lines))
-                # 副本紧跟在被复制块之后，行号 = last + 1
-                target_line = last + 1
-            else:
-                anchor_block = first_block
-                insert_pos = anchor_block.position()
-                cur.setPosition(insert_pos)
-                cur.insertText("\n".join(lines) + "\n")
-                # 副本插在原块之前，行号 = first
-                target_line = first
-            target_block = doc.findBlockByNumber(target_line)
-            if target_block.isValid():
-                target = target_block.position() + column
-            else:
-                target = insert_pos
-            cur.setPosition(min(target, doc.characterCount() - 1))
+                cur.insertText(payload)
+                applied = True
         finally:
             cur.endEditBlock()
-        self.setTextCursor(cur)
+        if not applied:
+            return False
+
+        def mapper(line: int) -> tuple[int, int]:
+            for first, last in groups:
+                if not first <= line <= last:
+                    continue
+                offset = line - first
+                above = self._groups_size_above(groups, first)
+                if direction > 0:
+                    # 副本紧跟在块后：光标进入副本
+                    return (first + above + (last - first + 1) + offset, 0)
+                # 副本插在块前：光标进入副本，行号只被上方块撑高
+                return (first + above + offset, 0)
+            return (line, 0)
+
+        self._place_cursors(specs, mapper)
         return True
 
     def move_line(self, direction: int) -> bool:
-        """把涉及的行整体上移或下移一行。"""
-        first, last = self._selected_line_range()
+        """把每个光标块整体上移或下移一行；贴边的块被跳过，其余照常移动。"""
+        if direction == 0:
+            return False
+        groups = self._line_groups()
         doc = self.document()
-        if direction > 0 and not doc.findBlockByNumber(last + 1).isValid():
+        if not groups:
             return False
-        if direction < 0 and first == 0:
+        block_count = doc.blockCount()
+        movable: list[tuple[int, int]] = []
+        for first, last in groups:
+            if direction > 0 and last + 1 >= block_count:
+                continue
+            if direction < 0 and first == 0:
+                continue
+            movable.append((first, last))
+        if not movable:
             return False
-        first_block = doc.findBlockByNumber(first)
-        if not first_block.isValid():
-            return False
+        specs = self._cursor_specs()
         cur = self.textCursor()
-        column = cur.position() - first_block.position()
-        # 把 [first, last] 与相邻行一起替换成数组重排后的结果，最稳
-        if direction > 0:
-            low, high = first, last + 1
-        else:
-            low, high = first - 1, last
-        texts = [doc.findBlockByNumber(i).text() for i in range(low, high + 1)]
-        if direction > 0:
-            moved = texts[: last - first + 1]
-            texts = [texts[-1]] + moved
-            new_column_line = first + 1
-        else:
-            moved = texts[1:]
-            texts = moved + [texts[0]]
-            new_column_line = first - 1
-        start_block = doc.findBlockByNumber(low)
-        end_block = doc.findBlockByNumber(high)
-        if not start_block.isValid() or not end_block.isValid():
-            return False
-        start = start_block.position()
-        end = end_block.position() + end_block.length() - 1
         cur.beginEditBlock()
         try:
-            cur.setPosition(start)
-            cur.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
-            cur.removeSelectedText()
-            cur.setPosition(start)
-            cur.insertText("\n".join(texts))
-            target_block = doc.findBlockByNumber(new_column_line)
-            target = target_block.position() + column if target_block.isValid() else start
-            limit = doc.characterCount() - 1
-            cur.setPosition(max(0, min(target, limit)))
+            for first, last in reversed(movable):
+                if direction > 0:
+                    low, high = first, last + 1
+                else:
+                    low, high = first - 1, last
+                texts = [doc.findBlockByNumber(i).text() for i in range(low, high + 1)]
+                if direction > 0:
+                    moved = texts[: last - first + 1]
+                    texts = [texts[-1]] + moved
+                else:
+                    texts = texts[1:] + [texts[0]]
+                self._replace_lines(doc, cur, low, high, texts)
         finally:
             cur.endEditBlock()
-        self.setTextCursor(cur)
+
+        def mapper(line: int) -> tuple[int, int]:
+            for first, last in movable:
+                if first <= line <= last:
+                    return (line + direction, 0)
+            return (line, 0)
+
+        self._place_cursors(specs, mapper)
         return True
 
     def toggle_line_comment(self, prefix: str = "#") -> bool:
-        """给涉及的行统一加/去注释前缀；返回操作后是否处于注释状态。"""
+        """给每个光标块涉及的行加/去注释前缀；返回操作后是否处于注释状态。
+
+        加/去的判定是**全局**的：混合状态下按一次得到「全部加注释」，
+        与 VS Code 一致，也不会把已经有前缀的行叠加成 ``##``。
+        """
         if not prefix:
             return False
-        first, last = self._selected_line_range()
+        groups = self._line_groups()
         doc = self.document()
-        blocks = [doc.findBlockByNumber(i) for i in range(first, last + 1)]
-        blocks = [b for b in blocks if b.isValid()]
-        if not blocks:
+        if not groups:
             return False
-        stripped = [b.text().lstrip() for b in blocks]
-        all_commented = all(t.startswith(prefix) for t in stripped)
-        new_texts: list[str] = []
-        for block in blocks:
-            text = block.text()
-            pad = len(text) - len(text.lstrip())
-            if all_commented:
-                new_texts.append(text[:pad] + text[pad + len(prefix) :])
-            elif text.lstrip().startswith(prefix):
-                # 混合状态：已经注释过的行保持原样，避免叠加前缀
-                new_texts.append(text)
-            else:
-                new_texts.append(text[:pad] + prefix + text[pad:])
-        start = blocks[0].position()
-        end = blocks[-1].position() + blocks[-1].length() - 1
+        all_lines: list[int] = []
+        for first, last in groups:
+            all_lines.extend(range(first, last + 1))
+        blocks = [doc.findBlockByNumber(i) for i in all_lines]
+        if not all(block.isValid() for block in blocks):
+            return False
+        all_commented = all(
+            block.text().lstrip().startswith(prefix) for block in blocks
+        )
+        deltas: dict[int, int] = {}
+        specs = self._cursor_specs()
         cur = self.textCursor()
         cur.beginEditBlock()
         try:
-            cur.setPosition(start)
-            cur.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
-            cur.removeSelectedText()
-            cur.setPosition(start)
-            cur.insertText("\n".join(new_texts))
-            limit = doc.characterCount() - 1
-            cur.setPosition(max(0, min(start, limit)))
+            for first, last in reversed(groups):
+                new_texts: list[str] = []
+                for line in range(first, last + 1):
+                    text = doc.findBlockByNumber(line).text()
+                    pad = len(text) - len(text.lstrip())
+                    if all_commented:
+                        new_texts.append(text[:pad] + text[pad + len(prefix) :])
+                        deltas[line] = -len(prefix)
+                    elif text.lstrip().startswith(prefix):
+                        # 混合状态：已注释的行保持原样，避免叠加前缀
+                        new_texts.append(text)
+                        deltas[line] = 0
+                    else:
+                        new_texts.append(text[:pad] + prefix + text[pad:])
+                        deltas[line] = len(prefix)
+                self._replace_lines(doc, cur, first, last, new_texts)
         finally:
             cur.endEditBlock()
-        self.setTextCursor(cur)
+
+        def mapper(line: int) -> tuple[int, int]:
+            return (line, deltas.get(line, 0))
+
+        self._place_cursors(specs, mapper)
         return not all_commented
 
     def _position_at(self, point: QPoint) -> int:
