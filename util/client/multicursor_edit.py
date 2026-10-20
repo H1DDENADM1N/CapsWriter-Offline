@@ -21,6 +21,7 @@ from typing import Optional
 from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
+    QContextMenuEvent,
     QKeyEvent,
     QMouseEvent,
     QPainter,
@@ -155,8 +156,18 @@ class MultiCursorTextEdit(QTextEdit):
         self._follow_caret = True
         self._extra_cursors: list[QTextCursor] = []
         self._column_anchor: Optional[int] = None
+        # 矩形列选锚点：像素坐标 (x, y) + 命中的视觉行。
+        # 位置本身不足以描述列选——软换行的一行日志在文本上是同一个块里的
+        # 多个视觉行，位置相同、像素行不同。
+        self._column_anchor_point: Optional[tuple[int, int]] = None
         self._column_dragging = False
         self._column_moved = False
+        # 矩形列选状态：命中时右击不再清空副光标，复制时按矩形整体取文本
+        self._rect_active = False
+        self._rect_spans: list[tuple[int, int]] = []
+        self._rect_rows: list[dict] = []
+        # 矩形整体的包围盒 (x_left, y_top, x_right, y_bottom)
+        self._rect_bounds: Optional[tuple[int, int, int, int]] = None
         # 普通拖选（非 Alt）的锚点：用于修正 Qt 在软换行视觉行右边缘的塌陷
         self._plain_anchor: Optional[int] = None
         self._plain_dragging = False
@@ -192,9 +203,13 @@ class MultiCursorTextEdit(QTextEdit):
 
         ``follow_caret`` 为真时行为等同 ``QTextEdit.append``（光标与滚动条
         跟随末尾）；为假时保留用户的光标、选区与滚动位置。
+
+        有选区时**不**把光标拉到末尾：``moveCursor(End)`` 会顺手清掉选区，
+        用户刚「全选」的内容会在下一条日志到达时消失。
         """
         if self._follow_caret:
-            self.moveCursor(QTextCursor.MoveOperation.End)
+            if not self.textCursor().hasSelection():
+                self.moveCursor(QTextCursor.MoveOperation.End)
             self.append(line)
             return
         saved = self._snapshot_state()
@@ -202,10 +217,16 @@ class MultiCursorTextEdit(QTextEdit):
         self._restore_state(saved)
 
     def scroll_to_bottom_if_follow(self) -> None:
-        """仅在跟随末尾时把光标与滚动条推到最后一行。"""
+        """仅在跟随末尾时把光标与滚动条推到最后一行。
+
+        同样不能在有选区时调用 ``moveCursor(End)``——它会把选区清掉。
+        右键菜单关闭后窗口会补发一次 enterEvent（鼠标重新进入窗口），
+        本方法正是从 enterEvent 调用的，所以这里必须保住选区。
+        """
         if not self._follow_caret:
             return
-        self.moveCursor(QTextCursor.MoveOperation.End)
+        if not self.textCursor().hasSelection():
+            self.moveCursor(QTextCursor.MoveOperation.End)
         bar = self.verticalScrollBar()
         bar.setValue(bar.maximum())
 
@@ -524,6 +545,10 @@ class MultiCursorTextEdit(QTextEdit):
 
     def clear_extra_cursors(self) -> None:
         """收敛为单光标，主光标位置保持不变。"""
+        self._rect_active = False
+        self._rect_spans = []
+        self._rect_rows = []
+        self._rect_bounds = None
         if not self._extra_cursors:
             return
         self._extra_cursors.clear()
@@ -875,6 +900,303 @@ class MultiCursorTextEdit(QTextEdit):
         start = block.position()
         end = start + max(0, block.length() - 1)
         return min(start + column, end)
+
+    # ------------------------------------------------ 视觉行（像素）模型
+    #
+    # 矩形列选是**像素**概念：用户在屏幕上框出一个矩形，落在矩形里的
+    # 文字才算选中。而文本位置是**字符**概念，两者不是一一对应：
+    #
+    # 1. 软换行把一个块拆成多个视觉行。一行很长的日志在屏幕上折成两三
+    #    行，但文本上它们属于**同一个块**，「列号」是块内偏移而不是
+    #    视觉列号。用块内偏移去算列选，���行部分就会被整段吞掉或整段选上。
+    # 2. 行尾不是列边界。短行的正文到行尾就结束了，但用户拖到的那个
+    #    像素 x 可能落在行尾**之外**；旧实现把「列号」直接当字符下标去
+    #    夹取，短行因此少选——这就是「部分行行尾部分内容选不中」。
+    #
+    # 所以列选改成以**视觉行**为单位：先定位鼠标落在哪个视觉行，再在
+    # 该视觉行内按像素 x 反查字符边界。每个视觉行用自己的字体度量算，
+    # 于是折行后的续行也能按自己的列参与选区。
+
+    def _block_visual_rows(self, block_number: int) -> list[dict]:
+        """返回一个块的各视觉行描述。
+
+        每项含：``block`` 块号、``index`` 块内视觉行下标、``text_start``
+        块内起始下标、``text_length`` 长度、``top``/``height`` 视口 y 几何、
+        ``origin_x`` 视口 x 原点、``line`` 对应的 ``QTextLine``。
+
+        几何来自 ``QTextBlock.layout()`` 而不是逐块 ``cursorRect()``：前者是
+        O(1) 的布局查询，后者每次都要跑一遍命中测试，拖动时每帧调用会
+        卡顿。布局坐标是**文档坐标**，要减掉滚动量才是视口坐标。
+        """
+        doc = self.document()
+        block = doc.findBlockByNumber(block_number)
+        if not block.isValid():
+            return []
+        layout = block.layout()
+        if layout is None or layout.lineCount() == 0:
+            return []
+        origin = layout.position()
+        offset_y = self.verticalScrollBar().value()
+        base_top = origin.y() - offset_y
+        base_x = origin.x()
+        rows: list[dict] = []
+        for index in range(layout.lineCount()):
+            line = layout.lineAt(index)
+            rect = line.rect()
+            rows.append(
+                {
+                    "block": block_number,
+                    "index": index,
+                    "text_start": line.textStart(),
+                    "text_length": line.textLength(),
+                    "top": base_top + rect.top(),
+                    "height": rect.height(),
+                    "origin_x": base_x + rect.left(),
+                    "line": line,
+                }
+            )
+        return rows
+
+    def _visual_row_at(self, y: int) -> Optional[dict]:
+        """返回 y 像素所在的视觉行描述。
+
+        落点通常在正文上，但也会落在行间空隙（或正文上下的 margin）。
+        这时取**最近的**视觉行：空隙上方取上一行、空隙下方取下一行，
+        这样拖拽起点即便落在行间也不会让列选失效。
+
+        先用 ``cursorForPosition`` 定位到块（O(log n)），再在该块与前一块
+        内找行；只有连块都定位不到时才全文扫描，避免日志很长时每次鼠标
+        移动都遍历整篇文档。
+        """
+        doc = self.document()
+        if doc.blockCount() == 0:
+            return None
+        inside = self.cursorForPosition(QPoint(0, y))
+        block = inside.block()
+        if block.isValid():
+            number = block.blockNumber()
+            for candidate in (number, number - 1):
+                if candidate < 0:
+                    continue
+                rows = self._block_visual_rows(candidate)
+                if not rows:
+                    continue
+                for row in rows:
+                    if row["top"] <= y < row["top"] + row["height"]:
+                        return row
+                if y < rows[0]["top"]:
+                    return rows[0]
+                return rows[-1]
+        for block_number in range(doc.blockCount()):
+            for row in self._block_visual_rows(block_number):
+                if row["top"] <= y < row["top"] + row["height"]:
+                    return row
+        return None
+
+    def _visual_rows_between(
+        self,
+        start: tuple[int, int],
+        end: tuple[int, int],
+    ) -> list[dict]:
+        """列出两个视觉行之间（含两端）的所有视觉行，自上而下。
+
+        ``start`` / ``end`` 是 ``(块号, 块内视觉行下标)``。视觉行的全序就是
+        先按块号、再按块内下标，因此两端之间的行可以按块区间枚举，不必给
+        整篇文档建索引。
+        """
+        if start > end:
+            start, end = end, start
+        first_block, first_index = start
+        last_block, last_index = end
+        rows: list[dict] = []
+        for block_number in range(first_block, last_block + 1):
+            for row in self._block_visual_rows(block_number):
+                key = (row["block"], row["index"])
+                if key < start or key > end:
+                    continue
+                rows.append(row)
+        return rows
+
+    def _row_span_for_pixels(
+        self,
+        row: dict,
+        x_left: int,
+        x_right: int,
+    ) -> Optional[tuple[int, int]]:
+        """求一个视觉行内落在像素区间 ``[x_left, x_right]`` 的字符区间。
+
+        返回**块内**的 ``(起始下标, 结束下标)``；该行与区间无交集时
+        返回 None（该行不参与选区）。
+
+        映射规则（与 ``QTextLine`` 的度量自洽）：
+
+        - 起点 = 落在 ``x_left`` 左侧最近的那个字符边界；
+        - 终点 = 落在 ``x_right`` 右侧最近的那个字符边界，即**被矩形碰到的
+          字符都算选中**；
+        - ``x_right`` 越过该行正文右边界时，终点直接取行末——这正是旧实现
+          丢字的地方（``xToCursor`` 在正文右边界返回的是**最后一个字符**
+          而不是行末，于是少选一个字）。
+        """
+        line = row["line"]
+        text_start = row["text_start"]
+        text_length = row["text_length"]
+        if text_length <= 0:
+            return None
+        text_end = text_start + text_length
+        origin_x = row["origin_x"]
+        rel_left = x_left - origin_x
+        rel_right = x_right - origin_x
+        # 正文右边界：行末字符边界的 x 坐标
+        end_x = line.cursorToX(text_end)[0]
+        if rel_right <= 0 or rel_left >= end_x:
+            # 矩形与该行正文完全不相交
+            return None
+        if rel_left <= 0:
+            start_index = text_start
+        else:
+            # xToCursor 返回**块内**下标，且是「就近取整」；要拿到矩形左边
+            # 覆盖到的那个字符（把字符整个包含进来），得再向左退一格。
+            start_index = line.xToCursor(rel_left)
+            if start_index <= text_start:
+                start_index = text_start
+            elif line.cursorToX(start_index)[0] > rel_left:
+                start_index -= 1
+            start_index = max(text_start, min(start_index, text_end))
+        if rel_right >= end_x:
+            end_index = text_end
+        else:
+            end_index = line.xToCursor(rel_right)
+            if end_index >= text_end:
+                end_index = text_end
+            elif line.cursorToX(end_index)[0] < rel_right:
+                # 右边界落在某个字符内部：把它整个选上
+                end_index += 1
+            end_index = max(text_start, min(end_index, text_end))
+        if end_index <= start_index:
+            return None
+        return (start_index, end_index)
+
+    def _apply_rect_selection(
+        self,
+        rows: list[dict],
+        x_left: int,
+        x_right: int,
+    ) -> bool:
+        """在给定的视觉行与像素 x 区间围成的矩形内选中所有行。
+
+        返回是否真的产生了选区。命中后记录 ``_rect_spans`` / ``_rect_rows``，
+        供复制与「右击不丢选区」使用。
+        """
+        spans: list[tuple[int, int]] = []
+        rect_rows: list[dict] = []
+        for row in rows:
+            span = self._row_span_for_pixels(row, x_left, x_right)
+            if span is None:
+                continue
+            block = self.document().findBlockByNumber(row["block"])
+            base = block.position()
+            spans.append((base + span[0], base + span[1]))
+            rect_rows.append(
+                {
+                    "row": row,
+                    "start": base + span[0],
+                    "end": base + span[1],
+                    "x_left": x_left,
+                    "x_right": x_right,
+                }
+            )
+        if not spans:
+            self._rect_active = False
+            self._rect_spans = []
+            self._rect_rows = []
+            self._rect_bounds = None
+            return False
+        self._rect_spans = spans
+        self._rect_rows = rect_rows
+        self._rect_active = True
+        tops = [entry["row"]["top"] for entry in rect_rows]
+        bottoms = [entry["row"]["top"] + entry["row"]["height"] for entry in rect_rows]
+        self._rect_bounds = (x_left, int(min(tops)), x_right, int(max(bottoms)))
+        first_start, first_end = spans[0]
+        cur = self.textCursor()
+        cur.setPosition(first_start)
+        cur.setPosition(first_end, QTextCursor.MoveMode.KeepAnchor)
+        self.setTextCursor(cur)
+        self._extra_cursors.clear()
+        for start, end in spans[1:]:
+            self._push_selection(start, end)
+        return True
+
+    def _rect_text(self) -> str:
+        """把矩形选区按行拼成文本（每行一段，行间用换行）。"""
+        text = self.toPlainText()
+        return "\n".join(text[start:end] for start, end in self._rect_spans)
+
+    def _copy_rect_selection(self) -> None:
+        """把整个矩形选区（而不是只有主光标那一行）复制到剪贴板。"""
+        if not self._rect_active or not self._rect_spans:
+            return
+        QApplication.clipboard().setText(self._rect_text())
+
+    def _delete_rect_spans(self) -> None:
+        """删除矩形选区覆盖的所有行，并收敛回单个光标。
+
+        矩形选区在文档里是**多段互不相连**的选区（每行一段），Qt 自带的
+        剪切/删除只作用于主光标那一段，所以必须自己逐段删。
+
+        逐段删除按**位置从后往前**做：删掉后面的段不会影响前面段的
+        绝对位置，最后把主光标落到第一段的起点。
+        """
+        if not self._rect_active or not self._rect_spans:
+            return
+        spans = sorted(self._rect_spans)
+        first_start = spans[0][0]
+        editor = self.textCursor()
+        editor.beginEditBlock()
+        try:
+            for start, end in reversed(spans):
+                work = QTextCursor(self.document())
+                work.setPosition(start)
+                work.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+                work.removeSelectedText()
+        finally:
+            editor.endEditBlock()
+        self._rect_active = False
+        self._rect_spans = []
+        self._rect_rows = []
+        self._rect_bounds = None
+        self._extra_cursors.clear()
+        self._sync_extra_cursors()
+        cur = QTextCursor(self.document())
+        cur.setPosition(first_start)
+        self.setTextCursor(cur)
+
+    def _cut_rect_selection(self) -> None:
+        """剪切矩形选区：复制整块文本，然后把所有行删掉。"""
+        if not self._rect_active or not self._rect_spans:
+            return
+        QApplication.clipboard().setText(self._rect_text())
+        self._delete_rect_spans()
+
+    def _point_inside_rect(self, x: int, y: int) -> bool:
+        """判断某个像素点是否落在当前矩形选区内。
+
+        判定用的是**矩形整体**的包围盒，而不是逐行判定：矩形覆盖的纵向
+        区间里可能夹着「该 x 位置没有文字」的行（例如短行右侧），用户
+        在那里右击仍然是「对着这个矩形操作」，不该把选区清掉。
+        """
+        bounds = self._rect_bounds
+        if bounds is None:
+            return False
+        x_left, y_top, x_right, y_bottom = bounds
+        return x_left <= x <= x_right and y_top <= y < y_bottom
+
+    def _position_inside_rect(self, position: int) -> bool:
+        """判断某个文本位置是否落在当前矩形选区内。"""
+        for start, end in self._rect_spans:
+            if start <= position <= end:
+                return True
+        return False
 
     def add_cursor_vertical(self, direction: int) -> bool:
         """在上下相邻行同列加光标；``direction`` 为 +1 向下、-1 向上。
@@ -1290,6 +1612,14 @@ class MultiCursorTextEdit(QTextEdit):
             # 右击 = 弹上下文菜单 = 回到常规操作。此时若还留着一排副光标，
             # 用户接下来的输入会同时写进多个位置，是很危险的意外。
             # 先收敛再交给 Qt 弹菜单，不影响主光标位置。
+            #
+            # 例外：**点在自己的矩形列选区内**时不清——用户此时的意图是
+            # 「对这个矩形选区操作」（复制、查找…），把选区清掉会让菜单里的
+            # 复制只拿到第一行。落在选区外才收敛回单光标。
+            point = event.position().toPoint()
+            if self._rect_active and self._point_inside_rect(point.x(), point.y()):
+                super().mousePressEvent(event)
+                return
             self.clear_extra_cursors()
             super().mousePressEvent(event)
             return
@@ -1297,6 +1627,7 @@ class MultiCursorTextEdit(QTextEdit):
             # Alt+左键是「往集合里再加一个光标」，不能清空
             point = event.position().toPoint()
             self._column_anchor = self._position_at(point)
+            self._column_anchor_point = (point.x(), point.y())
             self._column_dragging = True
             self._column_moved = False
             event.accept()
@@ -1312,18 +1643,40 @@ class MultiCursorTextEdit(QTextEdit):
             self._plain_anchor = self.textCursor().position()
             self._plain_dragging = True
 
+    def _rect_drag_selection(self, end_point: tuple[int, int]) -> bool:
+        """按「锚点像素 + 当前像素」计算矩形列选并应用。
+
+        返回是否产生了选区。矩形是**像素**概念：纵向取锚点与当前点之间
+        的所有视觉行（含两端），横向取两点的 x 区间；每个视觉行用**自己
+        的**字体度量反查字符边界，所以软换行的续行、短行的行尾都能正确
+        命中——这正是旧实现（用块内字符偏移当列号）丢字的原因。
+        """
+        anchor_point = self._column_anchor_point
+        if anchor_point is None:
+            return False
+        ax, ay = anchor_point
+        bx, by = end_point
+        anchor_row = self._visual_row_at(ay)
+        end_row = self._visual_row_at(by)
+        if anchor_row is None or end_row is None:
+            return False
+        rows = self._visual_rows_between(
+            (anchor_row["block"], anchor_row["index"]),
+            (end_row["block"], end_row["index"]),
+        )
+        if not rows:
+            return False
+        x_left = min(ax, bx)
+        x_right = max(ax, bx)
+        return self._apply_rect_selection(rows, x_left, x_right)
+
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if self._column_dragging and event.modifiers() & Qt.KeyboardModifier.AltModifier:
-            anchor = self._column_anchor
-            if anchor is not None:
-                end = self._position_at(event.position().toPoint())
-                a_line, _ = self._line_index_and_column(anchor)
-                b_line, _ = self._line_index_and_column(end)
-                if a_line != b_line:
-                    self._column_moved = True
-                    self.select_column(*self._column_span(anchor, end))
-                    event.accept()
-                    return
+            point = event.position().toPoint()
+            if self._rect_drag_selection((point.x(), point.y())):
+                self._column_moved = True
+                event.accept()
+                return
         super().mouseMoveEvent(event)
         if self._plain_dragging and self._plain_anchor is not None:
             point = event.position().toPoint()
@@ -1342,12 +1695,13 @@ class MultiCursorTextEdit(QTextEdit):
             self._column_dragging = False
             anchor = self._column_anchor
             self._column_anchor = None
+            self._column_anchor_point = None
             moved = self._column_moved
             self._column_moved = False
             if anchor is not None:
                 if moved:
-                    end = self._position_at(event.position().toPoint())
-                    self.select_column(*self._column_span(anchor, end))
+                    point = event.position().toPoint()
+                    self._rect_drag_selection((point.x(), point.y()))
                 else:
                     # 没有拖动：按 Alt+点击语义加/减一个副光标
                     self.toggle_cursor_at(anchor)
@@ -1477,12 +1831,91 @@ class MultiCursorTextEdit(QTextEdit):
             return True
         return False
 
+    def createStandardContextMenu(self):  # noqa: N802
+        """构建标准右键菜单；矩形列选时把 Copy/Cut/Delete 换成整块版本。
+
+        Qt 自带的这些动作只会作用于**主光标**那一行的选区——矩形列选
+        有多行，复制/剪切/删除都只拿到第一行。把它们换掉后，右键菜单与
+        Ctrl+C / Ctrl+X 的行为一致。
+        """
+        menu = super().createStandardContextMenu()
+        if not self._rect_active or not self._rect_spans:
+            return menu
+        handlers = {
+            "Copy": self._copy_rect_selection,
+            "Cut": self._cut_rect_selection,
+            "Delete": self._delete_rect_spans,
+        }
+        actions = menu.actions()
+        replacements = []
+        for action in actions:
+            label = action.text().replace("&", "").split("\t")[0]
+            handler = handlers.get(label)
+            if handler is None:
+                continue
+            replacements.append((actions.index(action), action, label, handler))
+        for index, action, label, handler in reversed(replacements):
+            menu.removeAction(action)
+            new_action = menu.addAction(action.text())
+            new_action.setShortcut(action.shortcut())
+            new_action.setEnabled(True)
+            new_action.triggered.connect(handler)
+            menu.insertAction(menu.actions()[min(index, len(menu.actions()))], new_action)
+        return menu
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:  # noqa: N802
+        """弹出右键菜单。
+
+        必须自己建菜单再 ``exec``：``QTextEdit.contextMenuEvent`` 内部走的是
+        ``QWidgetTextControl`` 自己的菜单构造，**不会**调用本控件的
+        ``createStandardContextMenu()``，所以只在后者里替换动作是无效的——
+        右键菜单里的剪切/删除依旧只作用于主光标那一行。
+
+        非矩形选区时走 Qt 原生路径，保留拼写建议等原生菜单项。
+        """
+        if not self._rect_active or not self._rect_spans:
+            super().contextMenuEvent(event)
+            return
+        menu = self.createStandardContextMenu()
+        self._exec_context_menu(menu, event)
+
+    def _exec_context_menu(self, menu, event: QContextMenuEvent) -> None:
+        """真正弹出菜单；单独成方法便于测试时替换。"""
+        menu.exec(event.globalPos())
+
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_Escape and self._extra_cursors:
             self.clear_extra_cursors()
             event.accept()
             return
         if self._shortcut_action(event):
+            event.accept()
+            return
+        if (
+            self._rect_active
+            and event.key() == Qt.Key.Key_C
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+            and not event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            and not event.modifiers() & Qt.KeyboardModifier.AltModifier
+        ):
+            # 矩形列选要复制**整块**文本，Qt 默认只会复制主光标那一行。
+            self._copy_rect_selection()
+            event.accept()
+            return
+        if (
+            self._rect_active
+            and event.key() == Qt.Key.Key_X
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+            and not event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            and not event.modifiers() & Qt.KeyboardModifier.AltModifier
+        ):
+            # 矩形列选是**多段**选区，Qt 默认剪切只切主光标那一行。
+            self._cut_rect_selection()
+            event.accept()
+            return
+        if self._rect_active and event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            # 同理：Delete/Backspace 也要作用到矩形的每一行。
+            self._delete_rect_spans()
             event.accept()
             return
         if self._extra_cursors:

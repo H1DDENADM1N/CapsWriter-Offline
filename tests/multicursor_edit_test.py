@@ -15,9 +15,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import PySide6  # noqa: E402
 
-from PySide6.QtCore import QEvent, QPointF, QRect, Qt  # noqa: E402
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt  # noqa: E402
 from PySide6.QtGui import (  # noqa: E402
     QColor,
+    QContextMenuEvent,
     QFocusEvent,
     QImage,
     QKeyEvent,
@@ -123,6 +124,39 @@ def test_scroll_to_bottom_respects_follow_flag() -> None:
     edit.scroll_to_bottom_if_follow()
     assert edit.textCursor().position() == len(edit.toPlainText())
     assert scroll.value() == scroll.maximum(), (scroll.value(), scroll.maximum())
+
+
+@test
+def test_append_line_keeps_selection_when_following() -> None:
+    """监听中追加日志不能清掉用户的选区。
+
+    监听模式下 ``append_line`` 会把光标拉到末尾；``moveCursor(End)`` 顺手
+    就会把选区清掉。用户右键菜单「全选」后，下一条日志一到达选区就消失，
+    表现为「全选状态极短时间自动失效」。
+    """
+    edit = make_edit("alpha beta gamma")
+    edit.selectAll()
+    assert edit.textCursor().hasSelection()
+    edit.append_line("tail")
+    assert edit.textCursor().hasSelection(), "追加日志后选区被清掉了"
+    cur = edit.textCursor()
+    assert cur.anchor() == 0, cur.anchor()
+    assert cur.selectedText().startswith("alpha beta gamma"), cur.selectedText()
+
+
+@test
+def test_scroll_to_bottom_keeps_selection_when_following() -> None:
+    """滚动到底时若已有选区，不能顺手把光标拉到末尾。
+
+    右键菜单关闭后窗口会补发 enterEvent，enterEvent 会调本方法。
+    """
+    edit = make_edit("alpha beta gamma")
+    edit.selectAll()
+    edit.scroll_to_bottom_if_follow()
+    assert edit.textCursor().hasSelection(), "滚动到底把选区清掉了"
+    assert edit.textCursor().selectedText() == "alpha beta gamma", (
+        edit.textCursor().selectedText()
+    )
 
 
 # ------------------------------------------------------------------ 光标叠加层
@@ -1649,12 +1683,21 @@ def test_ctrl_alt_up_and_down_multi_line_keeps_column() -> None:
 
 @test
 def test_alt_drag_selects_rectangular_column() -> None:
-    """按住 Alt 拖拽产生矩形列选区，每行等宽且非空。"""
+    """按住 Alt 拖拽产生矩形列选区，每行等宽且非空。
+
+    列选是**像素**概念，所以这里用真实字体度量算出字符边界对应的 x，
+    再拖出 [x1, x2] 这段像素区间；断言每行选中的字符一样。
+    """
     edit = make_edit("abcdef\nabcdef\nabcdef")
-    stub_position_lookup(edit, {0: 0, 1: 7, 2: 14})
-    mouse(edit, QEvent.Type.MouseButtonPress, 10, 0, Qt.KeyboardModifier.AltModifier)
-    mouse(edit, QEvent.Type.MouseMove, 30, 1, Qt.KeyboardModifier.AltModifier)
-    mouse(edit, QEvent.Type.MouseButtonRelease, 30, 1, Qt.KeyboardModifier.AltModifier)
+    line = edit.document().begin().layout().lineAt(0)
+    margin = edit.document().documentMargin()
+    x1 = int(line.cursorToX(1)[0] + margin)
+    x2 = int(line.cursorToX(3)[0] + margin)
+    y0 = int(margin + 2)
+    y1 = int(margin + 16)
+    mouse(edit, QEvent.Type.MouseButtonPress, x1, y0, Qt.KeyboardModifier.AltModifier)
+    mouse(edit, QEvent.Type.MouseMove, x2, y1, Qt.KeyboardModifier.AltModifier)
+    mouse(edit, QEvent.Type.MouseButtonRelease, x2, y1, Qt.KeyboardModifier.AltModifier)
     assert edit.extra_cursor_count() == 1, edit.extra_cursor_count()
     widths = {len(edit.textCursor().selectedText())}
     widths |= {len(c.selectedText()) for c in edit.extra_cursors}
@@ -2377,6 +2420,214 @@ def test_drag_right_edge_of_last_visual_row_selects_block_end() -> None:
     assert edit.textCursor().selectionEnd() == expect_end, (
         f"应选到 {expect_end}，实际 {edit.textCursor().selectionEnd()}"
     )
+
+
+# --------------------------------------- 矩形列选（Alt+拖拽）：像素语义
+
+
+def _char_x(edit: MultiCursorTextEdit, block_number: int, char_index: int) -> float:
+    """某块里第 ``char_index`` 个字符边界的视口 x 坐标。
+
+    用 ``cursorRect`` 反查：它走的是控件自己的排版结果，不依赖
+    ``QTextLayout`` 尚未建立时的空指针，比直接拿 ``block.layout()`` 安全。
+    """
+    block = edit.document().findBlockByNumber(block_number)
+    cur = QTextCursor(block)
+    cur.setPosition(block.position() + char_index)
+    return float(edit.cursorRect(cur).left())
+
+
+def _row_h(edit: MultiCursorTextEdit) -> int:
+    """一个视觉行的高度（像素）。"""
+    cur = QTextCursor(edit.document().begin())
+    return int(edit.cursorRect(cur).height())
+
+
+def _alt_drag(edit: MultiCursorTextEdit, x1: int, y1: int, x2: int, y2: int) -> None:
+    mouse(edit, QEvent.Type.MouseButtonPress, x1, y1, Qt.KeyboardModifier.AltModifier)
+    mouse(edit, QEvent.Type.MouseMove, x2, y2, Qt.KeyboardModifier.AltModifier)
+    mouse(edit, QEvent.Type.MouseButtonRelease, x2, y2, Qt.KeyboardModifier.AltModifier)
+
+
+def _drag_rect(edit: MultiCursorTextEdit, x1: int, x2: int, rows: int = 3) -> None:
+    """在 ``rows`` 行上拖出 [x1, x2] 的矩形列选。"""
+    margin = edit.document().documentMargin()
+    row_h = _row_h(edit)
+    _alt_drag(
+        edit,
+        x1,
+        int(margin + 2),
+        x2,
+        int(margin + 2 + (rows - 1) * row_h + 4),
+    )
+
+
+@test
+def test_alt_drag_selects_to_each_line_end_not_common_column() -> None:
+    """矩形越过短行行尾时，短行选到自己的行尾，而不是被裁成统一列宽。
+
+    旧实现把「列号」当块内字符偏移，短行会被裁到行尾、长行却只选到同一个
+    偏移量，行尾内容选不中。改成像素模型后，每行按自己的度量命中。
+    """
+    edit = make_edit("A" * 20 + "\n" + "B" * 10 + "\n" + "C" * 20)
+    _drag_rect(edit, int(_char_x(edit, 0, 0)), int(_char_x(edit, 0, 15)))
+    assert edit.extra_cursor_count() == 2, edit.extra_cursor_count()
+    texts = [edit.textCursor().selectedText()]
+    texts += [c.selectedText() for c in edit.extra_cursors]
+    assert texts[0] == "A" * 15, len(texts[0])
+    assert texts[1] == "B" * 10, len(texts[1])
+    assert texts[2] == "C" * 15, len(texts[2])
+
+
+@test
+def test_alt_drag_right_edge_includes_whole_last_character() -> None:
+    """矩形右边界落在字符内部时，那个字符要整个选中。"""
+    edit = make_edit("abcdef\nabcdef")
+    margin = edit.document().documentMargin()
+    row_h = _row_h(edit)
+    x1 = int(_char_x(edit, 0, 0) + 1)
+    # 落在第 3 个字符中间：应选到 'abc'
+    x2 = int(_char_x(edit, 0, 3) - 1)
+    _alt_drag(edit, x1, int(margin + 2), x2, int(margin + 2 + row_h))
+    assert edit.textCursor().selectedText() == "abc", edit.textCursor().selectedText()
+
+
+@test
+def test_right_click_inside_rect_selection_keeps_it() -> None:
+    """矩形列选后，在选区内右击不应把选区清掉。
+
+    用户此时的意图是「对这个矩形操作」（复制、查找…），清掉选区会让
+    菜单里的复制只拿到第一行。
+    """
+    edit = make_edit("abcdef\nabcdef\nabcdef")
+    margin = edit.document().documentMargin()
+    x1 = int(_char_x(edit, 0, 1))
+    x2 = int(_char_x(edit, 0, 3))
+    _drag_rect(edit, x1, x2)
+    assert edit.extra_cursor_count() == 2, edit.extra_cursor_count()
+    right_click(edit, x1 + 1, int(margin + 4))
+    assert edit.extra_cursor_count() == 2, edit.extra_cursor_count()
+    assert edit.textCursor().selectedText() == "bc", edit.textCursor().selectedText()
+
+
+@test
+def test_right_click_outside_rect_selection_clears_it() -> None:
+    """在矩形选区**外**右击仍按老规矩收敛回单光标。"""
+    edit = make_edit("abcdef\nabcdef\nabcdef")
+    margin = edit.document().documentMargin()
+    row_h = _row_h(edit)
+    x1 = int(_char_x(edit, 0, 1))
+    x2 = int(_char_x(edit, 0, 3))
+    _drag_rect(edit, x1, x2)
+    assert edit.extra_cursor_count() == 2, edit.extra_cursor_count()
+    right_click(edit, 2, int(margin + 4 * row_h))
+    assert edit.extra_cursor_count() == 0, edit.extra_cursor_count()
+
+
+@test
+def test_ctrl_c_copies_whole_rect_selection() -> None:
+    """矩形列选下 Ctrl+C 要复制整块，而不是只有主光标那一行。"""
+    edit = make_edit("abcdef\nabcdef\nabcdef")
+    x1 = int(_char_x(edit, 0, 1))
+    x2 = int(_char_x(edit, 0, 3))
+    _drag_rect(edit, x1, x2)
+    ev = QKeyEvent(
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_C,
+        Qt.KeyboardModifier.ControlModifier,
+        "\x03",
+    )
+    edit.keyPressEvent(ev)
+    assert QApplication.clipboard().text() == "bc\nbc\nbc", (
+        QApplication.clipboard().text()
+    )
+
+
+@test
+def test_ctrl_x_cuts_whole_rect_selection() -> None:
+    """矩形列选下 Ctrl+X 要剪切整块，而不是只有主光标那一行。"""
+    edit = make_edit("abcdef\nabcdef\nabcdef")
+    x1 = int(_char_x(edit, 0, 1))
+    x2 = int(_char_x(edit, 0, 3))
+    _drag_rect(edit, x1, x2)
+    ev = QKeyEvent(
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_X,
+        Qt.KeyboardModifier.ControlModifier,
+        "\x18",
+    )
+    edit.keyPressEvent(ev)
+    assert QApplication.clipboard().text() == "bc\nbc\nbc", (
+        QApplication.clipboard().text()
+    )
+    assert edit.toPlainText() == "adef\nadef\nadef", repr(edit.toPlainText())
+
+
+@test
+def test_delete_key_removes_whole_rect_selection() -> None:
+    """矩形列选下 Delete 要删掉矩形的每一行。"""
+    edit = make_edit("abcdef\nabcdef\nabcdef")
+    x1 = int(_char_x(edit, 0, 1))
+    x2 = int(_char_x(edit, 0, 3))
+    _drag_rect(edit, x1, x2)
+    ev = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Delete, Qt.KeyboardModifier.NoModifier, "")
+    edit.keyPressEvent(ev)
+    assert edit.toPlainText() == "adef\nadef\nadef", repr(edit.toPlainText())
+
+
+@test
+def test_context_menu_cut_and_delete_act_on_whole_rect() -> None:
+    """右键菜单里的剪切/删除也要作用到矩形的每一行。
+
+    走真实的 ``contextMenuEvent`` 路径：``QTextEdit`` 内部的右键菜单不会
+    调 ``createStandardContextMenu()``，只改后者是无效的。
+    """
+    edit = make_edit("abcdef\nabcdef\nabcdef")
+    x1 = int(_char_x(edit, 0, 1))
+    x2 = int(_char_x(edit, 0, 3))
+    _drag_rect(edit, x1, x2)
+    menus = []
+    edit._exec_context_menu = lambda menu, event: menus.append(menu)
+    ev = QContextMenuEvent(
+        QContextMenuEvent.Reason.Mouse,
+        QPoint(int(x1), 4),
+        QPoint(int(x1), 4),
+    )
+    edit.contextMenuEvent(ev)
+    assert menus, "右键菜单没有被构造"
+    labels = [a.text().replace("&", "").split("\t")[0] for a in menus[0].actions()]
+    assert "Cut" in labels, labels
+    assert "Delete" in labels, labels
+    for action in menus[0].actions():
+        label = action.text().replace("&", "").split("\t")[0]
+        if label == "Cut":
+            action.trigger()
+    assert QApplication.clipboard().text() == "bc\nbc\nbc", (
+        QApplication.clipboard().text()
+    )
+    assert edit.toPlainText() == "adef\nadef\nadef", repr(edit.toPlainText())
+
+
+@test
+def test_context_menu_delete_removes_whole_rect() -> None:
+    """右键菜单里的「删除」要删掉矩形的每一行。"""
+    edit = make_edit("abcdef\nabcdef\nabcdef")
+    x1 = int(_char_x(edit, 0, 1))
+    x2 = int(_char_x(edit, 0, 3))
+    _drag_rect(edit, x1, x2)
+    menus = []
+    edit._exec_context_menu = lambda menu, event: menus.append(menu)
+    ev = QContextMenuEvent(
+        QContextMenuEvent.Reason.Mouse,
+        QPoint(int(x1), 4),
+        QPoint(int(x1), 4),
+    )
+    edit.contextMenuEvent(ev)
+    for action in menus[0].actions():
+        label = action.text().replace("&", "").split("\t")[0]
+        if label == "Delete":
+            action.trigger()
+    assert edit.toPlainText() == "adef\nadef\nadef", repr(edit.toPlainText())
 
 
 if __name__ == "__main__":
