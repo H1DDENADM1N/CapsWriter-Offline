@@ -482,6 +482,26 @@ class CustomTextEdit(MultiCursorTextEdit):
         """
         self.setStyleSheet(mono_font_stylesheet_with_alpha(self.font_size, alpha))
 
+    def contextMenuEvent(self, event):
+        """右键菜单弹出时通知主窗口。
+
+        右键菜单是一个独立的弹出窗口，弹出瞬间主窗口会收到 leave 事件
+        （鼠标"离开"了主窗口，落到了菜单上），菜单关闭后鼠标若没有移动，
+        Qt 也不会再补发 enter 事件。后果是标题栏/底栏被隐藏后再也回不来，
+        开了时钟模式的话窗口会直接变成时钟。
+
+        这里在菜单打开期间挂一个标记，让主窗口把这种"假离开"忽略掉。
+        """
+        window = self.window()
+        notifier = getattr(window, "_set_context_menu_open", None)
+        if notifier is not None:
+            notifier(True)
+        try:
+            super().contextMenuEvent(event)
+        finally:
+            if notifier is not None:
+                notifier(False)
+
     def wheelEvent(self, event: QWheelEvent):
         # 检测Ctrl键是否被按下
         if event.modifiers() == Qt.ControlModifier:
@@ -515,6 +535,10 @@ class GUI(QMainWindow):
         self.original_stays_on_top = bool(
             self.windowFlags() & Qt.WindowStaysOnTopHint
         )  # 记录原始置顶状态
+        # 右键菜单是独立窗口，它弹出时主窗口会失去激活，Qt 会向鼠标所在控件
+        # 补发 leave 事件；菜单关闭后若鼠标没动，也不会再有 enter 事件。
+        # 用这个标记把「菜单导致的假离开」和「鼠标真的离开」区分开。
+        self._context_menu_open = False
 
         # 初始化文件系统监控器
         self.init_file_watcher()
@@ -2021,14 +2045,7 @@ class GUI(QMainWindow):
     def enterEvent(self, event):
         super().enterEvent(event)
         self.logger.trace("[enterEvent] 鼠标进入窗口")
-        if self.get_config_value("client.show_time_label", False):
-            self.create_time_label()  # 确保时间标签存在
-            self.time_label.stop_timer()  # 停止定时器
-            self.text_box_client.setVisible(True)
-            self.text_box_client.apply_background(255)
-            self.time_label.setVisible(False)
-            self.adjust_time_label_position()
-            self.setStyleSheet("background-color: rgba(35, 38, 41, 255);")
+        self._apply_inside_state()
         # 添加诊断日志：记录resize前的窗口大小
         geometry_before = self.geometry()
         self.logger.trace(
@@ -2040,14 +2057,6 @@ class GUI(QMainWindow):
         self.logger.trace(
             f"[enterEvent] resize后窗口大小: width={geometry_after.width()}, height={geometry_after.height()}"
         )
-        for i in range(self.title_bar.count()):  # 鼠标进入时显示标题栏
-            widget = self.title_bar.itemAt(i).widget()
-            if widget is not None:
-                widget.setVisible(True)
-        for i in range(self.layout2.count()):  # 鼠标进入时显示操作栏
-            widget = self.layout2.itemAt(i).widget()
-            if widget is not None:
-                widget.setVisible(True)
         self.text_box_client.scroll_to_bottom_if_follow()  # 仅在跟随时滚动到最下行
         x, y, width, height, screenWidth, screenHeight, currentScreen = (
             self.checkWindowInfo()
@@ -2081,6 +2090,51 @@ class GUI(QMainWindow):
     def leaveEvent(self, event):
         super().leaveEvent(event)
         self.logger.trace("[leaveEvent] 鼠标离开窗口")
+        if self._context_menu_open or QApplication.activePopupWidget() is not None:
+            # 右键菜单是独立的弹出窗口，弹出瞬间主窗口会收到一次"假离开"。
+            # 若在这里执行隐藏逻辑，菜单关掉后标题栏/底栏再也回不来
+            # （Qt 不会补发 enter 事件），开了时钟模式窗口还会直接变成时钟。
+            # 菜单期间保持现状，等菜单关闭后再统一同步一次。
+            self.logger.trace("[leaveEvent] 右键菜单弹出中，忽略本次离开事件")
+            return
+        if self._cursor_inside_window():
+            # 鼠标其实还在窗口范围内（例如右键菜单弹出时系统补发的离开
+            # 事件），此时不能按"鼠标已离开"处理，否则界面会被误隐藏。
+            self.logger.trace("[leaveEvent] 鼠标仍在窗口内，忽略本次离开事件")
+            return
+        self._apply_outside_state()
+        self._apply_berth_logic()
+
+    def _cursor_inside_window(self) -> bool:
+        """当前鼠标是否仍落在本窗口范围内。"""
+        try:
+            return bool(self.rect().contains(self.mapFromGlobal(QCursor.pos())))
+        except RuntimeError:
+            return False
+
+    # ------------------------------------------------------- 鼠标进出状态同步
+
+    def _apply_inside_state(self):
+        """鼠标在窗口内：显示标题栏/底栏，时钟模式下显示编辑框。"""
+        if self.get_config_value("client.show_time_label", False):
+            self.create_time_label()  # 确保时间标签存在
+            self.time_label.stop_timer()  # 停止定时器
+            self.text_box_client.setVisible(True)
+            self.text_box_client.apply_background(255)
+            self.time_label.setVisible(False)
+            self.adjust_time_label_position()
+            self.setStyleSheet("background-color: rgba(35, 38, 41, 255);")
+        for i in range(self.title_bar.count()):  # 鼠标进入时显示标题栏
+            widget = self.title_bar.itemAt(i).widget()
+            if widget is not None:
+                widget.setVisible(True)
+        for i in range(self.layout2.count()):  # 鼠标进入时显示操作栏
+            widget = self.layout2.itemAt(i).widget()
+            if widget is not None:
+                widget.setVisible(True)
+
+    def _apply_outside_state(self):
+        """鼠标在窗口外：隐藏标题栏/底栏，时钟模式下只显示时钟。"""
         if self.get_config_value("client.show_time_label", False):
             self.create_time_label()  # 确保时间标签存在
             self.time_label.start_timer()  # 启动定时器
@@ -2108,6 +2162,9 @@ class GUI(QMainWindow):
             widget = self.layout2.itemAt(i).widget()
             if widget is not None:
                 widget.setVisible(False)
+
+    def _apply_berth_logic(self):
+        """鼠标离开窗口后的贴边（停靠）处理。"""
         x, y, width, height, screenWidth, screenHeight, currentScreen = (
             self.checkWindowInfo()
         )
@@ -2156,14 +2213,18 @@ class GUI(QMainWindow):
                 # print("窗口活跃状态，无需停靠")
                 pass
         else:  # 窗口非活跃状态，用户可能只是鼠标划过看一眼，失去焦点时恢复继续停靠
-            self.logger.trace("[leaveEvent] 窗口不活跃状态")
+            self.logger.trace("[leaveEvent] 窗口非活跃状态")
             if is_out_left:
-                self.logger.trace("[leaveEvent] 窗口的一半已超出屏幕左边界")
+                self.logger.trace(
+                    "[leaveEvent] 窗口非活跃状态，窗口的一半已超出屏幕左边界"
+                )
                 self.berthToLeft(
                     x, y, width, height, screenWidth, screenHeight, currentScreen
                 )
             elif is_out_right:
-                self.logger.trace("[leaveEvent] 窗口的一半已超出屏幕右边界")
+                self.logger.trace(
+                    "[leaveEvent] 窗口非活跃状态，窗口的一半已超出屏幕右边界"
+                )
                 self.berthToRight(
                     x, y, width, height, screenWidth, screenHeight, currentScreen
                 )
@@ -2189,6 +2250,27 @@ class GUI(QMainWindow):
                 self.logger.trace("[leaveEvent] 窗口未超出屏幕边界")
                 # print("窗口未超出屏幕边界")
                 pass
+
+    def _set_context_menu_open(self, is_open: bool):
+        """右键菜单打开/关闭时由文本框回调。
+
+        菜单关闭后 Qt 不会补发 enter 事件，所以要自己按当前鼠标位置
+        重新同步一次界面状态，否则标题栏/底栏会一直保持隐藏。
+        """
+        self._context_menu_open = bool(is_open)
+        if self._context_menu_open:
+            self.logger.trace("[contextMenu] 右键菜单已打开")
+            return
+        self.logger.trace("[contextMenu] 右键菜单已关闭，同步界面状态")
+        self._sync_hover_state()
+
+    def _sync_hover_state(self):
+        """按当前鼠标位置重新同步标题栏/底栏与时钟的显示状态。"""
+        if self._cursor_inside_window():
+            self._apply_inside_state()
+        else:
+            self._apply_outside_state()
+            self._apply_berth_logic()
 
     def berthToLeft(
         self, x, y, width, height, screenWidth, screenHeight, currentScreen
