@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from PySide6.QtCore import QRect  # noqa: E402
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtGui import QKeyEvent, QTextCursor  # noqa: E402
 from PySide6.QtCore import QEvent  # noqa: E402
@@ -246,6 +247,46 @@ def test_append_line_keeps_selection_when_not_following() -> None:
     box.setTextCursor(cur)
     box.append_line("log")
     assert box.textCursor().selectedText() == "alpha", box.textCursor().selectedText()
+
+
+# ------------------------------------------------------- 右侧贴边弹出位置
+
+
+def _screen_rect(width: int = 1920, height: int = 1080):
+    return QRect(0, 0, width, height)
+
+
+@test
+def test_right_pop_out_covers_last_screen_column() -> None:
+    """从右侧贴边弹出后，窗口必须覆盖到屏幕最后一列。
+
+    否则鼠标移到屏幕最右一列会离开窗口 → 窗口贴回 → 窗口又盖住该列 →
+    enterEvent 再弹出，形成在屏幕右边缘反复闪烁的循环。
+    """
+    screen = _screen_rect()
+    width = 425
+    x = gui_module.GUI._right_pop_out_x(screen, width)
+    assert x + width - 1 >= screen.right(), (
+        f"弹出后窗口右边缘 {x + width - 1} 未覆盖屏幕最后列 {screen.right()}"
+    )
+
+
+@test
+def test_right_pop_out_keeps_cursor_inside_window() -> None:
+    """鼠标停在屏幕最后一列时，仍在弹出后的窗口范围内。"""
+    screen = _screen_rect()
+    width = 425
+    x = gui_module.GUI._right_pop_out_x(screen, width)
+    assert x <= screen.right() <= x + width - 1
+
+
+@test
+def test_right_pop_out_is_one_pixel_right_of_naive_formula() -> None:
+    """修复点明确为 +1 像素，锁死 off-by-one 回归。"""
+    screen = _screen_rect()
+    width = 425
+    assert gui_module.GUI._right_pop_out_x(screen, width) == screen.right() - width + 1
+    assert gui_module.GUI._right_pop_out_x(screen, width) == (screen.right() - width) + 1
 
 
 def main() -> int:

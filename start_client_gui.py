@@ -2000,7 +2000,7 @@ class GUI(QMainWindow):
                     x, y, width, height, screenWidth, screenHeight, currentScreen
                 )
             elif (
-                x == screenWidth - width
+                x == self._right_pop_out_x(currentScreen.geometry(), width)
             ):  # 窗口非活跃状态，从右边弹出的，恢复继续停靠在右边
                 self.berthToRight(
                     x, y, width, height, screenWidth, screenHeight, currentScreen
@@ -2078,7 +2078,7 @@ class GUI(QMainWindow):
             self.move(target_x, y)  # 从左边弹出，使用当前屏幕的左边界
             self.isBerthLeft = False
         elif self.isBerthRight:  # 已停靠在右边
-            target_x = currentScreenRect.right() - width
+            target_x = self._right_pop_out_x(currentScreenRect, width)
             self.logger.trace(f"[enterEvent] 从右边弹出，移动到 ({target_x}, {y})")
             self.move(target_x, y)  # 从右边弹出，使用当前屏幕的右边界
             self.isBerthRight = False
@@ -2111,6 +2111,24 @@ class GUI(QMainWindow):
             return bool(self.rect().contains(self.mapFromGlobal(QCursor.pos())))
         except RuntimeError:
             return False
+
+    @staticmethod
+    def _right_pop_out_x(screen_rect, width: int) -> int:
+        """窗口从右侧贴边状态弹出后的 x 坐标。
+
+        QRect.right() 是**含端点**的坐标（1920 宽的屏幕 right() == 1919，
+        有效像素列为 0..1919），而窗口覆盖的最右一列是 x + width - 1。
+
+        若用 right() - width，窗口只覆盖到 1918 列，屏幕最右的 1919 列
+        落在窗口之外。鼠标移到那一列就会触发 leaveEvent，窗口被重新贴回
+        右侧；而贴回的窗口又盖住了 1919 列，鼠标随即触发 enterEvent 把
+        窗口弹出——于是在屏幕右边缘反复闪烁切换位置。鼠标稍向左移一点
+        就进入窗口范围、不再触发 leaveEvent，所以「稍左移就不闪烁」。
+
+        这里取 right() - width + 1，让弹出后的窗口覆盖到屏幕最后一列，
+        鼠标贴到屏幕右边缘时仍然在窗口内，闪烁循环被打断。
+        """
+        return screen_rect.right() - width + 1
 
     # ------------------------------------------------------- 鼠标进出状态同步
 
@@ -2237,8 +2255,8 @@ class GUI(QMainWindow):
                 self.berthToLeft(
                     x, y, width, height, screenWidth, screenHeight, currentScreen
                 )
-            elif (
-                x == currentScreenRect.right() - width
+            elif x == self._right_pop_out_x(
+                currentScreenRect, width
             ):  # 窗口非活跃状态，从右边弹出的，恢复继续停靠在右边
                 self.logger.trace(
                     "[leaveEvent] 窗口非活跃状态，从右边弹出的，恢复继续停靠在右边"
