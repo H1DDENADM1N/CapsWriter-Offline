@@ -32,7 +32,7 @@ from __future__ import annotations
 import warnings
 from typing import Optional
 
-__all__ = ["is_cjk", "word_range_at"]
+__all__ = ["is_cjk", "word_end_at", "word_range_at", "word_start_at"]
 
 
 # 汉字区段（CJK Unified Ideographs 及扩展 A）。
@@ -189,3 +189,144 @@ def word_range_at(text: str, position: int) -> Optional[tuple[int, int]]:
     if is_cjk(text[anchor]):
         return _cjk_word_range(text, anchor)
     return _ascii_word_range(text, anchor)
+
+
+# ------------------------------------------------------- 按词跳（Ctrl+←/→）
+#
+# Qt 自带的 ``PreviousWord``/``NextWord`` 对中文太粗：整段连续汉字算
+# **一个**词。在「语音输入测试字符串」上从 pos 2 跳 PreviousWord 会落到
+# 0（只退 2 个字），跳 NextWord 会落到 10（跳过整段 9 个字）。要按词典
+# 词粒度跳（语音输入 / 测试 / 字符串），必须自己算词边界。
+#
+# 语义与 VS Code 一致：
+#
+# - ``Ctrl+←``：光标在词中间 → 跳到**当前词开头**；已在词开头 → 跳到
+#   **上一个词开头**；
+# - ``Ctrl+→``：光标在词中间 → 跳到**当前词末尾**；已在词末尾 → 跳到
+#   **下一个词末尾**（VS Code 的 ``cursorWordEnd`` 跳的是下一个词的
+#   末尾，不是开头）。
+
+
+def _word_starts(text: str) -> list[int]:
+    """列出文本里所有词的起始下标（升序）。
+
+    汉字按 jieba 分词，ASCII 按字母数字下划线连续段。词之间的空白与
+    标点不产生词。
+    """
+    starts: list[int] = []
+    position = 0
+    length = len(text)
+    while position < length:
+        char = text[position]
+        if is_cjk(char):
+            # 汉字：切出这一段连续汉字再分词
+            run_start = position
+            while position < length and is_cjk(text[position]):
+                position += 1
+            for start, _end in _segment_cjk(text[run_start:position]):
+                starts.append(run_start + start)
+            continue
+        if _is_ascii_word_char(char):
+            starts.append(position)
+            while position < length and _is_ascii_word_char(text[position]):
+                position += 1
+            continue
+        position += 1
+    return starts
+
+
+def _word_ends(text: str) -> list[int]:
+    """列出文本里所有词的结束下标（升序，**开区间**：最后一个字之后一位）。
+
+    与 :func:`_word_starts` 一一对应。开区间与光标位置语义一致——
+    光标停在「词尾」就是停在最后一个字**之后**那一格。
+    """
+    ends: list[int] = []
+    position = 0
+    length = len(text)
+    while position < length:
+        char = text[position]
+        if is_cjk(char):
+            run_start = position
+            while position < length and is_cjk(text[position]):
+                position += 1
+            for _start, end in _segment_cjk(text[run_start:position]):
+                ends.append(run_start + end)
+            continue
+        if _is_ascii_word_char(char):
+            while position < length and _is_ascii_word_char(text[position]):
+                position += 1
+            ends.append(position)
+            continue
+        position += 1
+    return ends
+
+
+def word_start_at(text: str, position: int) -> int:
+    """``Ctrl+←`` 的目标位置：上一个词的起始下标。
+
+    光标在词中间时先回到**当前词**的开头；已经在词开头时再退到
+    上一个词的开头。文档开头处不再往回退。
+    """
+    if not text:
+        return 0
+    position = max(0, min(position, len(text)))
+    starts = _word_starts(text)
+    if not starts:
+        return position
+
+    # 当前词：包含 position 的那个词。position 落在词尾（含）时，
+    # 仍算在这个词里——VS Code 的语义是「先到本词开头，再到上一词」。
+    current = None
+    for index, start in enumerate(starts):
+        if start > position:
+            break
+        current = index
+    if current is None:
+        # 光标在第一个词之前
+        return starts[0]
+
+    if starts[current] < position:
+        # 还在词中间 -> 回到本词开头
+        return starts[current]
+    # 已在词开头 -> 退到上一个词开头
+    if current == 0:
+        return starts[0]
+    return starts[current - 1]
+
+
+def word_end_at(text: str, position: int) -> int:
+    """``Ctrl+→`` 的目标位置：下一个词的边界。
+
+    光标在词中间时先跳到**当前词末尾**（最后一个字之后那一格）；已经在
+    词末尾时再跳到**下一个词的末尾**——与 VS Code 的 ``cursorWordEnd``
+    一致（它跳的是下一个词的末尾，不是开头）。
+
+    文档末尾处不再往后跳。
+    """
+    if not text:
+        return 0
+    position = max(0, min(position, len(text)))
+    starts = _word_starts(text)
+    ends = _word_ends(text)
+    if not starts:
+        return position
+
+    # 当前词：包含 position 的那个词。position 正好落在词尾（开区间）
+    # 时算在这个词里——VS Code 的语义是「先到本词末尾，再到下一词」。
+    current = None
+    for index, start in enumerate(starts):
+        if start > position:
+            break
+        current = index
+    if current is None:
+        # 光标在第一个词之前 -> 跳到第一个词末尾
+        return ends[0]
+
+    if position < ends[current]:
+        # 还在词中间 -> 跳到本词末尾
+        return ends[current]
+    # 已在词末尾 -> 跳到下一个词的末尾
+    if current + 1 < len(ends):
+        return ends[current + 1]
+    return ends[current]

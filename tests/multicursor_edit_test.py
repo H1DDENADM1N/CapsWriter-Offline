@@ -975,6 +975,12 @@ def key(edit: MultiCursorTextEdit, *, key_code, modifiers=Qt.KeyboardModifier.No
     return event
 
 
+CTRL = Qt.KeyboardModifier.ControlModifier
+CTRL_SHIFT = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
+CTRL_ALT = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier
+ALT = Qt.KeyboardModifier.AltModifier
+
+
 @test
 def test_escape_collapses_extras_and_is_accepted() -> None:
     """有副光标时 Esc 收敛为单光标，并吞掉该按键（不隐藏窗口）。"""
@@ -1002,6 +1008,175 @@ def test_typing_routes_to_all_cursors() -> None:
     edit.add_cursor_at(4)
     key(edit, key_code=Qt.Key.Key_Z, text="Z")
     assert edit.toPlainText() == "aZb\naZb", repr(edit.toPlainText())
+
+
+# ---------------------------------------- Alt+←/→：跳到行首 / 行尾
+#
+# 「行」按**视觉行**算：长行在屏幕上折成几行，「行首」就是当前屏幕上
+# 那一行的开头，「行尾」是它的末尾（与刚修好的等宽网格模型一致）。
+#
+# Qt 的 ``StartOfLine``/``EndOfLine`` 本身就是视觉行语义，直接可用。
+
+@test
+def test_alt_left_moves_to_line_start() -> None:
+    """Alt+← 跳到行首。"""
+    edit = make_edit("hello world\nsecond")
+    caret(edit, 6)
+    key(edit, key_code=Qt.Key.Key_Left, modifiers=ALT)
+    assert edit.textCursor().position() == 0, edit.textCursor().position()
+
+
+@test
+def test_alt_right_moves_to_line_end() -> None:
+    """Alt+→ 跳到行尾。"""
+    edit = make_edit("hello world\nsecond")
+    caret(edit, 6)
+    key(edit, key_code=Qt.Key.Key_Right, modifiers=ALT)
+    assert edit.textCursor().position() == 11, edit.textCursor().position()
+
+
+@test
+def test_alt_left_uses_visual_row_on_wrapped_text() -> None:
+    """长行折行后，Alt+← 跳到**当前屏幕行**的开头，而不是整段的开头。"""
+    edit = make_edit("A" * 200)
+    APP.processEvents()
+    layout = edit.document().findBlockByNumber(0).layout()
+    assert layout is not None and layout.lineCount() > 1, "测试前提：首块应折成多行"
+    second_row_start = layout.lineAt(1).textStart()
+
+    caret(edit, second_row_start + 5)
+    key(edit, key_code=Qt.Key.Key_Left, modifiers=ALT)
+    assert edit.textCursor().position() == second_row_start, edit.textCursor().position()
+
+
+@test
+def test_alt_right_uses_visual_row_on_wrapped_text() -> None:
+    """长行折行后，Alt+→ 跳到**当前屏幕行**的末尾。
+
+    Qt 的 ``EndOfLine`` 把光标停在最后一个字**之后**那一格（开区间），
+    所以落点是 ``行首 + 行长``。
+    """
+    edit = make_edit("A" * 200)
+    APP.processEvents()
+    layout = edit.document().findBlockByNumber(0).layout()
+    assert layout is not None and layout.lineCount() > 1, "测试前提：首块应折成多行"
+    second_row = layout.lineAt(1)
+
+    caret(edit, second_row.textStart() + 5)
+    key(edit, key_code=Qt.Key.Key_Right, modifiers=ALT)
+    assert edit.textCursor().position() == second_row.textStart() + second_row.textLength(), (
+        edit.textCursor().position()
+    )
+
+
+@test
+def test_alt_left_right_move_all_cursors() -> None:
+    """多光标下每个光标各自跳到**自己那行**的行首/行尾。"""
+    edit = make_edit("alpha bravo\ncharlie delta")
+    caret(edit, 3)
+    edit.add_cursor_at(20)
+    key(edit, key_code=Qt.Key.Key_Left, modifiers=ALT)
+    assert edit.textCursor().position() == 0, edit.textCursor().position()
+    assert extra_positions(edit) == [12], extra_positions(edit)
+
+
+@test
+def test_shift_alt_left_extends_selection_to_line_start() -> None:
+    """Shift+Alt+← 扩展选区到行首（KeepAnchor）。"""
+    edit = make_edit("hello world")
+    caret(edit, 6)
+    key(edit, key_code=Qt.Key.Key_Left, modifiers=ALT | Qt.KeyboardModifier.ShiftModifier)
+    assert edit.textCursor().selectedText() == "hello ", repr(edit.textCursor().selectedText())
+
+
+# ---------------------------------------- Ctrl+←/→：按词跳（jieba 分词）
+#
+# Qt 的 PreviousWord/NextWord 对中文太粗——整段连续汉字算一个词。
+# 这里要求按词典词粒度跳：语音输入 / 测试 / 字符串。
+#
+# 同时修掉一处既有不一致：**多光标**状态下 Ctrl+←/→ 原先按字符跳
+# （走 ``_navigation_operation`` 的 ``Op.Left``），单光标却按词跳
+# （走 Qt 原生）。改后两者行为一致。
+
+
+@test
+def test_ctrl_left_moves_to_previous_word_boundary() -> None:
+    """Ctrl+← 按词跳（中文按 jieba 词粒度）。"""
+    edit = make_edit("语音输入测试字符串")
+    caret(edit, 5)
+    key(edit, key_code=Qt.Key.Key_Left, modifiers=CTRL)
+    assert edit.textCursor().position() == 4, edit.textCursor().position()
+
+
+@test
+def test_ctrl_right_moves_to_next_word_boundary() -> None:
+    """Ctrl+→ 按词跳（中文按 jieba 词粒度）。"""
+    edit = make_edit("语音输入测试字符串")
+    caret(edit, 0)
+    key(edit, key_code=Qt.Key.Key_Right, modifiers=CTRL)
+    assert edit.textCursor().position() == 4, edit.textCursor().position()
+
+
+@test
+def test_ctrl_left_jumps_by_dictionary_word_not_whole_cjk_run() -> None:
+    """Ctrl+← 不能跳过整段汉字——必须逐个词跳。
+
+    Qt 原生在这里会一次退到 0（整段 9 个字算一个词）；
+    按 jieba 词粒度，从「测试」退到「语音输入」的开头。
+    """
+    edit = make_edit("语音输入测试字符串")
+    caret(edit, 6)
+    key(edit, key_code=Qt.Key.Key_Left, modifiers=CTRL)
+    assert edit.textCursor().position() == 4, edit.textCursor().position()
+
+
+@test
+def test_ctrl_left_and_right_match_between_single_and_multi_cursor() -> None:
+    """单光标与多光标的 Ctrl+←/→ 行为必须一致。
+
+    原先不一致：单光标走 Qt 原生（按词），多光标走
+    ``_navigation_operation``（按字符）。
+    """
+    text = "语音输入测试字符串"
+
+    single = make_edit(text)
+    caret(single, 6)
+    key(single, key_code=Qt.Key.Key_Left, modifiers=CTRL)
+    single_pos = single.textCursor().position()
+
+    multi = make_edit(text)
+    caret(multi, 6)
+    multi.add_cursor_at(1)
+    caret(multi, 6)
+    key(multi, key_code=Qt.Key.Key_Left, modifiers=CTRL)
+    assert multi.textCursor().position() == single_pos, (
+        multi.textCursor().position(),
+        single_pos,
+    )
+
+
+@test
+def test_ctrl_left_moves_all_cursors_to_word_boundary() -> None:
+    """多光标下 Ctrl+← 每个光标各自按词跳。
+
+    「语音输入测试 语音输入」按 jieba 切成 语音输入 / 测试 / 语音输入，
+    起点分别是 0 / 4 / 7。
+    """
+    edit = make_edit("语音输入测试 语音输入")
+    caret(edit, 5)
+    edit.add_cursor_at(9)
+    key(edit, key_code=Qt.Key.Key_Left, modifiers=CTRL)
+    assert edit.textCursor().position() == 4, edit.textCursor().position()
+    assert extra_positions(edit) == [7], extra_positions(edit)
+
+
+@test
+def test_ctrl_left_keeps_ascii_word_intact() -> None:
+    """ASCII 词按整词跳（下划线不被切开）。"""
+    edit = make_edit("foo_bar baz")
+    caret(edit, 3)
+    key(edit, key_code=Qt.Key.Key_Left, modifiers=CTRL)
+    assert edit.textCursor().position() == 0, edit.textCursor().position()
 
 
 @test
@@ -1200,9 +1375,6 @@ def test_column_selection_skips_short_lines_gracefully() -> None:
 # ------------------------------------------------------- 行操作与快捷键分发
 
 
-CTRL = Qt.KeyboardModifier.ControlModifier
-CTRL_SHIFT = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
-CTRL_ALT = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier
 
 
 @test

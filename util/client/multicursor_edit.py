@@ -40,7 +40,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from util.client.word_segment import word_range_at
+from util.client.word_segment import word_end_at, word_range_at, word_start_at
 
 __all__ = ["FindBar", "FindLineEdit", "MultiCursorTextEdit"]
 
@@ -2401,6 +2401,10 @@ class MultiCursorTextEdit(QTextEdit):
         Ctrl+Home/End 走文档首尾，Home/End 走行首尾，与 Qt 默认一致。
         翻页键（PageUp/PageDown）不在此列：它们的位移量取决于视口高度，
         交给 Qt 默认处理更合适。
+
+        **Ctrl+←/→ 不在这里**：按词跳要按 jieba 的词粒度算边界，而 Qt 的
+        ``PreviousWord``/``NextWord`` 对中文太粗（整段连续汉字算一个词）。
+        它由 :meth:`move_all_cursors_by_word` 单独处理。
         """
         mods = event.modifiers()
         ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
@@ -2424,6 +2428,63 @@ class MultiCursorTextEdit(QTextEdit):
         if key == Qt.Key.Key_End:
             return (Op.End if ctrl else Op.EndOfLine), mode
         return None
+
+    def move_all_cursors_to_line_edge(
+        self,
+        to_start: bool,
+        mode: Optional[QTextCursor.MoveMode] = None,
+    ) -> None:
+        """把所有光标移到所在**视觉行**的行首 / 行尾。
+
+        「行」按视觉行算：长行在屏幕上折成几行，「行首」就是当前屏幕上
+        那一行的开头。Qt 的 ``StartOfLine``/``EndOfLine`` 本身就是视觉行
+        语义，直接可用。
+
+        ``mode`` 传 ``KeepAnchor`` 时扩展选区而不是移动光标。
+        """
+        operation = (
+            QTextCursor.MoveOperation.StartOfLine
+            if to_start
+            else QTextCursor.MoveOperation.EndOfLine
+        )
+        self.move_all_cursors(operation, mode)
+
+    def move_all_cursors_by_word(self, to_start: bool, mode=None) -> None:  # noqa: ANN001
+        """把所有光标按**词**移动：``to_start`` 为真跳到上一个词开头。
+
+        与 Qt 的 ``PreviousWord``/``NextWord`` 不同，中文按 **jieba 词典**
+        的词粒度跳——Qt 把整段连续汉字算一个词，在「语音输入测试字符串」
+        上一跳就是 9 个字。
+
+        这也让单光标与多光标的行为一致了：原先单光标走 Qt 原生（按词）、
+        多光标走 ``_navigation_operation``（按字符），两套语义。
+        """
+        text = self.toPlainText()
+        if not text:
+            return
+        if mode is None:
+            mode = QTextCursor.MoveMode.MoveAnchor
+
+        moved: list[QTextCursor] = []
+        for cur in list(self._extra_cursors):
+            work = QTextCursor(cur)
+            target = word_start_at(text, work.position()) if to_start else word_end_at(
+                text, work.position()
+            )
+            work.setPosition(target, mode)
+            moved.append(work)
+        if moved:
+            self._extra_cursors = moved
+
+        primary = self.textCursor()
+        target = word_start_at(text, primary.position()) if to_start else word_end_at(
+            text, primary.position()
+        )
+        primary.setPosition(target, mode)
+        self.setTextCursor(primary)
+
+        self._dedupe_extra_cursors()
+        self._sync_extra_cursors()
 
     def move_all_cursors(
         self,
@@ -2501,11 +2562,33 @@ class MultiCursorTextEdit(QTextEdit):
         if ctrl and shift and no_alt and key == Qt.Key.Key_K:
             self.delete_line()
             return True
+        # Ctrl+←/→：按词跳。中文按 jieba 词典的词粒度（Qt 原生把整段
+        # 连续汉字算一个词，太粗），ASCII 按整词。
+        if ctrl and no_alt and key in (Qt.Key.Key_Left, Qt.Key.Key_Right):
+            mode = (
+                QTextCursor.MoveMode.KeepAnchor
+                if shift
+                else QTextCursor.MoveMode.MoveAnchor
+            )
+            self.move_all_cursors_by_word(key == Qt.Key.Key_Left, mode)
+            return True
         if alt and shift and not ctrl and key in (Qt.Key.Key_Up, Qt.Key.Key_Down):
             self.duplicate_line(-1 if key == Qt.Key.Key_Up else 1)
             return True
         if alt and not ctrl and not shift and key in (Qt.Key.Key_Up, Qt.Key.Key_Down):
             self.move_line(-1 if key == Qt.Key.Key_Up else 1)
+            return True
+        # Alt+←/→：跳到所在视觉行的行首 / 行尾。
+        #
+        # 注意与 Alt+↑/↓ 的区分：↑/↓ 是「移动整行」，←/→ 只是「移动
+        # 光标」。两者不能混，否则 Alt+↑ 会变成两件事。
+        if alt and not ctrl and key in (Qt.Key.Key_Left, Qt.Key.Key_Right):
+            mode = (
+                QTextCursor.MoveMode.KeepAnchor
+                if shift
+                else QTextCursor.MoveMode.MoveAnchor
+            )
+            self.move_all_cursors_to_line_edge(key == Qt.Key.Key_Left, mode)
             return True
         return False
 

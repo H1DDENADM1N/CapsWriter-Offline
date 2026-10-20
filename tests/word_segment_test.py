@@ -39,7 +39,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from util.client.word_segment import (  # noqa: E402
     is_cjk,
+    word_end_at,
     word_range_at,
+    word_start_at,
 )
 
 TESTS = []
@@ -214,6 +216,122 @@ def test_mixed_cjk_and_ascii_each_segmented_by_own_rule() -> None:
     assert word_range_at(text, 0) == (0, 2)
     assert word_range_at(text, 2) == (2, 5)
     assert word_range_at(text, 5) == (5, 7)
+
+
+# ------------------------------------------------------- 按词跳（Ctrl+←/→）
+#
+# Qt 自带的 ``PreviousWord``/``NextWord`` 对中文是「整段连续汉字算一个词」：
+#
+#     在「语音输入测试字符串」上从 pos 2 跳 PreviousWord -> 0（跳了 2 个字）
+#     从 pos 2 跳 NextWord -> 10（跳过整段 9 个字）
+#
+# 要按词典词粒度跳（语音输入 / 测试 / 字符串），必须自己算词边界。
+#
+# 语义与 VS Code 一致：
+# - ``Ctrl+←``：光标在词中间 → 跳到**当前词开头**；已在词开头 → 跳到**上一个词开头**
+# - ``Ctrl+→``：光标在词中间 → 跳到**当前词末尾**；已在词末尾 → 跳到**下一个词开头**
+
+
+@test
+def test_word_start_at_jumps_to_current_word_start() -> None:
+    """光标在词中间时，Ctrl+← 跳到当前词的**开头**。"""
+    text = "语音输入测试字符串"
+    assert word_start_at(text, 1) == 0
+    assert word_start_at(text, 3) == 0
+    assert word_start_at(text, 5) == 4
+    assert word_start_at(text, 7) == 6
+
+
+@test
+def test_word_start_at_jumps_to_previous_word_when_already_at_start() -> None:
+    """光标已在词开头时，Ctrl+← 跳到**上一个词**的开头。"""
+    text = "语音输入测试字符串"
+    assert word_start_at(text, 4) == 0
+    assert word_start_at(text, 6) == 4
+
+
+@test
+def test_word_start_at_stops_at_document_beginning() -> None:
+    """已在第一个词开头时，Ctrl+← 不再往回跳。"""
+    text = "语音输入测试字符串"
+    assert word_start_at(text, 0) == 0
+
+
+@test
+def test_word_end_at_jumps_to_current_word_end() -> None:
+    """光标在词中间时，Ctrl+→ 跳到当前词的**末尾**。"""
+    text = "语音输入测试字符串"
+    assert word_end_at(text, 0) == 4
+    assert word_end_at(text, 1) == 4
+    assert word_end_at(text, 5) == 6
+    assert word_end_at(text, 7) == 9
+
+
+@test
+def test_word_end_at_jumps_to_next_word_when_already_at_end() -> None:
+    """光标已在词末尾时，Ctrl+→ 跳到**下一个词的末尾**。
+
+    与 VS Code 的 ``cursorWordEnd`` 一致：跳的是下一个词的**末尾**，
+    不是它的开头。中文的「词末尾」是最后一个字之后那一格。
+    """
+    text = "语音输入测试字符串"
+    assert word_end_at(text, 4) == 6
+    assert word_end_at(text, 6) == 9
+
+
+@test
+def test_word_end_at_stops_at_document_end() -> None:
+    """已在最后一个词末尾时，Ctrl+→ 不再往后跳。"""
+    text = "语音输入测试字符串"
+    assert word_end_at(text, 9) == 9
+
+
+@test
+def test_word_navigation_handles_ascii_words() -> None:
+    """ASCII 词同样按词跳。"""
+    text = "hello world"
+    assert word_start_at(text, 3) == 0
+    assert word_start_at(text, 5) == 0
+    assert word_start_at(text, 8) == 6
+    assert word_end_at(text, 0) == 5
+    assert word_end_at(text, 8) == 11
+
+
+@test
+def test_word_navigation_crosses_whitespace() -> None:
+    """词与词之间的空白不是词，跳过时直接落到相邻的词边界。
+
+    「语音输入 测试」中 pos 4 是空白：
+    - Ctrl+← 从 4 退到「语音输入」的开头 0；
+    - Ctrl+→ 从 4 前进到「测试」的末尾 7。
+    """
+    text = "语音输入 测试"
+    assert word_start_at(text, 4) == 0
+    assert word_end_at(text, 4) == 7
+
+
+@test
+def test_word_navigation_keeps_underscore_word_whole() -> None:
+    """下划线词整体跳（不被切成三段）。"""
+    text = "foo_bar baz"
+    assert word_start_at(text, 3) == 0
+    assert word_end_at(text, 0) == 7
+    assert word_end_at(text, 9) == 11
+
+
+@test
+def test_word_navigation_on_empty_text_is_safe() -> None:
+    """空文本不抛异常。"""
+    assert word_start_at("", 0) == 0
+    assert word_end_at("", 0) == 0
+
+
+@test
+def test_word_navigation_clamps_out_of_range_position() -> None:
+    """越界位置夹回文本范围内。"""
+    text = "hello world"
+    assert word_start_at(text, 99) == 6
+    assert word_end_at(text, -5) == 5
 
 
 def main() -> int:
