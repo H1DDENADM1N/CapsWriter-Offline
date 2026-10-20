@@ -780,6 +780,131 @@ def test_word_range_at_handles_mixed_chinese_and_ascii() -> None:
     assert edit._word_range_at(7) == (7, 9)
 
 
+# ---------------------------------------------------- 中文分词（jieba）
+#
+# 旧实现用 ``str.isalnum()`` 判定词字符，于是**一整段连续汉字算一个词**：
+# 「语音输入测试字符串」9 个字被当成一个词，Ctrl+D 一次全选。
+#
+# 现在汉字改走 jieba 词典分词，ASCII 词保持原样（``foo_bar`` 仍是一个
+# 词——jieba 会把它切成三段，所以不能交给 jieba）。分词规则见
+# ``util/client/word_segment.py``。
+
+
+@test
+def test_word_range_at_splits_chinese_run_into_dictionary_words() -> None:
+    """整段汉字按词典分词，而不是当成一个词。"""
+    edit = make_edit("语音输入测试字符串")
+    assert edit._word_range_at(0) == (0, 4)
+    assert edit._word_range_at(3) == (0, 4)
+    assert edit._word_range_at(4) == (4, 6)
+    assert edit._word_range_at(6) == (6, 9)
+
+
+@test
+def test_ctrl_d_selects_single_dictionary_word_in_chinese() -> None:
+    """Ctrl+D 在中文里只选中光标下的**那一个词**。
+
+    旧行为是选中整段汉字（「语音输入测试字符串」9 个字一次选中）。
+    """
+    edit = make_edit("语音输入测试字符串")
+    caret(edit, 0)
+    assert edit.select_next_occurrence() is True
+    assert edit.textCursor().selectedText() == "语音输入", selected_texts(edit)
+
+
+@test
+def test_ctrl_d_keeps_underscore_word_intact() -> None:
+    """下划线词仍是一个整体（不能交给 jieba 切）。"""
+    edit = make_edit("foo_bar foo_bar")
+    caret(edit, 0)
+    assert edit.select_next_occurrence() is True
+    assert edit.textCursor().selectedText() == "foo_bar", selected_texts(edit)
+    edit.select_next_occurrence()
+    assert extra_positions(edit) == [8], extra_positions(edit)
+
+
+@test
+def test_double_click_selects_single_dictionary_word_in_chinese() -> None:
+    """双击汉字只选中那一个词（Qt 默认会选中整段汉字）。
+
+    Qt 的双击把一整段连续汉字当作一个词，选中 9 个字；这里收窄到
+    词典分词后的词粒度，与 Ctrl+D 保持一致。
+    """
+    edit = make_edit("语音输入测试字符串")
+    APP.processEvents()
+    cursor = edit.textCursor()
+    cursor.setPosition(0)
+    edit.setTextCursor(cursor)
+    APP.processEvents()
+
+    rect = edit.cursorRect(cursor)
+    event = QMouseEvent(
+        QEvent.Type.MouseButtonDblClick,
+        QPointF(float(rect.center().x()), float(rect.center().y())),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    edit.mouseDoubleClickEvent(event)
+    APP.processEvents()
+
+    assert edit.textCursor().selectedText() == "语音输入", selected_texts(edit)
+
+
+@test
+def test_double_click_picks_the_word_actually_clicked() -> None:
+    """双击在一段汉字的**中间**时，选中的是被点到的那个词。
+
+    整段「语音输入测试字符串」被 Qt 当成一个词，选区从 0 开始；若直接
+    用选区起点当锚点，双击「字符」两字也只会选中开头的「语音输入」。
+    锚点必须是**鼠标点到的那个字符**。
+    """
+    edit = make_edit("语音输入测试字符串")
+    APP.processEvents()
+    # 点在「字」上（位置 7）
+    cursor = edit.textCursor()
+    cursor.setPosition(7)
+    edit.setTextCursor(cursor)
+    APP.processEvents()
+
+    rect = edit.cursorRect(cursor)
+    event = QMouseEvent(
+        QEvent.Type.MouseButtonDblClick,
+        QPointF(float(rect.center().x()), float(rect.center().y())),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    edit.mouseDoubleClickEvent(event)
+    APP.processEvents()
+
+    assert edit.textCursor().selectedText() == "字符串", selected_texts(edit)
+
+
+@test
+def test_double_click_keeps_ascii_word_unchanged() -> None:
+    """双击 ASCII 词不受影响（仍是一个整词）。"""
+    edit = make_edit("foo_bar baz")
+    APP.processEvents()
+    cursor = edit.textCursor()
+    cursor.setPosition(2)
+    edit.setTextCursor(cursor)
+    APP.processEvents()
+
+    rect = edit.cursorRect(cursor)
+    event = QMouseEvent(
+        QEvent.Type.MouseButtonDblClick,
+        QPointF(float(rect.center().x()), float(rect.center().y())),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    edit.mouseDoubleClickEvent(event)
+    APP.processEvents()
+
+    assert edit.textCursor().selectedText() == "foo_bar", selected_texts(edit)
+
+
 @test
 def test_word_range_at_returns_none_outside_any_word() -> None:
     """光标落在空白/标点上（且前后都不是词字符）时返回 None。"""
@@ -1001,6 +1126,53 @@ def test_add_cursor_vertical_at_first_line_is_noop() -> None:
     caret(edit, 2)
     edit.add_cursor_vertical(-1)
     assert edit.extra_cursor_count() == 0
+
+
+# --------------------------------------- Ctrl+Alt+↑/↓ 要按「视觉行」走
+#
+# 一个超长的块（没有换行符）在屏幕上会折成多个**视觉行**，但文本上它们
+# 属于同一个块。旧实现按块定位，「下一行」会直接跳到下一个块，
+# 于是本块剩下的那些折行视觉行被整个跳过：
+#
+#     块0 有 2 个视觉行，光标在第 1 个 -> 期望落在第 2 个（块0 内）
+#                                        旧实现落在块1（跳过块0 的第 2 行）
+#
+# 这就是「光标上下移动位置错乱」的另一半原因：网格修好后字符对齐了，
+# 但加光标仍然会跳过一整段折行。
+
+
+@test
+def test_add_cursor_vertical_moves_to_next_visual_row_within_same_block() -> None:
+    """超长块内加光标落在本块的下一个**视觉行**，而不是跳过它。"""
+    edit = make_edit("A" * 200)
+    APP.processEvents()
+    layout = edit.document().findBlockByNumber(0).layout()
+    assert layout is not None and layout.lineCount() > 1, "测试前提：首块应折成多行"
+
+    caret(edit, 3)
+    assert edit.add_cursor_vertical(1) is True
+    positions = extra_positions(edit)
+    assert len(positions) == 1, positions
+    # 落点必须在**同一个块**里，且在当前视觉行之后
+    block = edit.document().findBlock(positions[0]).blockNumber()
+    assert block == 0, f"落到了块 {block}，应仍在块 0 内"
+    assert positions[0] > 3, positions
+
+
+@test
+def test_add_cursor_vertical_up_stays_within_same_block() -> None:
+    """向上加光标同样按视觉行走（不跳过本块的折行）。"""
+    edit = make_edit("A" * 200)
+    APP.processEvents()
+    layout = edit.document().findBlockByNumber(0).layout()
+    assert layout is not None and layout.lineCount() > 1, "测试前提：首块应折成多行"
+
+    caret(edit, layout.lineAt(1).textStart() + 3)
+    assert edit.add_cursor_vertical(-1) is True
+    positions = extra_positions(edit)
+    assert len(positions) == 1, positions
+    block = edit.document().findBlock(positions[0]).blockNumber()
+    assert block == 0, f"落到了块 {block}，应仍在块 0 内"
 
 
 @test

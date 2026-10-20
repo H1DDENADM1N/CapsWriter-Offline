@@ -40,6 +40,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from util.client.word_segment import word_range_at
+
 __all__ = ["FindBar", "FindLineEdit", "MultiCursorTextEdit"]
 
 
@@ -1235,39 +1237,23 @@ class MultiCursorTextEdit(QTextEdit):
 
     # ---------------------------------------------------------- 选中相同内容
 
-    @staticmethod
-    def _is_word_char(ch: str) -> bool:
-        """判断字符是否属于「词内字符」。
-
-        词的构成规则是「字母 + 数字 + 下划线」，但**不能**写死成 ASCII
-        集合：写死之后中文里一个词内字符都没有，Ctrl+D 在中文日志上
-        永远选不中光标下的字。这里改用 ``str.isalnum()``，它对任何
-        语言的字母与数字都返回真（中文、日文、韩文、西里尔、希腊…），
-        而标点（中英文皆然）一律为假，因此标点天然成为分隔符。
-        """
-        return ch.isalnum() or ch == "_"
-
     def _word_range_at(self, position: int) -> Optional[tuple[int, int]]:
-        """返回 ``position`` 所在单词的 [start, end)；不在单词内返回 None。"""
+        """返回 ``position`` 所在单词的 [start, end)；不在单词内返回 None。
+
+        词边界规则见 ``util/client/word_segment.py``：
+
+        - **汉字**走 jieba 词典分词——一整段汉字不再被当成一个词，
+          「语音输入测试字符串」会切成「语音输入 / 测试 / 字符串」；
+        - **ASCII** 走字母数字下划线的连续段——``foo_bar`` 仍是一个词
+          （jieba 会把它切成三段，所以这一路径不能交给 jieba）。
+
+        光标落在分隔符（空白/标点）上时回退到光标左边的字符，
+        这样「刚打完一个词」时仍能选到刚写的那个词。
+        """
         text = self.toPlainText()
         if not text:
             return None
-        pos = max(0, min(position, len(text)))
-        if pos < len(text) and self._is_word_char(text[pos]):
-            pass
-        elif pos > 0 and self._is_word_char(text[pos - 1]):
-            pos -= 1
-        else:
-            return None
-        start = pos
-        while start > 0 and self._is_word_char(text[start - 1]):
-            start -= 1
-        end = pos
-        while end < len(text) and self._is_word_char(text[end]):
-            end += 1
-        if start == end:
-            return None
-        return start, end
+        return word_range_at(text, position)
 
     def _selection_seed(self) -> Optional[tuple[str, int, int, bool]]:
         """取当前选区文本与位置；无选区时退化为光标下的单词。
@@ -1735,26 +1721,124 @@ class MultiCursorTextEdit(QTextEdit):
         return False
 
     def add_cursor_vertical(self, direction: int) -> bool:
-        """在上下相邻行同列加光标；``direction`` 为 +1 向下、-1 向上。
+        """在上下相邻**视觉行**同列加光标；``direction`` 为 +1 向下、-1 向上。
 
         连续按同一方向时，从当前最外侧的光标继续延伸（与 VS Code 一致），
         而不是反复围绕主光标打转。
+
+        为什么按**视觉行**而不是按块：
+
+        一个超长的块（没有换行符）在屏幕上会折成多个视觉行，但文本上
+        它们属于同一个块。按块定位时，「下一行」会直接跳到下一个块，
+        把本块剩下的那些折行视觉行整个跳过——用户看到的就是光标一下子
+        跳到很远的地方。软换行的视觉行模型见 ``_block_visual_rows``。
         """
         candidates = [self.textCursor(), *self._extra_cursors]
-        line, column = self._line_index_and_column(self.textCursor().position())
         if direction > 0:
             base = max(candidates, key=lambda c: c.position())
         else:
             base = min(candidates, key=lambda c: c.position())
-        base_line, base_column = self._line_index_and_column(base.position())
-        column = base_column
-        target_line = base_line + (1 if direction > 0 else -1)
-        pos = self._position_at_line_column(target_line, column)
-        if pos is None:
+        base_position = base.position()
+
+        current = self._visual_row_for_position(base_position)
+        if current is None:
+            return False
+        block_number, row_index = current
+
+        # 列号是**视觉行内**的字符偏移。视觉行首才算是「第一列」——
+        # 若按块内偏移算，折行后的第二行会被当成「很长的一行」的后半截，
+        # 加出来的光标直接落在行尾。
+        column = base_position - self._absolute_row_start(block_number, row_index)
+
+        target = self._neighbor_visual_row(block_number, row_index, direction)
+        if target is None:
+            return False
+        position = self._position_in_visual_row(target[0], target[1], column)
+        if position is None:
             return False
         before = self.extra_cursor_count()
-        self.add_cursor_at(pos)
+        self.add_cursor_at(position)
         return self.extra_cursor_count() > before
+
+    def _visual_row_for_position(self, position: int) -> Optional[tuple[int, int]]:
+        """返回 ``position`` 所在的视觉行 (块号, 块内视觉行下标)。
+
+        位置落在块末（换行符之前）时归到该块的最后一行。
+        """
+        doc = self.document()
+        block = doc.findBlock(position)
+        if not block.isValid():
+            return None
+        number = block.blockNumber()
+        rows = self._block_visual_rows(number)
+        if not rows:
+            return None
+        offset = position - block.position()
+        for row in rows:
+            if row["text_start"] <= offset < row["text_start"] + row["text_length"]:
+                return (number, row["index"])
+        return (number, rows[-1]["index"])
+
+    def _absolute_row_start(self, block_number: int, row_index: int) -> int:
+        """返回该视觉行第一个字符的**绝对**文档位置。"""
+        doc = self.document()
+        block = doc.findBlockByNumber(block_number)
+        if not block.isValid():
+            return 0
+        for row in self._block_visual_rows(block_number):
+            if row["index"] == row_index:
+                return block.position() + row["text_start"]
+        return block.position()
+
+    def _neighbor_visual_row(
+        self,
+        block_number: int,
+        row_index: int,
+        direction: int,
+    ) -> Optional[tuple[int, int]]:
+        """返回指定视觉行在 ``direction`` 方向的相邻视觉行。
+
+        跨块时跳到相邻块的第一行（向下）或最后一行（向上）；空块跳过。
+        """
+        doc = self.document()
+        rows = self._block_visual_rows(block_number)
+        if direction > 0:
+            if row_index + 1 < len(rows):
+                return (block_number, row_index + 1)
+            candidate = block_number + 1
+            while candidate < doc.blockCount():
+                candidate_rows = self._block_visual_rows(candidate)
+                if candidate_rows:
+                    return (candidate, 0)
+                candidate += 1
+            return None
+        if row_index > 0:
+            return (block_number, row_index - 1)
+        candidate = block_number - 1
+        while candidate >= 0:
+            candidate_rows = self._block_visual_rows(candidate)
+            if candidate_rows:
+                return (candidate, len(candidate_rows) - 1)
+            candidate -= 1
+        return None
+
+    def _position_in_visual_row(
+        self,
+        block_number: int,
+        row_index: int,
+        column: int,
+    ) -> Optional[int]:
+        """返回视觉行内第 ``column`` 个字符的绝对位置；越界夹到行尾。"""
+        doc = self.document()
+        block = doc.findBlockByNumber(block_number)
+        if not block.isValid():
+            return None
+        for row in self._block_visual_rows(block_number):
+            if row["index"] != row_index:
+                continue
+            offset = min(max(column, 0), max(row["text_length"], 0))
+            return block.position() + row["text_start"] + offset
+        return None
 
     def select_column(
         self,
@@ -2233,6 +2317,51 @@ class MultiCursorTextEdit(QTextEdit):
                 cur.setPosition(self._plain_anchor)
                 cur.setPosition(corrected, QTextCursor.MoveMode.KeepAnchor)
                 self.setTextCursor(cur)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        """双击选词：中文按词典分词，不按整段汉字。
+
+        Qt 自带的双击把**一整段连续汉字**当作一个词——在
+        「语音输入测试字符串」上会一次选中 9 个字。选词粒度应与 Ctrl+D
+        一致，所以这里让 Qt 先按它自己的规则选，再把选区**收窄**到
+        真正的那个词。
+
+        收窄而不是重算：Qt 已经算好了双击命中的词边界，我们只需要知道
+        那个词在文档里的范围，再取其中分词后的那一个。
+
+        锚点是**鼠标点到的那个字符**，不是选区起点：Qt 对整段汉字只给出
+        一个跨越全段的选区，起点永远是 0；用起点当锚点的话，双击段落的
+        最后一个词也会选中开头的第一个词。
+
+        ASCII 词不受影响——分词结果与 Qt 的词边界一致，无需收窄。
+        """
+        super().mouseDoubleClickEvent(event)
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            return
+        start = min(cursor.position(), cursor.anchor())
+        end = max(cursor.position(), cursor.anchor())
+        text = self.toPlainText()
+        if not text:
+            return
+
+        # 锚点 = 鼠标点到的位置。取不到就退回选区起点。
+        anchor = self._position_at(event.position().toPoint())
+        if anchor < start or anchor > end:
+            anchor = start
+        anchor = min(max(anchor, 0), max(len(text) - 1, 0))
+
+        narrowed = word_range_at(text, anchor)
+        if narrowed is None or narrowed == (start, end):
+            return
+        new_start, new_end = narrowed
+        # 收窄后必须仍在原选区之内，否则说明分词结果与 Qt 的词边界
+        # 不一致——此时保持 Qt 的选择，不擅自改变用户的选区。
+        if new_start < start or new_end > end:
+            return
+        cursor.setPosition(new_start)
+        cursor.setPosition(new_end, QTextCursor.MoveMode.KeepAnchor)
+        self.setTextCursor(cursor)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if self._column_dragging:
