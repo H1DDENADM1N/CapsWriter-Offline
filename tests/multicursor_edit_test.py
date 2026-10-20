@@ -702,6 +702,123 @@ def test_select_all_occurrences_without_word_under_caret_is_noop() -> None:
 
 
 @test
+def test_select_next_occurrence_picks_following_match_not_first() -> None:
+    """Ctrl+D 必须从当前选中项**往后**找下一个匹配，而不是从文档开头找。
+
+    旧实现每次都取「第一个还没被选中的匹配」，于是用户在第 2 项上按
+    Ctrl+D，选中的却是文档里排在最前面的第 1 项——表现为「从头递增」。
+    """
+    edit = make_edit("foo bar foo baz foo")
+    select_word_at(edit, 8, 11)  # 第二个 foo
+    edit.select_next_occurrence()
+    assert extra_positions(edit) == [16], extra_positions(edit)
+
+
+@test
+def test_select_next_occurrence_wraps_around_to_earliest_unselected() -> None:
+    """走到文档末尾后回绕到最前面的未选中项（VS Code 同款循环）。"""
+    edit = make_edit("foo bar foo")
+    select_word_at(edit, 8, 11)  # 第二个 foo
+    edit.select_next_occurrence()
+    # 末尾之后没有匹配，回绕到第一个 foo
+    assert extra_positions(edit) == [0], extra_positions(edit)
+
+
+@test
+def test_select_next_occurrence_stops_when_all_occurrences_selected() -> None:
+    """所有匹配都选中之后，再按 Ctrl+D 不再增加新项。"""
+    edit = make_edit("foo bar foo baz foo")
+    select_word_at(edit, 8, 11)
+    edit.select_next_occurrence()
+    edit.select_next_occurrence()  # 回绕到第一个 foo
+    assert extra_positions(edit) == [0, 16], extra_positions(edit)
+    edit.select_next_occurrence()
+    assert extra_positions(edit) == [0, 16], extra_positions(edit)
+
+
+@test
+def test_select_next_occurrence_in_chinese_selects_word_under_caret() -> None:
+    """中文光标下的字也能被 Ctrl+D 选中。
+
+    旧实现的词字符集合写死为 ASCII 字母数字，中文里一个都不算，
+    于是 `_word_range_at` 恒返回 None，Ctrl+D 在中文日志上完全无效。
+    """
+    edit = make_edit("识别,完成")
+    caret(edit, 0)
+    assert edit.select_next_occurrence() is True
+    assert edit.textCursor().selectedText() == "识别", selected_texts(edit)
+    assert edit.extra_cursor_count() == 0
+
+
+@test
+def test_select_next_occurrence_in_chinese_picks_next_occurrence() -> None:
+    """中文里连续 Ctrl+D 也能逐个选中后面的相同内容。"""
+    edit = make_edit("中文,中文")
+    caret(edit, 0)
+    edit.select_next_occurrence()
+    assert edit.textCursor().selectedText() == "中文", selected_texts(edit)
+    edit.select_next_occurrence()
+    assert extra_positions(edit) == [3], extra_positions(edit)
+
+
+@test
+def test_word_range_at_stops_at_chinese_punctuation() -> None:
+    """中文标点是词分隔符，选词不能跨越标点。"""
+    edit = make_edit("你好，世界")
+    assert edit._word_range_at(0) == (0, 2)
+    assert edit._word_range_at(1) == (0, 2)
+    assert edit._word_range_at(3) == (3, 5)
+    assert edit._word_range_at(4) == (3, 5)
+
+
+@test
+def test_word_range_at_handles_mixed_chinese_and_ascii() -> None:
+    """中英混排时各自的词边界正确。"""
+    edit = make_edit("中文 abc 混合")
+    assert edit._word_range_at(0) == (0, 2)
+    assert edit._word_range_at(3) == (3, 6)
+    assert edit._word_range_at(7) == (7, 9)
+
+
+@test
+def test_word_range_at_returns_none_outside_any_word() -> None:
+    """光标落在空白/标点上（且前后都不是词字符）时返回 None。"""
+    edit = make_edit("   ")
+    assert edit._word_range_at(1) is None
+
+
+@test
+def test_selection_seed_uses_document_text_not_selected_text() -> None:
+    """跨行选区的 needle 必须取文档原文，不能取带 U+2029 的 selectedText。
+
+    `QTextCursor.selectedText()` 在跨行时用 U+2029 作换行符，而文档里
+    是 "\\n"，拿它去 `toPlainText().find()` 永远找不到匹配。
+    """
+    edit = make_edit("aa\nbb")
+    cur = edit.textCursor()
+    cur.setPosition(0)
+    cur.setPosition(5, QTextCursor.MoveMode.KeepAnchor)
+    edit.setTextCursor(cur)
+    seeded = edit._selection_seed()
+    assert seeded is not None
+    needle, start, end, had_selection = seeded
+    assert needle == "aa\nbb", repr(needle)
+    assert (start, end) == (0, 5)
+    assert had_selection is True
+
+
+@test
+def test_select_all_occurrences_keeps_primary_on_current_selection() -> None:
+    """Ctrl+Shift+L 之后主光标应留在当前选中的那一项上。"""
+    edit = make_edit("x y x z x")
+    select_word_at(edit, 8, 9)  # 最后一个 x
+    edit.select_all_occurrences()
+    assert edit.extra_cursor_count() == 2, extra_positions(edit)
+    assert selected_texts(edit) == ["x", "x", "x"], selected_texts(edit)
+    assert edit.textCursor().selectedText() == "x"
+
+
+@test
 def test_undo_last_cursor_removes_most_recent_extra() -> None:
     """Ctrl+U 撤销最后添加的那个副光标。"""
     edit = make_edit("ab cd ab ef ab")

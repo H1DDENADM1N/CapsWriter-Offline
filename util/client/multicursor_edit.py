@@ -902,11 +902,17 @@ class MultiCursorTextEdit(QTextEdit):
 
     # ---------------------------------------------------------- 选中相同内容
 
-    _WORD_CHARS = set(
-        "abcdefghijklmnopqrstuvwxyz"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "0123456789_"
-    )
+    @staticmethod
+    def _is_word_char(ch: str) -> bool:
+        """判断字符是否属于「词内字符」。
+
+        词的构成规则是「字母 + 数字 + 下划线」，但**不能**写死成 ASCII
+        集合：写死之后中文里一个词内字符都没有，Ctrl+D 在中文日志上
+        永远选不中光标下的字。这里改用 ``str.isalnum()``，它对任何
+        语言的字母与数字都返回真（中文、日文、韩文、西里尔、希腊…），
+        而标点（中英文皆然）一律为假，因此标点天然成为分隔符。
+        """
+        return ch.isalnum() or ch == "_"
 
     def _word_range_at(self, position: int) -> Optional[tuple[int, int]]:
         """返回 ``position`` 所在单词的 [start, end)；不在单词内返回 None。"""
@@ -914,17 +920,17 @@ class MultiCursorTextEdit(QTextEdit):
         if not text:
             return None
         pos = max(0, min(position, len(text)))
-        if pos < len(text) and text[pos] in self._WORD_CHARS:
+        if pos < len(text) and self._is_word_char(text[pos]):
             pass
-        elif pos > 0 and text[pos - 1] in self._WORD_CHARS:
+        elif pos > 0 and self._is_word_char(text[pos - 1]):
             pos -= 1
         else:
             return None
         start = pos
-        while start > 0 and text[start - 1] in self._WORD_CHARS:
+        while start > 0 and self._is_word_char(text[start - 1]):
             start -= 1
         end = pos
-        while end < len(text) and text[end] in self._WORD_CHARS:
+        while end < len(text) and self._is_word_char(text[end]):
             end += 1
         if start == end:
             return None
@@ -939,7 +945,10 @@ class MultiCursorTextEdit(QTextEdit):
         if cur.hasSelection():
             start = min(cur.position(), cur.anchor())
             end = max(cur.position(), cur.anchor())
-            return cur.selectedText(), start, end, True
+            # 用 toPlainText 的切片而不是 cur.selectedText()：后者在跨行选区
+            # 里用 U+2029 作换行符，与文档里的 "\n" 不一致，拿它当 needle
+            # 在文档里根本找不到匹配。
+            return self.toPlainText()[start:end], start, end, True
         under = self._word_range_at(cur.position())
         if under is None:
             return None
@@ -961,16 +970,6 @@ class MultiCursorTextEdit(QTextEdit):
             idx = text.find(needle, idx + len(needle))
         return spans
 
-    def _taken_spans(self) -> set[tuple[int, int]]:
-        taken = set()
-        primary = self.textCursor()
-        if primary.hasSelection():
-            taken.add((min(primary.position(), primary.anchor()), max(primary.position(), primary.anchor())))
-        for cur in self._extra_cursors:
-            if cur.hasSelection():
-                taken.add((min(cur.position(), cur.anchor()), max(cur.position(), cur.anchor())))
-        return taken
-
     def _push_selection(self, start: int, end: int) -> None:
         cur = QTextCursor(self.document())
         cur.setPosition(start)
@@ -978,25 +977,65 @@ class MultiCursorTextEdit(QTextEdit):
         self._extra_cursors.append(cur)
         self._sync_extra_cursors()
 
+    def _selection_chain(self) -> list[tuple[int, int]]:
+        """返回当前已选中的各项，顺序为「主选区 → 副光标（添加顺序）」。
+
+        这条链就是 Ctrl+D 已经走过的路径：链尾是「最近一次选中」。
+        """
+        chain: list[tuple[int, int]] = []
+        primary = self.textCursor()
+        if primary.hasSelection():
+            chain.append(
+                (
+                    min(primary.position(), primary.anchor()),
+                    max(primary.position(), primary.anchor()),
+                )
+            )
+        for cur in self._extra_cursors:
+            if cur.hasSelection():
+                chain.append(
+                    (min(cur.position(), cur.anchor()), max(cur.position(), cur.anchor()))
+                )
+        return chain
+
     def select_next_occurrence(self) -> bool:
         """选中下一个相同内容；返回是否发生了选中。
 
         首次调用且原本没有选区时只选中光标下的单词（与 VS Code 一致），
         再次调用才会追加下一个匹配。
+
+        「下一个」是**向后**找：从当前链尾（最近一次选中的那一项）的
+        末尾往后找第一个匹配，而不是从文档开头找第一个还没被选中的。
+        否则每次 Ctrl+D 都会把文档里排在最前面的那个匹配选中，用户
+        看到的就是「第一次选第 1 项、第二次选第 2 项」这种从头递增
+        的行为，而不是「跟着光标往后走」。走到文档末尾才回绕到最前面
+        那个还没被选中的匹配。
         """
         seeded = self._selection_seed()
         if seeded is None:
             return False
         needle, _start, _end, had_selection = seeded
         if not had_selection:
+            # 刚刚已把光标下的单词选中，等同于 VS Code 的首次 Ctrl+D。
             return True
-        taken = self._taken_spans()
-        for span in self._occurrence_spans(needle):
-            if span in taken:
-                continue
-            self._push_selection(*span)
-            return True
-        return False
+        spans = self._occurrence_spans(needle)
+        if not spans:
+            return False
+        chain = self._selection_chain()
+        taken = set(chain)
+        last_end = chain[-1][1] if chain else 0
+        # 向后：文档顺序里排在最后一次选中**之后**的第一个尚未选中的匹配
+        nxt = next(
+            (span for span in spans if span[0] >= last_end and span not in taken),
+            None,
+        )
+        if nxt is None:
+            # 文档末尾之后没有未选中的匹配了，回绕到最前面的那个。
+            nxt = next((span for span in spans if span not in taken), None)
+        if nxt is None:
+            return False
+        self._push_selection(*nxt)
+        return True
 
     def select_all_occurrences(self) -> bool:
         """选中全文所有与当前选区相同的内容。"""
@@ -1007,13 +1046,19 @@ class MultiCursorTextEdit(QTextEdit):
         spans = self._occurrence_spans(needle)
         if len(spans) <= 1:
             return False
-        primary_span = spans[0]
+        # 主光标保持在**当前选中的那一项**上，其余项作为副光标。
+        # 旧实现固定用 spans[0]（文档里最靠前的那个），会让「Ctrl+Shift+L
+        # 之后主光标跳到文档开头」，与 Ctrl+D 的链式语义不一致。
+        chain = self._selection_chain()
+        primary_span = chain[0] if chain else spans[0]
         cur = self.textCursor()
         cur.setPosition(primary_span[0])
         cur.setPosition(primary_span[1], QTextCursor.MoveMode.KeepAnchor)
         self.setTextCursor(cur)
         self._extra_cursors.clear()
-        for span in spans[1:]:
+        for span in spans:
+            if span == primary_span:
+                continue
             self._push_selection(*span)
         return True
 
