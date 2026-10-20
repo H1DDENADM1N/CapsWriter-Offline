@@ -184,6 +184,9 @@ class MultiCursorTextEdit(QTextEdit):
         # 自己用 fillRect 涂会把文字盖住，这是「列选遮挡文字」的根因。
         self._extra_selections: list[QTextEdit.ExtraSelection] = []
         self._host_selections: list[QTextEdit.ExtraSelection] = []
+        # 多光标编辑的撤销/重做快照，见「撤销与光标还原」一节。
+        self._edit_log: list[dict] = []
+        self._redo_log: list[dict] = []
         self.find_bar = FindBar(self)
         self.find_bar.hide()
 
@@ -635,6 +638,7 @@ class MultiCursorTextEdit(QTextEdit):
             return
         bases = [min(c.position(), c.anchor()) for c, _ in pairs]
         deltas = [len(text) - abs(c.position() - c.anchor()) for c, _ in pairs]
+        record = self._edit_begin()
         editor = self.textCursor()
         editor.beginEditBlock()
         try:
@@ -648,6 +652,7 @@ class MultiCursorTextEdit(QTextEdit):
         suffix = self._suffix_shift(deltas)
         finals = [b + len(text) + s for b, s in zip(bases, suffix)]
         self._apply_edit_result(pairs, finals)
+        self._edit_end(record)
 
     @staticmethod
     def _suffix_shift(deltas: list[int]) -> list[int]:
@@ -678,6 +683,7 @@ class MultiCursorTextEdit(QTextEdit):
             for b in bases
         ]
         editor = self.textCursor()
+        record = self._edit_begin()
         editor.beginEditBlock()
         try:
             for cur, _is_primary in pairs:
@@ -718,6 +724,7 @@ class MultiCursorTextEdit(QTextEdit):
         suffix = self._suffix_shift(deltas)
         finals = [b + off + s for b, off, s in zip(bases, caret_offsets, suffix)]
         self._apply_edit_result(pairs, finals)
+        self._edit_end(record)
 
     def _apply_edit_result(
         self,
@@ -743,6 +750,155 @@ class MultiCursorTextEdit(QTextEdit):
             self.setTextCursor(cur)
         self._extra_cursors = extras
         self._sync_extra_cursors()
+
+    # ------------------------------------------------------- 撤销与光标还原
+    #
+    # Qt 的撤销栈只还原**文本**，不认识本控件的副光标。多光标编辑撤销之后
+    # 文本确实回来了，但副光标（有时连主光标也）仍停在编辑后的位置——用户
+    # 报障的「多光标删除文字再 Ctrl+Z 撤销删除，光标位置错乱」正是这个。
+    #
+    # 副光标之所以会错位，是因为它本身也是 ``QTextCursor``：文档被撤销时
+    # Qt 会**自动**把这些光标平移到「看起来合理、其实不对」的偏移上。
+    #
+    # 做法：多光标编辑时记下「编辑前的文本特征 + 全部光标位置」；撤销时先让
+    # Qt 回退文本，再用文本特征判断这次回退的**是不是**我们记下的那次编辑，
+    # 是的话把光标集合显式写回去。
+
+    def _text_signature(self) -> tuple[int, int]:
+        """文档文本的轻量特征 ``(长度, hash)``。
+
+        用来判断「一次撤销回退的到底是不是某一次特定编辑」：编辑前、编辑后
+        与撤销之后各取一次特征，三者相等才认作同一次编辑。``hash`` 只在进程
+        内稳定，而比较的两端都在同一进程内，故可用。
+        """
+        text = self.toPlainText()
+        return (len(text), hash(text))
+
+    def _capture_cursor_state(self) -> list[tuple[int, int, bool]]:
+        """记录全部光标（主 + 副）的位置。
+
+        每项是 ``(position, anchor, is_primary)``。
+        """
+        state: list[tuple[int, int, bool]] = []
+        primary = self.textCursor()
+        state.append((primary.position(), primary.anchor(), True))
+        for cur in self._extra_cursors:
+            state.append((cur.position(), cur.anchor(), False))
+        return state
+
+    def _restore_cursor_state(self, state) -> None:
+        """把 ``_capture_cursor_state`` 记录的光标集合写回编辑器。"""
+        doc = self.document()
+        limit = max(0, doc.characterCount() - 1)
+        primary = None
+        extras: list[QTextCursor] = []
+        for position, anchor, is_primary in state:
+            cur = QTextCursor(doc)
+            cur.setPosition(max(0, min(anchor, limit)))
+            cur.setPosition(
+                max(0, min(position, limit)), QTextCursor.MoveMode.KeepAnchor
+            )
+            if is_primary:
+                primary = cur
+            else:
+                extras.append(cur)
+        if primary is not None:
+            self.setTextCursor(primary)
+        self._extra_cursors = extras
+        self._sync_extra_cursors()
+
+    def _edit_begin(self) -> dict:
+        """多光标编辑开始：抓一份「编辑前」的快照。"""
+        return {
+            "sig_before": self._text_signature(),
+            "cursors_before": self._capture_cursor_state(),
+        }
+
+    def _edit_end(self, record: dict) -> None:
+        """多光标编辑结束：补上「编辑后」的快照并入撤销栈。"""
+        record["sig_after"] = self._text_signature()
+        record["cursors_after"] = self._capture_cursor_state()
+        if record["sig_before"] == record["sig_after"]:
+            # 文本没变（例如所有光标都贴在文档边界上，删除无事可做），
+            # 不必留一条撤销记录。
+            return
+        self._edit_log.append(record)
+        if len(self._edit_log) > 200:
+            del self._edit_log[0]
+        self._redo_log.clear()
+
+    def _undo_with_cursors(self) -> bool:
+        """撤销一步；若回退的正是本控件的多光标编辑，一并还原光标集合。
+
+        返回 False 表示「当前没有可撤销的内容」，交给 Qt 默认处理。
+
+        匹配方式：撤销**之后**的文本若等于某条记录的「编辑前」文本，就说明
+        这一步回退的正是那次编辑，把光标集合写回去；否则说明这一步撤销的
+        是别的东西（例如中途追加的日志），记录原样留着，下一次撤销再匹配。
+        """
+        doc = self.document()
+        if not doc.isUndoAvailable():
+            return False
+        record = self._edit_log[-1] if self._edit_log else None
+        super().undo()
+        if record is None:
+            return True
+        if self._text_signature() != record["sig_before"]:
+            # 这一步撤销的不是我们记下的那次编辑（多半是中途追加的日志）。
+            # 记录留在栈里，等下一次撤销时再匹配。
+            return True
+        self._restore_cursor_state(record["cursors_before"])
+        self._edit_log.pop()
+        self._redo_log.append(record)
+        return True
+
+    def _redo_with_cursors(self) -> bool:
+        """重做一步；若重做的正是本控件的多光标编辑，一并还原光标集合。"""
+        doc = self.document()
+        if not doc.isRedoAvailable():
+            return False
+        record = self._redo_log[-1] if self._redo_log else None
+        super().redo()
+        if record is None:
+            return True
+        if self._text_signature() != record["sig_after"]:
+            return True
+        self._restore_cursor_state(record["cursors_after"])
+        self._redo_log.pop()
+        self._edit_log.append(record)
+        return True
+
+    def undo(self) -> None:
+        """撤销一步；多光标编辑会一并还原光标集合。"""
+        self._undo_with_cursors()
+
+    def redo(self) -> None:
+        """重做一步；多光标编辑会一并还原光标集合。"""
+        self._redo_with_cursors()
+
+    def _handle_undo_shortcut(self, event: QKeyEvent) -> bool:
+        """处理 Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y。
+
+        必须在这里自己接：``QTextEdit::undo()`` **不是虚函数**，Python 子类
+        覆写它并不会被 Qt 内部的按键处理调用到（``QTextEdit::keyPressEvent``
+        里直接调的是 C++ 版本），只在按键分发处拦截才真正生效。
+        """
+        mods = event.modifiers()
+        if not mods & Qt.KeyboardModifier.ControlModifier:
+            return False
+        if mods & (
+            Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier
+        ):
+            return False
+        key = event.key()
+        shift = bool(mods & Qt.KeyboardModifier.ShiftModifier)
+        if key == Qt.Key.Key_Z:
+            if shift:
+                return self._redo_with_cursors()
+            return self._undo_with_cursors()
+        if key == Qt.Key.Key_Y and not shift:
+            return self._redo_with_cursors()
+        return False
 
     # ---------------------------------------------------------- 选中相同内容
 
@@ -1152,6 +1308,7 @@ class MultiCursorTextEdit(QTextEdit):
         spans = sorted(self._rect_spans)
         first_start = spans[0][0]
         editor = self.textCursor()
+        record = self._edit_begin()
         editor.beginEditBlock()
         try:
             for start, end in reversed(spans):
@@ -1170,6 +1327,7 @@ class MultiCursorTextEdit(QTextEdit):
         cur = QTextCursor(self.document())
         cur.setPosition(first_start)
         self.setTextCursor(cur)
+        self._edit_end(record)
 
     def _cut_rect_selection(self) -> None:
         """剪切矩形选区：复制整块文本，然后把所有行删掉。"""
@@ -1386,6 +1544,7 @@ class MultiCursorTextEdit(QTextEdit):
         specs = self._cursor_specs()
         cur = self.textCursor()
         applied = False
+        record = self._edit_begin()
         cur.beginEditBlock()
         try:
             for first, last in reversed(groups):
@@ -1422,6 +1581,7 @@ class MultiCursorTextEdit(QTextEdit):
             return (line - removed, 0)
 
         self._place_cursors(specs, mapper)
+        self._edit_end(record)
         return True
 
     def duplicate_line(self, direction: int = 1) -> bool:
@@ -1433,6 +1593,7 @@ class MultiCursorTextEdit(QTextEdit):
         specs = self._cursor_specs()
         cur = self.textCursor()
         applied = False
+        record = self._edit_begin()
         cur.beginEditBlock()
         try:
             for first, last in reversed(groups):
@@ -1473,6 +1634,7 @@ class MultiCursorTextEdit(QTextEdit):
             return (line, 0)
 
         self._place_cursors(specs, mapper)
+        self._edit_end(record)
         return True
 
     def move_line(self, direction: int) -> bool:
@@ -1495,6 +1657,7 @@ class MultiCursorTextEdit(QTextEdit):
             return False
         specs = self._cursor_specs()
         cur = self.textCursor()
+        record = self._edit_begin()
         cur.beginEditBlock()
         try:
             for first, last in reversed(movable):
@@ -1519,6 +1682,7 @@ class MultiCursorTextEdit(QTextEdit):
             return (line, 0)
 
         self._place_cursors(specs, mapper)
+        self._edit_end(record)
         return True
 
     def toggle_line_comment(self, prefix: str = "#") -> bool:
@@ -1545,6 +1709,7 @@ class MultiCursorTextEdit(QTextEdit):
         deltas: dict[int, int] = {}
         specs = self._cursor_specs()
         cur = self.textCursor()
+        record = self._edit_begin()
         cur.beginEditBlock()
         try:
             for first, last in reversed(groups):
@@ -1570,6 +1735,7 @@ class MultiCursorTextEdit(QTextEdit):
             return (line, deltas.get(line, 0))
 
         self._place_cursors(specs, mapper)
+        self._edit_end(record)
         return not all_commented
 
     def _position_at(self, point: QPoint) -> int:
@@ -1886,6 +2052,12 @@ class MultiCursorTextEdit(QTextEdit):
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_Escape and self._extra_cursors:
             self.clear_extra_cursors()
+            event.accept()
+            return
+        # Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y 必须在这里自己接：Qt 内部的
+        # keyPressEvent 直接调 C++ 版 undo()，Python 子类覆写 undo() 不会被
+        # 它调到。多光标编辑若走 Qt 默认路径，副光标会停在错位的位置。
+        if self._handle_undo_shortcut(event):
             event.accept()
             return
         if self._shortcut_action(event):

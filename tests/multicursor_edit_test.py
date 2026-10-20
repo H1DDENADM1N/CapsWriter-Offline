@@ -2630,6 +2630,192 @@ def test_context_menu_delete_removes_whole_rect() -> None:
     assert edit.toPlainText() == "adef\nadef\nadef", repr(edit.toPlainText())
 
 
+# --------------------------------------------------- 撤销：光标集合要一起还原
+#
+# Qt 的撤销栈只还原**文本**，不认识本控件的副光标。多光标删除后按 Ctrl+Z，
+# 文本回来了，但副光标仍停在编辑后的位置——用户报障的「多光标删除文字再
+# ctrl+z 撤销删除，光标位置错乱」正是这个。
+#
+# 副光标之所以会错位，是因为它本身也是 ``QTextCursor``：文档被撤销时
+# Qt 会**自动**把这些光标平移到「看起来合理、其实不对」的偏移上。
+
+
+def _cursor_positions(edit: MultiCursorTextEdit) -> list[tuple[int, int]]:
+    """全部光标（主 + 副）的 (position, anchor)，按主光标在前。"""
+    primary = edit.textCursor()
+    out = [(primary.position(), primary.anchor())]
+    for cur in edit.extra_cursors:
+        out.append((cur.position(), cur.anchor()))
+    return out
+
+
+def _multicursor_setup(edit: MultiCursorTextEdit) -> None:
+    """造三个互不相同的光标：主光标 6，副光标 11、17。"""
+    edit.add_cursor_at(11)
+    edit.add_cursor_at(17)
+    caret(edit, 6)
+
+
+@test
+def test_undo_restores_cursor_positions_after_multicursor_delete() -> None:
+    """多光标删除后 Ctrl+Z，文本与**全部光标位置**都要回到删除前。"""
+    edit = make_edit("alpha beta gamma delta")
+    _multicursor_setup(edit)
+    before = _cursor_positions(edit)
+
+    edit.delete_at_cursors(backward=True)
+    assert edit.toPlainText() == "alphabetagammadelta", repr(edit.toPlainText())
+    assert _cursor_positions(edit) != before
+
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    assert edit.toPlainText() == "alpha beta gamma delta", repr(edit.toPlainText())
+    assert _cursor_positions(edit) == before, (
+        _cursor_positions(edit),
+        before,
+    )
+
+
+@test
+def test_undo_restores_cursor_positions_after_multicursor_insert() -> None:
+    """多光标输入后 Ctrl+Z，光标集合同样要还原。"""
+    edit = make_edit("alpha beta gamma delta")
+    _multicursor_setup(edit)
+    before = _cursor_positions(edit)
+
+    edit.insert_text_at_cursors("X")
+    assert edit.toPlainText() != "alpha beta gamma delta"
+
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    assert edit.toPlainText() == "alpha beta gamma delta", repr(edit.toPlainText())
+    assert _cursor_positions(edit) == before, (
+        _cursor_positions(edit),
+        before,
+    )
+
+
+@test
+def test_redo_restores_cursor_positions_after_undo() -> None:
+    """Ctrl+Shift+Z 重做后，光标要回到「编辑后」的位置。"""
+    edit = make_edit("alpha beta gamma delta")
+    _multicursor_setup(edit)
+    edit.delete_at_cursors(backward=True)
+    after = _cursor_positions(edit)
+
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    key(
+        edit,
+        key_code=Qt.Key.Key_Z,
+        modifiers=Qt.KeyboardModifier.ControlModifier
+        | Qt.KeyboardModifier.ShiftModifier,
+    )
+    assert edit.toPlainText() == "alphabetagammadelta", repr(edit.toPlainText())
+    assert _cursor_positions(edit) == after, (
+        _cursor_positions(edit),
+        after,
+    )
+
+
+@test
+def test_undo_key_is_consumed_by_editor() -> None:
+    """Ctrl+Z 必须被本控件吃掉，不能再冒泡给 Qt 默认处理。"""
+    edit = make_edit("alpha beta gamma delta")
+    _multicursor_setup(edit)
+    edit.delete_at_cursors(backward=True)
+    event = key(
+        edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier
+    )
+    assert event.isAccepted(), "Ctrl+Z 未被消费"
+
+
+@test
+def test_undo_without_multicursor_still_works() -> None:
+    """单光标时 Ctrl+Z 依然要能撤销普通输入。"""
+    edit = make_edit("alpha")
+    caret(edit, 5)
+    edit.insertPlainText("beta")
+    assert edit.toPlainText() == "alphabeta", repr(edit.toPlainText())
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    assert edit.toPlainText() == "alpha", repr(edit.toPlainText())
+
+
+@test
+def test_undo_after_interleaved_log_append_restores_cursors() -> None:
+    """多光标编辑之后又追加了日志，撤销追加再撤销编辑，光标仍要还原。"""
+    edit = make_edit("alpha beta gamma delta")
+    _multicursor_setup(edit)
+    before = _cursor_positions(edit)
+
+    edit.delete_at_cursors(backward=True)
+    edit.append_line("a new log line")
+
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    assert "a new log line" not in edit.toPlainText(), repr(edit.toPlainText())
+
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    assert edit.toPlainText() == "alpha beta gamma delta", repr(edit.toPlainText())
+    assert _cursor_positions(edit) == before, (
+        _cursor_positions(edit),
+        before,
+    )
+
+
+@test
+def test_undo_restores_cursor_selection_state() -> None:
+    """选区也要还原：撤销后光标仍带原来的选区。"""
+    edit = make_edit("alpha beta gamma delta")
+    cur = edit.textCursor()
+    cur.setPosition(0)
+    cur.setPosition(5, cur.MoveMode.KeepAnchor)
+    edit.setTextCursor(cur)
+    edit.add_cursor_at(11)
+
+    edit.delete_at_cursors(backward=True)
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    assert edit.toPlainText() == "alpha beta gamma delta", repr(edit.toPlainText())
+    assert edit.textCursor().hasSelection(), "选区没有随撤销还原"
+    assert edit.textCursor().selectedText() == "alpha", (
+        edit.textCursor().selectedText()
+    )
+
+
+@test
+def test_undo_restores_cursor_positions_after_delete_line() -> None:
+    """多光标删整行后 Ctrl+Z，光标要回到删行前。"""
+    edit = make_edit("one\ntwo\nthree\nfour")
+    caret(edit, 1)
+    edit.add_cursor_at(9)
+    before = _cursor_positions(edit)
+
+    edit.delete_line()
+    assert edit.toPlainText() != "one\ntwo\nthree\nfour", repr(edit.toPlainText())
+
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    assert edit.toPlainText() == "one\ntwo\nthree\nfour", repr(edit.toPlainText())
+    assert _cursor_positions(edit) == before, (
+        _cursor_positions(edit),
+        before,
+    )
+
+
+@test
+def test_undo_restores_cursor_positions_after_duplicate_line() -> None:
+    """多光标复制行后 Ctrl+Z，光标要回到复制前。"""
+    edit = make_edit("one\ntwo\nthree")
+    caret(edit, 1)
+    edit.add_cursor_at(6)
+    before = _cursor_positions(edit)
+
+    edit.duplicate_line(1)
+    assert edit.toPlainText() != "one\ntwo\nthree", repr(edit.toPlainText())
+
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    assert edit.toPlainText() == "one\ntwo\nthree", repr(edit.toPlainText())
+    assert _cursor_positions(edit) == before, (
+        _cursor_positions(edit),
+        before,
+    )
+
+
 if __name__ == "__main__":
     sys.exit(main())
 
