@@ -2933,6 +2933,449 @@ def test_undo_restores_cursor_positions_after_duplicate_line() -> None:
     )
 
 
+# ---------------------------------------------------------------- 查找与替换
+#
+# Ctrl+F 打开查找栏、Ctrl+H 展开替换行，两个动作共用同一个浮层。
+# 替换语义对齐 VS Code：选区正好是匹配就替换它，否则定位下一个并就地
+# 替换；「全部替换」只占一步撤销。
+
+
+def _open_replace_bar(edit: MultiCursorTextEdit) -> None:
+    key(edit, key_code=Qt.Key.Key_H, modifiers=CTRL, text="\x08")
+    APP.processEvents()
+    assert edit.find_bar.isVisible() is True
+    assert edit.find_bar.replace_mode is True
+
+
+def _select(edit: MultiCursorTextEdit, start: int, end: int) -> None:
+    cur = edit.textCursor()
+    cur.setPosition(start)
+    cur.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+    edit.setTextCursor(cur)
+
+
+@test
+def test_ctrl_h_opens_replace_bar_with_two_rows() -> None:
+    """Ctrl+H 打开浮层并展开替换行。"""
+    edit = make_edit("hello")
+    key(edit, key_code=Qt.Key.Key_H, modifiers=CTRL, text="\x08")
+    APP.processEvents()
+    assert edit.find_bar.isVisible() is True
+    assert edit.find_bar.replace_mode is True
+    assert edit.find_bar.replace_panel.isVisible() is True
+
+
+@test
+def test_ctrl_f_keeps_single_row_when_no_replace_mode() -> None:
+    """Ctrl+F 仍然只显示查找行——不能因为加了替换功能就改变旧行为。"""
+    edit = make_edit("hello")
+    _open_find_bar(edit)
+    assert edit.find_bar.replace_mode is False
+    assert edit.find_bar.replace_panel.isVisible() is False
+
+
+@test
+def test_ctrl_f_keeps_replace_mode_when_already_open() -> None:
+    """已经在替换模式时按 Ctrl+F 不得收起替换行、也不得清空输入。"""
+    edit = make_edit("hello")
+    _open_replace_bar(edit)
+    edit.find_bar.line_edit.setText("keep")
+    edit.find_bar.replace_edit.setText("this")
+
+    key(edit, key_code=Qt.Key.Key_F, modifiers=CTRL, text="\x06")
+    APP.processEvents()
+    assert edit.find_bar.replace_mode is True
+    assert edit.find_bar.replace_panel.isVisible() is True
+    assert edit.find_bar.line_edit.text() == "keep"
+    assert edit.find_bar.replace_edit.text() == "this"
+
+
+@test
+def test_replace_bar_does_not_cover_text() -> None:
+    """两行高的浮层同样不能盖住正文，滚动条也不能被挡住。"""
+    edit = make_edit("\n".join(f"line{i}" for i in range(40)))
+    baseline_top = edit.viewport().geometry().top()
+    baseline_h = edit.viewport().height()
+
+    _open_replace_bar(edit)
+    bar_h = edit.find_bar.height()
+    assert bar_h > 0, bar_h
+    top = edit.viewport().geometry().top()
+    assert top >= baseline_top + bar_h, (top, baseline_top, bar_h)
+    assert edit.viewport().height() <= baseline_h - bar_h + 1, (
+        edit.viewport().height(),
+        baseline_h,
+        bar_h,
+    )
+    assert edit.find_bar.geometry().bottom() < top, (
+        edit.find_bar.geometry(),
+        edit.viewport().geometry(),
+    )
+    assert edit.find_bar.width() == edit.viewport().width()
+
+
+@test
+def test_closing_replace_bar_restores_full_viewport() -> None:
+    """关掉浮层后必须把边距清零，不能永久留白。"""
+    edit = make_edit("\n".join(f"line{i}" for i in range(40)))
+    baseline_top = edit.viewport().geometry().top()
+    baseline_h = edit.viewport().height()
+
+    _open_replace_bar(edit)
+    assert edit.viewport().height() < baseline_h, "替换栏应压矮正文区"
+
+    edit.find_bar.close()
+    APP.processEvents()
+    assert edit.find_bar.isVisible() is False
+    assert edit.viewport().geometry().top() == baseline_top, edit.viewport().geometry()
+    assert edit.viewport().height() == baseline_h, edit.viewport().height()
+
+
+@test
+def test_replace_current_replaces_the_selected_match() -> None:
+    """选区正好是一个匹配时，「替换」替换它。"""
+    edit = make_edit("foo bar foo")
+    _select(edit, 0, 3)
+    assert edit.replace_current_match("foo", "qux") is True
+    assert edit.toPlainText() == "qux bar foo", repr(edit.toPlainText())
+
+
+@test
+def test_replace_current_finds_next_match_when_no_selection() -> None:
+    """没有匹配选区时，「替换」定位下一个匹配并就地替换。"""
+    edit = make_edit("foo bar foo")
+    caret(edit, 0)
+    assert edit.replace_current_match("foo", "qux") is True
+    assert edit.toPlainText() == "qux bar foo", repr(edit.toPlainText())
+
+
+@test
+def test_repeated_replace_walks_through_matches() -> None:
+    """连点「替换」逐个替换，等价于 VS Code 的连续替换。"""
+    edit = make_edit("foo bar foo baz foo")
+    caret(edit, 0)
+    for expected in ("qux bar foo baz foo", "qux bar qux baz foo", "qux bar qux baz qux"):
+        assert edit.replace_current_match("foo", "qux") is True
+        assert edit.toPlainText() == expected, repr(edit.toPlainText())
+
+
+@test
+def test_replace_all_replaces_every_match_and_returns_count() -> None:
+    """「全部替换」替换全文所有匹配并返回替换处数。"""
+    edit = make_edit("foo bar foo baz foo")
+    caret(edit, 0)
+    assert edit.replace_all_matches("foo", "qux") == 3
+    assert edit.toPlainText() == "qux bar qux baz qux", repr(edit.toPlainText())
+
+
+@test
+def test_replace_all_is_a_single_undo_step() -> None:
+    """「全部替换」只占一步撤销，Ctrl+Z 一次就整体还原。"""
+    edit = make_edit("foo bar foo baz foo")
+    caret(edit, 0)
+    edit.replace_all_matches("foo", "qux")
+    assert edit.toPlainText() == "qux bar qux baz qux", repr(edit.toPlainText())
+
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    assert edit.toPlainText() == "foo bar foo baz foo", repr(edit.toPlainText())
+
+
+@test
+def test_replace_current_is_a_single_undo_step() -> None:
+    """单次「替换」也只占一步撤销。"""
+    edit = make_edit("foo bar")
+    caret(edit, 0)
+    edit.replace_current_match("foo", "qux")
+    assert edit.toPlainText() == "qux bar", repr(edit.toPlainText())
+
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    assert edit.toPlainText() == "foo bar", repr(edit.toPlainText())
+
+
+@test
+def test_replace_with_empty_replacement_deletes_the_match() -> None:
+    """替换词为空 = 删除匹配。"""
+    edit = make_edit("foo bar foo")
+    caret(edit, 0)
+    assert edit.replace_all_matches("foo", "") == 2
+    assert edit.toPlainText() == " bar ", repr(edit.toPlainText())
+
+
+@test
+def test_replace_with_empty_needle_is_a_noop() -> None:
+    """查找词为空时两个替换动作都不做事。"""
+    edit = make_edit("foo bar")
+    caret(edit, 0)
+    assert edit.replace_current_match("", "qux") is False
+    assert edit.replace_all_matches("", "qux") == 0
+    assert edit.toPlainText() == "foo bar", repr(edit.toPlainText())
+
+
+@test
+def test_replace_when_no_match_exists_is_a_noop() -> None:
+    """全文没有匹配时不改文本，也不报错。"""
+    edit = make_edit("foo bar")
+    caret(edit, 0)
+    assert edit.replace_current_match("zzz", "qux") is False
+    assert edit.replace_all_matches("zzz", "qux") == 0
+    assert edit.toPlainText() == "foo bar", repr(edit.toPlainText())
+
+
+@test
+def test_replace_clears_extra_cursors_before_editing() -> None:
+    """文档级替换会清掉副光标，避免它们停在失效的位置。"""
+    edit = make_edit("foo bar foo")
+    caret(edit, 0)
+    edit.add_cursor_at(8)
+    assert edit.extra_cursor_count() == 1
+
+    edit.replace_all_matches("foo", "qux")
+    assert edit.extra_cursor_count() == 0, edit.extra_cursor_count()
+    assert edit.toPlainText() == "qux bar qux", repr(edit.toPlainText())
+
+
+@test
+def test_undo_after_replace_all_restores_extra_cursors() -> None:
+    """替换前被收敛的副光标，撤销时要一并回来。"""
+    edit = make_edit("foo bar foo")
+    caret(edit, 0)
+    edit.add_cursor_at(8)
+    before = _cursor_positions(edit)
+
+    edit.replace_all_matches("foo", "qux")
+    key(edit, key_code=Qt.Key.Key_Z, modifiers=Qt.KeyboardModifier.ControlModifier)
+    assert edit.toPlainText() == "foo bar foo", repr(edit.toPlainText())
+    assert _cursor_positions(edit) == before, (_cursor_positions(edit), before)
+
+
+@test
+def test_find_match_info_reports_total_and_current() -> None:
+    """匹配计数：总数 + 当前是第几个。
+
+    规则与 VS Code 一致：选区正好覆盖某个匹配就是那一项；光标停在某个
+    匹配内部也是那一项；光标不在任何匹配里则指向**下一个**匹配。
+    """
+    edit = make_edit("foo bar foo baz foo")
+    _select(edit, 0, 3)
+    assert edit.find_match_info("foo") == (3, 1), edit.find_match_info("foo")
+    _select(edit, 8, 11)
+    assert edit.find_match_info("foo") == (3, 2), edit.find_match_info("foo")
+    _select(edit, 16, 19)
+    assert edit.find_match_info("foo") == (3, 3), edit.find_match_info("foo")
+    # 光标不在任何匹配里：指向下一个匹配
+    caret(edit, 4)
+    assert edit.find_match_info("foo") == (3, 2), edit.find_match_info("foo")
+    # 光标在最后一个匹配之后：回绕到第一个
+    caret(edit, 19)
+    assert edit.find_match_info("foo") == (3, 1), edit.find_match_info("foo")
+    assert edit.find_match_info("zzz") == (0, 0)
+
+
+@test
+def test_match_label_shows_no_match() -> None:
+    """找不到匹配时计数区显示「无匹配」。"""
+    edit = make_edit("hello")
+    _open_replace_bar(edit)
+    edit.find_bar.line_edit.setText("zzz")
+    APP.processEvents()
+    assert edit.find_bar.match_label.text() == "无匹配", edit.find_bar.match_label.text()
+
+    edit.find_bar.line_edit.setText("hello")
+    APP.processEvents()
+    assert edit.find_bar.match_label.text() == "1/1", edit.find_bar.match_label.text()
+
+
+@test
+def test_replace_bar_buttons_perform_the_actions() -> None:
+    """浮层上的「替换」「全部替换」按钮真的生效。"""
+    edit = make_edit("foo bar foo")
+    _open_replace_bar(edit)
+    edit.find_bar.line_edit.setText("foo")
+    edit.find_bar.replace_edit.setText("qux")
+
+    edit.find_bar.replace_button.click()
+    APP.processEvents()
+    assert edit.toPlainText() == "qux bar foo", repr(edit.toPlainText())
+
+    edit.find_bar.replace_all_button.click()
+    APP.processEvents()
+    assert edit.toPlainText() == "qux bar qux", repr(edit.toPlainText())
+
+
+@test
+def test_escape_closes_replace_bar_and_returns_focus_to_editor() -> None:
+    """Esc 关闭浮层并把焦点还给文本框。"""
+    edit = make_edit("hello")
+    _open_replace_bar(edit)
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier, "\x1b")
+    edit.find_bar.keyPressEvent(event)
+    APP.processEvents()
+    assert edit.find_bar.isVisible() is False
+    assert edit.hasFocus() is True
+
+
+@test
+def test_tab_switches_focus_between_find_and_replace_fields() -> None:
+    """Tab 在查找框与替换框之间切换。"""
+    edit = make_edit("hello")
+    _open_replace_bar(edit)
+    assert edit.find_bar.line_edit.hasFocus() is True
+
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Tab, Qt.KeyboardModifier.NoModifier, "\t")
+    edit.find_bar.line_edit.keyPressEvent(event)
+    APP.processEvents()
+    assert edit.find_bar.replace_edit.hasFocus() is True
+
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Tab, Qt.KeyboardModifier.NoModifier, "\t")
+    edit.find_bar.replace_edit.keyPressEvent(event)
+    APP.processEvents()
+    assert edit.find_bar.line_edit.hasFocus() is True
+
+
+@test
+def test_shift_enter_in_find_field_searches_backwards() -> None:
+    """查找框里 Shift+Enter 找上一个。"""
+    edit = make_edit("foo bar foo")
+    _open_replace_bar(edit)
+    edit.find_bar.line_edit.setText("foo")
+    caret(edit, 8)
+    event = QKeyEvent(
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_Return,
+        Qt.KeyboardModifier.ShiftModifier,
+        "\r",
+    )
+    edit.find_bar.line_edit.keyPressEvent(event)
+    APP.processEvents()
+    assert edit.textCursor().selectedText() == "foo", edit.textCursor().selectedText()
+    assert edit.textCursor().position() == 3, edit.textCursor().position()
+
+
+@test
+def test_ctrl_alt_enter_in_replace_field_replaces_all() -> None:
+    """替换框里 Ctrl+Alt+Enter 全部替换。"""
+    edit = make_edit("foo bar foo")
+    _open_replace_bar(edit)
+    edit.find_bar.line_edit.setText("foo")
+    edit.find_bar.replace_edit.setText("qux")
+    event = QKeyEvent(
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_Return,
+        Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier,
+        "\r",
+    )
+    edit.find_bar.replace_edit.keyPressEvent(event)
+    APP.processEvents()
+    assert edit.toPlainText() == "qux bar qux", repr(edit.toPlainText())
+
+
+@test
+def test_replace_bar_text_is_not_rendered_with_the_icon_font() -> None:
+    """浮层文字不能用图标字体（Segoe MDL2 Assets）。
+
+    客户端主题 CSS 给**所有** QLabel / QPushButton 指定了 Segoe MDL2
+    Assets —— 那是给图标用的。查找/替换栏写的是「上一个 / 下一个 / 替换 /
+    全部替换 / 3/8」，沿用图标字体会被画成一串图标字形，完全读不出来。
+
+    这里模拟应用级主题 CSS，断言浮层里的文字控件拿到的是普通文本字体。
+    """
+    app = QApplication.instance()
+    previous = app.styleSheet()
+    css_path = Path(__file__).resolve().parents[1] / "util" / "client" / "gui_theme_custom.css"
+    if not css_path.exists():
+        return
+    app.setStyleSheet(css_path.read_text(encoding="utf-8"))
+    try:
+        edit = make_edit("hello")
+        bar = edit.find_bar
+        for name, widget in (
+            ("match_label", bar.match_label),
+            ("next_button", bar.next_button),
+            ("replace_all_button", bar.replace_all_button),
+        ):
+            family = widget.font().family()
+            assert "Segoe MDL2 Assets" not in family, (
+                f"{name} 用了图标字体，中文会被画成图标字形: {family!r}"
+            )
+    finally:
+        app.setStyleSheet(previous)
+
+
+@test
+def test_replace_all_keeps_cursor_and_scroll_position() -> None:
+    """「全部替换」不能把光标甩到文档开头、也不能把视图拉到顶部。
+
+    替换是**就地**操作：用户的选区与滚动位置都应该留在原处。
+    实现里若在替换后调用 ``setTextCursor(0)``，Qt 会为了「让光标可见」
+    把视口滚到文档顶部——用户看到的就是「按一次全部替换，文本框跳到最上面、
+    光标位置丢失」。
+    """
+    text = "\n".join(f"line{i} foo tail" for i in range(40))
+    edit = make_edit(text)
+    edit.verticalScrollBar().setValue(15)
+    _select(edit, 300, 320)
+    APP.processEvents()
+    before_scroll = edit.verticalScrollBar().value()
+    before_pos = edit.textCursor().position()
+    before_anchor = edit.textCursor().anchor()
+    assert before_scroll > 0, before_scroll
+
+    edit.replace_all_matches("foo", "qux")
+    APP.processEvents()
+
+    assert edit.verticalScrollBar().value() == before_scroll, (
+        edit.verticalScrollBar().value(),
+        before_scroll,
+    )
+    assert edit.textCursor().position() == before_pos, edit.textCursor().position()
+    assert edit.textCursor().anchor() == before_anchor, edit.textCursor().anchor()
+
+
+@test
+def test_replace_all_keeps_selection_covering_the_same_region() -> None:
+    """替换后选区仍覆盖**同一段逻辑区域**（内容按替换词更新）。
+
+    选区里含有被替换的文本时，选中内容当然会变（「foo」→「qux」），
+    这是替换本身的结果；真正要保证的是**选区没有跑到别处去**——
+    即它覆盖的仍是原来那一段，而不是被拽到文档开头。
+    """
+    text = "\n".join(f"line{i} foo tail" for i in range(40))
+    edit = make_edit(text)
+    _select(edit, 300, 320)
+    before_selected = edit.textCursor().selectedText()
+    assert "foo" in before_selected, before_selected
+
+    edit.replace_all_matches("foo", "qux")
+    APP.processEvents()
+    after_selected = edit.textCursor().selectedText()
+    assert after_selected == before_selected.replace("foo", "qux"), (
+        after_selected,
+        before_selected,
+    )
+
+
+@test
+def test_replace_all_at_document_end_keeps_cursor_at_end() -> None:
+    """光标在文档末尾时替换，光标仍停在末尾、视图仍在底部。"""
+    text = "\n".join(f"line{i} foo tail" for i in range(40))
+    edit = make_edit(text)
+    bar = edit.verticalScrollBar()
+    bar.setValue(bar.maximum())
+    cur = edit.textCursor()
+    cur.movePosition(cur.MoveOperation.End)
+    edit.setTextCursor(cur)
+    APP.processEvents()
+    end_pos = len(text)
+
+    edit.replace_all_matches("foo", "qux")
+    APP.processEvents()
+    assert edit.textCursor().position() == end_pos, edit.textCursor().position()
+    assert edit.verticalScrollBar().value() == bar.maximum(), (
+        edit.verticalScrollBar().value(),
+        bar.maximum(),
+    )
+
+
 if __name__ == "__main__":
     sys.exit(main())
 

@@ -32,23 +32,78 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPushButton,
     QTextEdit,
+    QVBoxLayout,
     QWidget,
 )
 
-__all__ = ["FindBar", "MultiCursorTextEdit"]
+__all__ = ["FindBar", "FindLineEdit", "MultiCursorTextEdit"]
 
 
 SELECTION_COLOR = QColor(38, 79, 120, 160)
 
 
-class FindBar(QWidget):
-    """编辑器顶部的轻量查找栏（Ctrl+F）。
+class FindLineEdit(QLineEdit):
+    """查找 / 替换输入框。
 
-    只做「查找下一个 / 上一个」，不做替换，因为它服务的是客户端日志框，
-    真正的编辑仍在主文本框里完成。
+    ``QLineEdit`` 自带 ``returnPressed`` 只覆盖纯回车，组合键需要自己
+    识别：``Shift+Enter`` 找上一个、``Ctrl+Alt+Enter`` 全部替换、
+    ``Tab`` / ``Shift+Tab`` 在查找框与替换框之间切换。
+
+    之所以做成子类而不是在 ``FindBar`` 里过滤按键：``QLineEdit`` 会先
+    消费掉 ``Tab``（把它挪成焦点切换），在父控件里就再也收不到这个键。
+    """
+
+    find_prev_requested = Signal()
+    replace_all_requested = Signal()
+    focus_switch_requested = Signal(bool)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt 命名
+        mods = event.modifiers()
+        ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
+        alt = bool(mods & Qt.KeyboardModifier.AltModifier)
+        shift = bool(mods & Qt.KeyboardModifier.ShiftModifier)
+
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if ctrl and alt:
+                self.replace_all_requested.emit()
+                event.accept()
+                return
+            if shift:
+                self.find_prev_requested.emit()
+                event.accept()
+                return
+            # 纯回车：交给 ``returnPressed``（查找下一个 / 替换当前）
+            super().keyPressEvent(event)
+            return
+
+        if event.key() == Qt.Key.Key_Tab:
+            self.focus_switch_requested.emit(not shift)
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_Backtab:
+            self.focus_switch_requested.emit(False)
+            event.accept()
+            return
+
+        super().keyPressEvent(event)
+
+
+class FindBar(QWidget):
+    """编辑器顶部的轻量查找栏（Ctrl+F）/ 替换栏（Ctrl+H）。
+
+    查找与替换**共用同一个浮层**：第一行是查找，第二行是替换。
+    ``Ctrl+F`` 只显示第一行（与旧的查找栏完全一致），``Ctrl+H`` 把第二行
+    一并展开。切换模式时不清空已经输入的查找词/替换词——用户按错一次
+    ``Ctrl+F`` 不该丢掉刚打好的关键词。
+
+    替换动作的语义与 VS Code 一致：
+    - 「替换」：若当前选区正好是一个匹配，替换它并跳到下一个匹配；
+      否则先定位下一个匹配并**就地替换**（连点即连续替换）。
+    - 「全部替换」：替换全文所有匹配。
     """
 
     def __init__(self, editor: "MultiCursorTextEdit") -> None:
@@ -62,39 +117,131 @@ class FindBar(QWidget):
             "QPushButton { background: #3a3f45; color: #e6e6e6;"
             " border: none; padding: 3px 8px; }"
             "QPushButton:hover { background: #4a4f55; }"
+            "QPushButton:disabled { color: #7a8087; }"
+            # 客户端主题 CSS 把 Segoe MDL2 Assets 设给了**所有** QLabel 与
+            # QPushButton（那是给图标用的）。本浮层写的是「上一个 / 下一个 /
+            # 替换 / 全部替换 / 3/8」这类中文与数字，沿用图标字体会被画成
+            # 一串图标字形。这里显式改回普通文本字体。
+            #
+            # 必须写在**样式表**里而不是 setFont()：Qt 中样式表指定的字体
+            # 优先级高于控件自身的 font 属性，setFont 会被应用级 CSS 盖掉。
+            # 控件自身的样式表又优先于应用级样式表，所以这里的规则生效。
+            "QLabel, QPushButton { font-family: 'Microsoft YaHei UI',"
+            " 'Microsoft YaHei', 'Segoe UI'; font-size: 12px; }"
         )
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)
         layout.setSpacing(4)
-        self.line_edit = QLineEdit(self)
+
+        # ---- 第一行：查找 ----
+        find_row = QHBoxLayout()
+        find_row.setContentsMargins(0, 0, 0, 0)
+        find_row.setSpacing(4)
+        self.line_edit = FindLineEdit(self)
         self.line_edit.setPlaceholderText("查找")
         self.line_edit.returnPressed.connect(self.find_next)
-        layout.addWidget(self.line_edit, 1)
+        find_row.addWidget(self.line_edit, 1)
         self.prev_button = QPushButton("上一个", self)
         self.prev_button.clicked.connect(self.find_prev)
-        layout.addWidget(self.prev_button)
+        find_row.addWidget(self.prev_button)
         self.next_button = QPushButton("下一个", self)
         self.next_button.clicked.connect(self.find_next)
-        layout.addWidget(self.next_button)
+        find_row.addWidget(self.next_button)
+        self.match_label = QLabel("", self)
+        self.match_label.setMinimumWidth(72)
+        self.match_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        find_row.addWidget(self.match_label)
         self.close_button = QPushButton("关闭", self)
         self.close_button.clicked.connect(self.close)
-        layout.addWidget(self.close_button)
+        find_row.addWidget(self.close_button)
+        layout.addLayout(find_row)
+
+        # ---- 第二行：替换（默认隐藏，Ctrl+H 展开）----
+        # 注意：整行要装进一个 **QWidget** 容器。``QLayout`` 没有
+        # ``setVisible``，且隐藏 layout 本身不会让其中的子控件消失。
+        self.replace_panel = QWidget(self)
+        replace_row = QHBoxLayout(self.replace_panel)
+        replace_row.setContentsMargins(0, 0, 0, 0)
+        replace_row.setSpacing(4)
+        self.replace_edit = FindLineEdit(self.replace_panel)
+        self.replace_edit.setPlaceholderText("替换")
+        self.replace_edit.returnPressed.connect(self.replace_current)
+        replace_row.addWidget(self.replace_edit, 1)
+        self.replace_button = QPushButton("替换", self.replace_panel)
+        self.replace_button.clicked.connect(self.replace_current)
+        replace_row.addWidget(self.replace_button)
+        self.replace_all_button = QPushButton("全部替换", self.replace_panel)
+        self.replace_all_button.clicked.connect(self.replace_all)
+        replace_row.addWidget(self.replace_all_button)
+        layout.addWidget(self.replace_panel)
+
+        # 查找框文本变化时实时更新匹配计数
+        self.line_edit.textChanged.connect(self.update_match_count)
+        # 光标移动也会改变「第 i/N 处」里的 i，所以也要跟着刷新
+        editor.cursorPositionChanged.connect(self.update_match_count)
         self.hide()
+        self._replace_mode = False
+        self.replace_panel.setVisible(False)
 
-    def open(self) -> None:
-        """显示查找栏并把焦点交给输入框（保留已选中的文本作为关键词）。
+        # 组合键：Shift+Enter 找上一个、Ctrl+Alt+Enter 全部替换、
+        # Tab/Shift+Tab 在查找框与替换框之间切换。
+        for edit in (self.line_edit, self.replace_edit):
+            edit.find_prev_requested.connect(self.find_prev)
+            edit.replace_all_requested.connect(self.replace_all)
+            edit.focus_switch_requested.connect(self._switch_focus)
 
-        用 ``setViewportMargins`` 给查找栏留出顶部空间，让正文整体下移，
-        而不是把找到的内容盖住。
+    # ------------------------------------------------------------- 模式切换
+
+    @property
+    def replace_mode(self) -> bool:
+        """当前是否处于「替换模式」（第二行可见）。"""
+        return self._replace_mode
+
+    def open(self, replace_mode: bool = False) -> None:
+        """显示浮层并把焦点交给查找输入框。
+
+        保留已选中的文本作为关键词；**不**清空上一次输入的查找词与
+        替换词——用户按错一次 ``Ctrl+F`` 不该丢掉刚打好的关键词。
+
+        ``replace_mode=True``（Ctrl+H）时展开替换行；否则若当前已经是
+        替换模式则**保持**替换模式，只把焦点交回查找框。
         """
         selected = self._editor.textCursor().selectedText()
         if selected:
             self.line_edit.setText(selected)
+        if replace_mode:
+            self._replace_mode = True
+        self.replace_panel.setVisible(self._replace_mode)
         self.show()
         self.raise_()
         self.reposition()
         self.line_edit.setFocus()
         self.line_edit.selectAll()
+        self.update_match_count()
+
+    def _switch_focus(self, forward: bool) -> None:
+        """在查找框与替换框之间切换焦点。
+
+        查找框 → 替换框 → 查找框 循环（``forward`` 为假则反向）。
+        不在替换模式时只有查找框一个目标，Tab 保持焦点不动。
+        """
+        if not self._replace_mode:
+            self.line_edit.setFocus()
+            return
+        if forward:
+            if self.line_edit.hasFocus():
+                self.replace_edit.setFocus()
+                self.replace_edit.selectAll()
+            else:
+                self.line_edit.setFocus()
+                self.line_edit.selectAll()
+            return
+        if self.replace_edit.hasFocus():
+            self.line_edit.setFocus()
+            self.line_edit.selectAll()
+        else:
+            self.replace_edit.setFocus()
+            self.replace_edit.selectAll()
 
     def hideEvent(self, event) -> None:  # noqa: N802 - Qt 命名
         """隐藏/关闭时清掉边距，把视口还原成占满整个编辑器的尺寸。
@@ -136,6 +283,38 @@ class FindBar(QWidget):
 
     def find_prev(self) -> None:
         self._editor.find_next(self.line_edit.text(), backward=True)
+
+    def replace_current(self) -> None:
+        self._editor.replace_current_match(
+            self.line_edit.text(), self.replace_edit.text()
+        )
+        self.update_match_count()
+
+    def replace_all(self) -> None:
+        self._editor.replace_all_matches(
+            self.line_edit.text(), self.replace_edit.text()
+        )
+        self.update_match_count()
+
+    def update_match_count(self) -> None:
+        """刷新「第 i/N 处」计数。
+
+        计数只依赖查找词与文档内容，**不**依赖当前光标位置，所以
+        查找框文本一变就能立刻算出来。
+        """
+        needle = self.line_edit.text()
+        if not needle:
+            self.match_label.setText("")
+            return
+        try:
+            total, current = self._editor.find_match_info(needle)
+        except RuntimeError:
+            # 解释器退出阶段 Qt 对象可能已销毁，忽略即可
+            return
+        if total == 0:
+            self.match_label.setText("无匹配")
+        else:
+            self.match_label.setText(f"{current}/{total}")
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_Escape:
@@ -505,6 +684,160 @@ class MultiCursorTextEdit(QTextEdit):
         self.setTextCursor(target)
         self.ensureCursorVisible()
         return True
+
+    # ----------------------------------------------------------- 查找与替换
+
+    def _match_spans(self, needle: str) -> list[tuple[int, int]]:
+        """返回 ``needle`` 在文档中的所有匹配区间 ``[start, end)``。
+
+        用 ``toPlainText()`` 的绝对下标，而不是 ``QTextCursor`` 的位置：
+        两者在纯文本文档里一致，但 ``selectedText()`` 在跨行选区里用
+        U+2029 作换行符，与文档里的 ``"\\n"`` 不一致——拿它当 needle
+        在文档里根本找不到匹配。
+
+        匹配之间**不重叠**（往后 ``len(needle)`` 个字符再找），与本模块
+        既有的 ``_occurrence_spans`` 以及 ``str.count`` / ``str.replace``
+        一致。这样「匹配计数」与「全部替换处数」永远对得上。
+        """
+        if not needle:
+            return []
+        text = self.toPlainText()
+        spans: list[tuple[int, int]] = []
+        idx = text.find(needle)
+        while idx != -1:
+            spans.append((idx, idx + len(needle)))
+            idx = text.find(needle, idx + len(needle))
+        return spans
+
+    def find_match_info(self, needle: str) -> tuple[int, int]:
+        """返回 ``(总匹配数, 当前匹配序号)``。
+
+        「当前匹配序号」从 1 开始，取值规则与 VS Code 一致：
+        - 选区正好覆盖某个匹配 → 就是那一项（``find_next`` 之后就是这种）；
+        - 光标停在某个匹配内部 → 那一项；
+        - 光标不在任何匹配里 → 指向**下一个**匹配（回绕时指向第一个），
+          也就是「现在按回车会跳到的那一项」。
+
+        计数只依赖查找词与文档内容，与选区之外的编辑状态无关。
+        """
+        spans = self._match_spans(needle)
+        if not spans:
+            return 0, 0
+        cur = self.textCursor()
+        if cur.hasSelection():
+            sel_start = min(cur.position(), cur.anchor())
+            sel_end = max(cur.position(), cur.anchor())
+        else:
+            sel_start = sel_end = cur.position()
+        # 选区正好覆盖某个匹配
+        for index, (start, end) in enumerate(spans, start=1):
+            if start == sel_start and end == sel_end:
+                return len(spans), index
+        # 光标停在某个匹配内部
+        for index, (start, end) in enumerate(spans, start=1):
+            if start <= sel_start < end:
+                return len(spans), index
+        # 不在任何匹配里：指向下一个匹配；到末尾则回绕到第一个
+        for index, (start, _end) in enumerate(spans, start=1):
+            if start > sel_start:
+                return len(spans), index
+        return len(spans), 1
+
+    def replace_current_match(self, needle: str, replacement: str) -> bool:
+        """替换「当前」的一个匹配；返回是否发生了替换。
+
+        语义与 VS Code 一致：
+        - 当前选区正好是一个匹配 → 替换它，然后跳到下一个匹配并选中；
+        - 否则 → 先定位下一个匹配并**就地替换**（连点即连续替换）。
+
+        ``replacement`` 为空字符串表示「删除匹配」。
+
+        替换前会收敛副光标：文档级操作之后副光标的位置全部失效，留着
+        只会让下一次编辑落在错误的位置。收敛前的光标集合记进撤销栈，
+        ``Ctrl+Z`` 会一并还原。
+        """
+        if not needle:
+            return False
+        text = self.toPlainText()
+        cur = self.textCursor()
+        start = min(cur.position(), cur.anchor())
+        end = max(cur.position(), cur.anchor())
+
+        # 分支一：当前选区正好就是一个匹配
+        if end > start and end - start == len(needle) and text[start:end] == needle:
+            target = (start, end)
+        else:
+            # 分支二：定位下一个匹配
+            idx = text.find(needle, end)
+            if idx == -1:
+                idx = text.find(needle)
+            if idx == -1:
+                return False
+            target = (idx, idx + len(needle))
+
+        record = self._edit_begin()
+        self.clear_extra_cursors()
+        self._replace_span(target[0], target[1], replacement)
+        # 替换后从「替换文本末尾」继续找下一个并选中
+        self.find_next(needle)
+        self._edit_end(record)
+        return True
+
+    def replace_all_matches(self, needle: str, replacement: str) -> int:
+        """替换全文所有匹配；返回替换处数。
+
+        从**后往前**替换：前面的替换会改变后面匹配的绝对位置，从后往前
+        可以保证已处理区间的下标始终有效。
+
+        整批替换包在一次 ``beginEditBlock/endEditBlock`` 里，所以
+        「全部替换」只占**一步撤销**；同时用 ``_edit_begin/_edit_end``
+        记录光标集合，撤销时主/副光标一并回到替换前。
+
+        **不要**在替换后调用 ``setTextCursor(0)``：``setTextCursor`` 会让
+        Qt 把视口滚到「光标可见」的位置，光标在 0 就等于把视图拉到文档
+        顶部——用户看到的是「按一次全部替换，文本框跳到最上面、光标位置
+        丢失」。Qt 自己会处理好光标位置：等长替换后光标原地不动，不等长
+        替换后 Qt 把光标平移相应的位移量，选区仍覆盖同一段文本。
+        """
+        if not needle:
+            return 0
+        spans = self._match_spans(needle)
+        if not spans:
+            return 0
+
+        # 记录要赶在收敛副光标**之前**：否则撤销时还原不了被收敛的那些
+        record = self._edit_begin()
+        self.clear_extra_cursors()
+
+        editor = self.textCursor()
+        editor.beginEditBlock()
+        try:
+            for start, end in reversed(spans):
+                work = QTextCursor(self.document())
+                work.setPosition(start)
+                work.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+                work.insertText(replacement)
+        finally:
+            editor.endEditBlock()
+
+        self._edit_end(record)
+        return len(spans)
+
+    def _replace_span(self, start: int, end: int, replacement: str) -> None:
+        """把 ``[start, end)`` 这段文本替换为 ``replacement``。
+
+        只做文本替换，**不**自行记录撤销——撤销由调用方的
+        ``_edit_begin/_edit_end`` 统一管理，这样「替换当前 + 跳到下一个」
+        整体只占一步撤销。
+        """
+        work = QTextCursor(self.document())
+        work.setPosition(start)
+        work.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+        work.insertText(replacement)
+        # 光标停在替换文本末尾
+        cur = QTextCursor(self.document())
+        cur.setPosition(start + len(replacement))
+        self.setTextCursor(cur)
 
     # ----------------------------------------------------------- 光标集合维护
 
@@ -2015,6 +2348,11 @@ class MultiCursorTextEdit(QTextEdit):
 
         if ctrl and no_alt and not shift and key == Qt.Key.Key_F:
             self.find_bar.open()
+            return True
+        if ctrl and no_alt and not shift and key == Qt.Key.Key_H:
+            # Ctrl+H 展开替换行。若浮层已经开着，open() 会保留用户已经
+            # 输入的查找词/替换词，不会因为再按一次 Ctrl+F 就丢掉。
+            self.find_bar.open(replace_mode=True)
             return True
         if ctrl and no_alt and not shift and key == Qt.Key.Key_Slash:
             self.toggle_line_comment("#")
