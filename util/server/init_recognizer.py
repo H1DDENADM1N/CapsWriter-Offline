@@ -16,6 +16,7 @@ from util.config import FunASRArgs, ModelPaths, ParaformerArgs, QwenCTCArgs, Sen
 from util.config import ServerConfig as Config
 from util.empty_working_set import empty_current_working_set
 from util.server.cosmic import console
+from util.server.print_runtime_mode import print_runtime_mode
 
 
 def init_recognizer(
@@ -164,6 +165,10 @@ def init_recognizer(
 
     console.print(f"模型加载耗时 {time.time() - t1:.2f}s", end="\n\n")
     log.success(f"模型加载耗时 {time.time() - t1:.2f}s")
+
+    # 打印易读的运行模式信息：只看「模型加载完成」看不出 QwenCTC 跑的是
+    # 纯 CTC / 两遍 / 纯 LLM，也看不出编码器形态与时间戳来源
+    print_runtime_mode(recognizer, punc_model, log)
 
     # 清空物理内存工作集
     if system() == "Windows":
