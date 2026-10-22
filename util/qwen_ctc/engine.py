@@ -19,9 +19,10 @@ CTC 头不可用时降级为纯 LLM 并打 WARNING，不是启动失败。
 加载顺序（规格 §5.3，顺序本身是正确性的一部分）：
 
 1. llama.cpp 运行时（DLL + backend）——必须在任何 torch/transformers 导入之前；
-2. 解码器 GGUF + LlamaContext；
+   **只在配了解码器时才加载**（纯 CTC 不需要 LLM，也就不需要 llama.cpp 的 DLL）；
+2. 解码器 GGUF + LlamaContext（配了路径但文件不存在 = 硬错误，规格 §7.4(2)）；
 3. ONNX 编码器（这一步才惰性 import transformers 的 WhisperFeatureExtractor）；
-4. ONNX CTC 头；
+4. ONNX CTC 头（只有 `enable_ctc=True` 且路径非空时才加载）；
 5. 维度校验 + 模式判定；
 6. 解码器预热（把 ~2s 的首帧开销挪到启动阶段，失败向上抛、绝不吞掉）。
 
@@ -234,39 +235,46 @@ class QwenCTCEngine:
     def _initialize_impl(self) -> None:
         cfg = self.config
 
-        # ① llama.cpp 运行时（DLL + backend_init）：必须早于 transformers，
-        #    也必须早于解码器 GGUF 的加载
-        llama_cpp.init_lib()
-
-        # ② 解码器（可选）：纯 CTC 模式不碰 GGUF，省掉 1~2 GB 的加载
+        # ①＋② llama.cpp 运行时 + 解码器（可选）
+        #
+        # 纯 CTC 模式完全不碰 llama.cpp / GGUF：规格 §10.2 里纯 CTC 只需要
+        # encoder + CTC 头 + tokens + preprocessor，`bin/` 缺 DLL 不该拖死一个
+        # 用不到 LLM 的部署。有解码器时 init_lib() 仍先于建 encoder（§5.3 的
+        # 顺序约束不变：llama.cpp 运行时必须早于 transformers 的导入）。
         if cfg.decoder_gguf_path:
-            if Path(cfg.decoder_gguf_path).is_file():
-                # 惰性导入：纯 CTC 模式完全不加载 llm.py 的依赖链
-                from .llm import QwenLLMDecoder
+            if not Path(cfg.decoder_gguf_path).is_file():
+                # 规格 §7.4(2)：配了路径但文件不存在是硬错误。静默降级会把
+                # 「想要两遍」变成「无标点的纯 CTC」，而且用户只看到一条 WARNING
+                raise ValueError(
+                    f"解码器 GGUF 不存在: {cfg.decoder_gguf_path}；"
+                    "要么下载该文件，要么把 model_paths.qwen_llm_path 留空"
+                    "以使用纯 CTC"
+                )
 
-                self._llm = QwenLLMDecoder(
-                    cfg.decoder_gguf_path,
-                    n_ctx=cfg.llm_n_ctx,
-                    n_threads=cfg.llm_n_threads,
-                    n_predict=cfg.llm_n_predict,
-                    verbose=cfg.verbose,
-                    logger=self.logger,
-                )
-            else:
-                # 规格 §7.4 把「配了路径但文件不存在」列为硬错误，但那是
-                # check_model.py 的职责（启动前的配置体检）；引擎里按 best-effort
-                # 处理，避免用户把别人机器的配置抄过来就再也起不来
-                self.logger.warning(
-                    f"解码器 GGUF 不存在，已忽略（将不启用 LLM）: {cfg.decoder_gguf_path}"
-                )
+            # ① llama.cpp 运行时（DLL + backend_init）
+            llama_cpp.init_lib()
+
+            # 惰性导入：纯 CTC 模式完全不加载 llm.py 的依赖链
+            from .llm import QwenLLMDecoder
+
+            self._llm = QwenLLMDecoder(
+                cfg.decoder_gguf_path,
+                n_ctx=cfg.llm_n_ctx,
+                n_threads=cfg.llm_n_threads,
+                n_predict=cfg.llm_n_predict,
+                verbose=cfg.verbose,
+                logger=self.logger,
+            )
 
         # ③ 编码器：这一步才真正 import transformers（encoder.py 内惰性导入），
-        #    必须排在 llama.cpp 之后
+        #    有解码器时必须排在 llama.cpp 运行时之后
         self._enc = self._build_encoder()
 
-        # ④ CTC 头（可选）：文件存在就建会话，可用性留到 ⑤ 用维度判定
+        # ④ CTC 头（可选）：只在「请求了 CTC 首遍」且文件存在时建会话，可用性
+        #    留到 ⑤ 用维度判定。禁用 CTC 时白加载一个用不到的 ONNX，只会让
+        #    「一个本该无关的 CTC 文件损坏」卡死启动。
         ctc_path = cfg.ctc_onnx_path or ""
-        if ctc_path and Path(ctc_path).is_file():
+        if cfg.enable_ctc and ctc_path and Path(ctc_path).is_file():
             import onnxruntime as ort
 
             providers = resolve_providers(ort, cfg.provider)
@@ -276,8 +284,15 @@ class QwenCTCEngine:
             self._ctc = ort.InferenceSession(
                 ctc_path, sess_options=so, providers=providers
             )
-        elif ctc_path:
-            self.logger.warning(f"CTC 头不存在，已忽略: {ctc_path}")
+        elif cfg.enable_ctc:
+            # 规格 §7.3：CTC 头缺失必须让用户看见，不能静默
+            if ctc_path:
+                self.logger.warning(f"CTC 头不存在，已忽略: {ctc_path}")
+            elif cfg.decoder_gguf_path:
+                self.logger.warning("未配置 CTC 头，已降级为纯 LLM")
+            else:
+                # 纯 CTC 且没配 CTC 头：下面第 ⑥ 步会硬失败，这里先如实提示
+                self.logger.warning("未配置 CTC 头（ctc_onnx_path 为空）")
 
         # ⑤ 维度校验 + CTC 头可用性
         enc_dim = self._enc.output_dim
@@ -621,6 +636,9 @@ class QwenCTCEngine:
                 except Exception as exc:  # 释放失败不该打断调用方的收尾流程
                     self.logger.debug(f"关闭 {attr} 失败: {exc}")
         self._ctc = None
+        # config 是公开可变属性：split 初始化 → cleanup → 改 fused 再 initialize 时，
+        # 若不复位，_build_encoder 的 fused 分支不会把它设回 False，模式判定会误判
+        self._is_split = False
         self.id2bytes = {}
         self.mode = ""
         self.has_timestamps = False

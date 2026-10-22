@@ -52,7 +52,10 @@ Task 6 覆盖 `util/qwen_ctc/engine.py`（三模式编排）：
     （两遍 tokens 逐字符、时间戳单调且与 tokens 等长；纯 LLM 的 tokens/timestamps 为空）；
 25. 静音不崩、>30s 长音频切块偏移连续、同一引擎连续两次识别结果一致；
 26. 0.6B 拆分 encoder 无 CTC 头时自动降级纯 LLM（能正常启动）；解码器维度不符、
-    0.6B 只配一端、纯 CTC 缺 CTC 头都必须显式抛错。
+    0.6B 只配一端、纯 CTC 缺 CTC 头都必须显式抛错；
+27. 配了解码器路径但 GGUF 不存在 = 硬错误（§7.4(2)）；纯 CTC 不加载 llama.cpp
+    运行时（`bin/` 缺 DLL 也能起，§7.2 / §10.2）；两遍文本必须 == 纯 LLM 文本
+    且 != 纯 CTC 文本（§12.3）。
 
 需要模型文件 models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf
 （0.6B 用例需要 models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
@@ -942,6 +945,63 @@ def test_engine_resolve_mode_rejects_impossible_combos():
         raise AssertionError("既没有解码器又禁用 CTC 时必须抛错")
 
 
+def test_engine_rejects_missing_decoder_file():
+    """配了解码器路径但文件不存在 = 硬错误（规格 §7.4(2)），不许静默降级成纯 CTC
+
+    `_llm=None` 会让「想要两遍」的用户拿到无标点的 CTC 文本，`has_timestamps`
+    还是 True，只有一条 WARNING —— 所以必须在 initialize() 里就抛。
+    """
+    missing = MODEL_DIR_17B / "nope.gguf"
+    assert not missing.is_file(), f"这条用例要求该路径确实不存在：{missing}"
+
+    try:
+        _make_engine(decoder=missing, enable_ctc=True)
+    except ValueError as exc:
+        msg = str(exc)
+        assert str(missing) in msg, f"硬错误信息必须带缺失路径：{msg}"
+        assert "qwen_llm_path" in msg, f"应告诉用户是哪个配置键：{msg}"
+        assert "纯 CTC" in msg, f"应给出「留空即纯 CTC」的出路：{msg}"
+        print(f"  [硬错误] {msg}", flush=True)
+    else:
+        raise AssertionError("解码器 GGUF 不存在时必须抛 ValueError，不能静默降级")
+
+
+def test_engine_pure_ctc_needs_no_llama_runtime():
+    """纯 CTC 不需要 llama.cpp：bin/ 缺 DLL 也必须能起（规格 §7.2 / §10.2）
+
+    纯 CTC 只需要 encoder + CTC 头 + tokens + preprocessor；无条件 `init_lib()`
+    会让一个完全没有 LLM 的部署直接起不来。
+    """
+    if not _engine_models_available():
+        print("  (跳过：缺少 CTC 头 / tokens / 融合 encoder / 测试音频)", flush=True)
+        return
+
+    from util.qwen_ctc import llama_cpp
+
+    orig_bin, orig_init = llama_cpp._BIN_DIR, llama_cpp.init_lib
+    # init_lib() 成功加载后是幂等的（前面的用例已经把 DLL 载进来了），单改
+    # `_BIN_DIR` 在进程内观察不到；再把它换成「真的会失败」的桩，这条用例才
+    # 真能抓住「纯 CTC 又去加载 llama.cpp」的回归。
+    llama_cpp._BIN_DIR = Path("no-such-llama-bin-dir")
+
+    def _boom():
+        raise RuntimeError(f"找不到 llama.cpp 二进制目录: {llama_cpp._BIN_DIR}")
+
+    llama_cpp.init_lib = _boom
+    try:
+        eng = _make_engine(decoder="", enable_ctc=True)
+        try:
+            assert eng.mode == "ctc", f"纯 CTC 模式判定错了：{eng.mode}"
+            res = eng.transcribe(_read_wav(AUDIO_ZH))
+            assert res.text, "纯 CTC 必须出文本"
+            assert len(res.tokens) == len(res.timestamps)
+        finally:
+            eng.cleanup()
+    finally:
+        llama_cpp._BIN_DIR = orig_bin
+        llama_cpp.init_lib = orig_init
+
+
 def test_engine_modes_end_to_end():
     """纯 CTC / 两遍 / 纯 LLM 的 mode、has_timestamps 与输出形态"""
     if not _engine_models_available() or not DECODER_17B.is_file():
@@ -949,6 +1009,9 @@ def test_engine_modes_end_to_end():
         return
 
     audio = _read_wav(AUDIO_ZH)
+    ctc_text = ""
+    two_pass_text = ""
+    llm_text = ""
 
     started = time.perf_counter()
     eng = _make_engine(decoder="", enable_ctc=True)
@@ -956,6 +1019,7 @@ def test_engine_modes_end_to_end():
         assert eng.mode == "ctc", f"纯 CTC 模式判定错了：{eng.mode}"
         assert eng.has_timestamps is True
         res = eng.transcribe(audio)
+        ctc_text = res.text
         assert res.text, "纯 CTC 必须出文本"
         assert len(res.tokens) == len(res.timestamps)
         assert "".join(res.tokens) == res.text
@@ -969,6 +1033,7 @@ def test_engine_modes_end_to_end():
         assert eng.mode == "two_pass", f"两遍模式判定错了：{eng.mode}"
         assert eng.has_timestamps is True
         res = eng.transcribe(audio)
+        two_pass_text = res.text
         assert res.text, "两遍模式必须出文本"
         assert len(res.tokens) == len(res.text), "两遍模式 tokens 必须是逐字符拆分"
         assert "".join(res.tokens) == res.text
@@ -987,11 +1052,25 @@ def test_engine_modes_end_to_end():
         assert eng.mode == "llm", f"纯 LLM 模式判定错了：{eng.mode}"
         assert eng.has_timestamps is False
         res = eng.transcribe(audio)
+        llm_text = res.text
         assert res.text, "纯 LLM 必须出文本"
         assert res.tokens == [] and res.timestamps == [], "纯 LLM 不带时间戳"
         print(f"  [llm] {time.perf_counter() - started:.2f}s 文本: {res.text!r}", flush=True)
     finally:
         eng.cleanup()
+
+    # 规格 §12.3：两遍文本必须与纯 LLM 文本逐字符一致。少了这条，`_decode_two_pass`
+    # 的「LLM 抛异常 → 回退该段 CTC 文本」会让「每段都回退」也通过上面全部形态断言
+    # （tokens 逐字符、时间戳等长又单调，纯 CTC 文本同样满足）。
+    assert two_pass_text == llm_text, (
+        "两遍文本必须与纯 LLM 文本一致（§12.3）：\n"
+        f"  two_pass={two_pass_text!r}\n  llm     ={llm_text!r}\n"
+        "  不一致说明两遍里 LLM 二遍没真正生效（可能每段都回退了 CTC 首遍）"
+    )
+    assert two_pass_text != ctc_text, (
+        "两遍文本不应等于纯 CTC 文本，否则分辨不出「跑了 LLM 二遍」还是「回退 CTC」："
+        f"{two_pass_text!r}"
+    )
 
 
 def test_engine_silence_does_not_crash():
@@ -1019,12 +1098,16 @@ def test_engine_long_audio_offsets_are_continuous():
 
     audio = _long_audio(31.0)
     assert len(audio) / 16000.0 > 30.0
+    duration = len(audio) / 16000.0
     eng = _make_engine(decoder=DECODER_17B, enable_ctc=True)
     try:
         res = eng.transcribe(audio)
         assert res.text, "两遍模式长音频必须出文本"
         assert len(res.tokens) == len(res.timestamps)
         assert max(res.timestamps) > 30.0, f"第二段起始时间没加上偏移：max={max(res.timestamps)}"
+        assert max(res.timestamps) <= duration + 0.5, (
+            f"时间戳不得超过音频时长太多：max={max(res.timestamps)}, duration={duration}"
+        )
         assert all(
             res.timestamps[i] <= res.timestamps[i + 1]
             for i in range(len(res.timestamps) - 1)
@@ -1227,6 +1310,8 @@ if __name__ == "__main__":
         test_engine_config_exposes_new_fields_and_factory_kwargs,
         test_engine_resolve_mode_matrix,
         test_engine_resolve_mode_rejects_impossible_combos,
+        test_engine_rejects_missing_decoder_file,
+        test_engine_pure_ctc_needs_no_llama_runtime,
         test_engine_modes_end_to_end,
         test_engine_silence_does_not_crash,
         test_engine_long_audio_offsets_are_continuous,
