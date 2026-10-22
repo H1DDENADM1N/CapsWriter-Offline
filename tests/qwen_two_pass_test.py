@@ -1748,6 +1748,19 @@ def test_qwen_mode_errors_reject_pure_ctc_without_ctc_head():
     )
 
 
+def test_qwen_mode_errors_split_skips_pure_ctc_head_error():
+    """0.6B 拆分 + 缺解码器 + 缺 CTC 头：只报 0.6B 那条，别让用户去配不存在的 CTC 头"""
+    from util.server.check_model import qwen_mode_errors
+
+    errors = qwen_mode_errors(
+        True, True, False, True, ctc_configured=False, tokens_configured=False
+    )
+    assert any("0.6B" in e for e in errors), errors
+    assert not any("纯 CTC" in e for e in errors), (
+        f"0.6B 路径上根本没有 CTC 头可选，不该再要求配 ctc_onnx_path：{errors}"
+    )
+
+
 def _stub_qwen_ctc_args(**overrides):
     """QwenCTCArgs 替身：默认是「老配置形态」的纯 CTC，可任意覆盖字段"""
     fields = dict(
@@ -1895,6 +1908,7 @@ if __name__ == "__main__":
         test_qwen_mode_errors_reject_split_encoder_without_decoder,
         test_qwen_mode_errors_split_missing_decoder_precedes_ctc_disabled,
         test_qwen_mode_errors_reject_pure_ctc_without_ctc_head,
+        test_qwen_mode_errors_split_skips_pure_ctc_head_error,
         test_qwen_plan_paths_come_from_qwen_ctc_args,
         test_qwen_plan_reports_pure_ctc_without_ctc_head,
         test_qwen_download_commands_are_verbatim_from_spec,

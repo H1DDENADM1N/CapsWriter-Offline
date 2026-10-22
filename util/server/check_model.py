@@ -134,9 +134,11 @@ def qwen_mode_errors(
 
     # ④ 纯 CTC（无解码器 + 启用 CTC）但缺 CTC 头 / 词表：引擎初始化时硬失败。
     #    有解码器时缺 CTC 头是合法的（引擎 WARNING 降级为纯 LLM），不在这里报。
+    #    0.6B 拆分形态也跳过：那条路径上根本没有 CTC 头可选，①已经把
+    #    「必须配解码器」说清楚了，再让用户去配一个不存在的 CTC 头只会误导。
     if not has_decoder and enable_ctc and not (
         ctc_configured and tokens_configured
-    ):
+    ) and not (has_frontend and has_backend):
         errors.append(
             "纯 CTC 模式必须配置 ctc_onnx_path 与 tokens_path：请在 config.toml 的"
             " qwen_ctc_args 段填写 ctc_onnx_path 与 tokens_path（CTC 头与紧凑词表），"
