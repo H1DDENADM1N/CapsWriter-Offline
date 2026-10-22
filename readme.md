@@ -7,7 +7,7 @@
 > [!IMPORTANT]
 > 图形化配置界面 `edit_config_gui.exe`，覆盖 `config.toml` 的全部配置项（含提示词、API Key、ADB 控制、快捷键），写入前预览 diff 并自动备份
 
-## 😎 十四个功能
+## 😎 十五个功能
 
 1. 按下键盘上的大写锁定键 `CapsLock` ，录音开始，当松开大写锁定键时，就会识别你的录音，并将识别结果立刻输入
 2. 按下键盘上的 `Left Shift` 再按 `CapsLock` 可以将识别结果离线翻译为英文，当松开大写锁定键时，将翻译结果立刻输入
@@ -23,6 +23,7 @@
 12. 可通过 `config_selector.exe` 选择配置文件
 13. 客户端文本框是一个多光标编辑器：`Alt+点击` 加副光标、`Alt+拖拽` 矩形列选、`Ctrl+D` 选词、`Ctrl+F` 查找、`Ctrl+H` 替换，键位与 VS Code 默认一致；中文按 jieba 词典分词
 14. 客户端文本框使用等宽字体 **Maple Mono NF CN**，长行折行后仍逐格对齐（字号会自动吸附到 2:1 网格点）
+15. 服务端可选 4 种语音识别模型：`FunASR`、`Sensevoice`、`Paraformer`、`QwenCTC`（Qwen3-ASR + CTC 头，输出带字级时间戳）
 
 - [✨ 特性](#-特性)
 - [⬇️ 下载地址](#-下载地址)
@@ -36,6 +37,18 @@
 
 <details>
 <summary><h1">展开最近更新</h1></summary>
+
+## 新增 可选模型 `QwenCTC`（Qwen3-ASR + CTC 头）
+>
+> 服务端新增第 4 个可选语音识别模型 `QwenCTC`：Qwen3-ASR 编码器（ONNX，int4）+ CTC 头，纯 CPU 推理，**输出带字级时间戳**，可直接转录生成 SRT 字幕。
+>
+> 在 `config.toml` 中设置 `model = "QwenCTC"` 启用，模型文件按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载到 `models/qwen-ctc-aiinfra4/`。
+>
+> 特点：无 LLM 二遍，识别速度快（30 秒音频约 2 秒）、内存占用小；支持中英混说；标点由服务端自带的标点模型补全（`format_punc`）。
+>
+> ⚠️ 官方提供的 `aiinfra4` 版 CTC 头在**AI 技术领域的英文内容**上会把英文词转写成对应中文译文（如 `we` → `我们`），详见 [Qwen3-CTC-语言串味问题排查](docs/Qwen3-CTC-语言串味问题排查.md)。建议改用 `Qwen3-ASR-CTC.v1.fp16.onnx`（v1 头），在 `config.toml` 的 `[model_paths]` 里加一行 `qwen_ctc_ctc_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx"` 即可（默认就是 v1 头）。
+>
+> 客户端无需任何改动：服务端/客户端协议未变，转录文件、字幕生成、简繁转换、翻译全部照常工作。
 
 ## 客户端文本框升级为多光标编辑器，键位与 VS Code 对齐
 >
@@ -345,6 +358,20 @@
 >
 > 不影响简繁转换和翻译
 
+## 新增 可选项 切换模型 `QwenCTC`（Qwen3-ASR + CTC 头）
+
+> 第 4 个可选模型，用 `config.toml` 的 `model = "QwenCTC"` 启用
+>
+> Qwen3-ASR 编码器 + CTC 头，纯 CPU 推理，无 LLM 二遍，**输出带字级时间戳**，转录文件时字幕更准
+>
+> 模型文件需另行下载，见 [models/模型下载方式.txt](models/模型下载方式.txt) 的「Qwen3-ASR + CTC 头」一节
+>
+> 标点由服务端自带的标点模型补全（`format_punc = true`）
+>
+> 注意：官方 `aiinfra4` 版 CTC 头在 AI 技术领域的英文上会串味成中文，详见 [排查文档](docs/Qwen3-CTC-语言串味问题排查.md)，建议用 v1 头
+>
+> 不影响简繁转换和翻译
+
 ## 新增 可选项 通过注册表/按键判断是否语音输入中
 
 ## 新增 可选项 是否启用离在线翻译和状态提示
@@ -504,6 +531,7 @@
 26. 文本框多光标编辑：支持 `Alt+点击` 加副光标、`Alt+拖拽` 矩形列选、`Ctrl+Alt+↑/↓` 加光标、`Ctrl+D` 选中当前词并追加下一个相同内容、`Ctrl+Shift+L` 全选相同内容、`Ctrl+U` 撤销最后一个副光标、`Esc` 收敛；方向键、退格、删除、回车同时作用于所有光标，一次输入只占一步撤销。详细键位见「新版客户端界面 → 文本框多光标与快捷键」
 27. 文本框查找与替换：`Ctrl+F` 打开查找栏、`Ctrl+H` 展开 VS Code 风格替换栏（替换语义对齐 VS Code，全部替换只占一步撤销）
 28. 图形化配置界面 `edit_config_gui.exe`：覆盖 `config.toml` 全部 162 个叶子键，采用 Material Design 3 外观并**自动跟随 Windows 深浅色与主题色**（无独立主题开关）；保存前提供 unified diff 预览、自动备份、原子替换与回读校验，失败自动回滚
+29. 服务端可选 4 种语音识别模型：`FunASR`（旗舰，速度快准确率高）、`Sensevoice`（中粤英日韩，最快最省内存）、`Paraformer`（中英，准确率高）、`QwenCTC`（Qwen3-ASR + CTC 头，输出带字级时间戳，30 秒音频约 2 秒）。通过 `config.toml` 中 `model` 配置
 
 # ⬇️ 下载地址
 
@@ -595,7 +623,7 @@ Copyright (c) 2026 H1DDENADM1N, JoanthanWu (graphical interface package branch)
 | 随包分发的原生二进制 | 7 个 | MIT、Apache-2.0 | **FFmpeg / FFplay（GPL-2.0-or-later）** |
 | 随包分发的字体 | 1 套（`assets/fonts/`，约 19.6 MB） | **OFL-1.1（SIL Open Font License 1.1）** | 无代码传染性（但须随包附许可原文、不得单独售卖） |
 | 内嵌 / 移植的第三方脚本 | 4 个 | MIT、未声明 | **GetCaretPosEx.ahk、app-list.ahk（派生自 AGPL-3.0 的 InputTip）** |
-| 离线 AI 模型权重 | 6 套 | Apache-2.0、CC-BY-4.0、FunASR 模型协议 | 无（但含署名义务） |
+| 离线 AI 模型权重 | 7 套 | Apache-2.0、CC-BY-4.0、FunASR 模型协议 | 无（但含署名义务） |
 
 ### 重点声明
 
@@ -619,6 +647,7 @@ Copyright (c) 2026 H1DDENADM1N, JoanthanWu (graphical interface package branch)
    - SenseVoice / Paraformer / 标点模型：Apache-2.0，来自 ModelScope `iic` 系列与 [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)。
    - Fun-ASR 权重：适用 [FunASR Model Open Source License Agreement v1.1](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE)，允许自由使用与修改，但**必须标注来源并保留模型名称**。
    - 中译英模型 [Helsinki-NLP/opus-mt-zh-en](https://huggingface.co/Helsinki-NLP/opus-mt-zh-en)：**CC-BY-4.0**，再分发需署名 Helsinki-NLP / OPUS-MT / Tatoeba。
+   - Qwen3-ASR + CTC 头（`QwenCTC` 模型）：编码器来自 [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)，CTC 头与 ONNX 导出来自 [JazerJu/glm-asr-ctc-bench](https://huggingface.co/JazerJu/glm-asr-ctc-bench)，均为 **Apache-2.0**；参考实现 [JazerJu/bench-asr-ctc](https://github.com/JazerJu/bench-asr-ctc) 为 Apache-2.0、[JazerJu/Qwen3-ASR-CTC-GGUF](https://github.com/JazerJu/Qwen3-ASR-CTC-GGUF) 为 MIT。**再分发需标注 Qwen 团队与 JazerJu**，详见 [models/ATTRIBUTION.md](models/ATTRIBUTION.md) 第 6 节。
 
 6. **在线翻译服务**
    [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate)（AGPL-3.0）仅通过 HTTP API 调用，本项目**不复制其代码**，故 AGPL 不传染；[DeepLX](https://github.com/OwO-Network/DeepLX) 以 MIT 许可发布，其 `deeplx_windows_amd64.exe` 随包分发。
@@ -634,7 +663,7 @@ Copyright (c) 2026 H1DDENADM1N, JoanthanWu (graphical interface package branch)
 
 ## 在 整合包 使用 嵌入式python 简单调试
 
-1. 运行 `.\runtime\python.exe .\core_server.py` 脚本 在终端启动服务端，会载入 SenseVoice 模型识别模型 或Paraformer 模型和标点模型（通过`config.toml` `model = 'Sensevoice' # 'Sensevoice' 或 'Paraformer'` 配置。这会占用 2GB 的内存，载入时长约 50 秒）
+1. 运行 `.\runtime\python.exe .\core_server.py` 脚本 在终端启动服务端，会载入 `config.toml` 里 `model` 指定的语音识别模型（`'FunASR'` / `'Sensevoice'` / `'Paraformer'` / `'QwenCTC'`）和标点模型。这会占用 2GB 的内存，载入时长约 50 秒
 2. 运行 `.\runtime\python.exe .\core_client.py` 脚本 在终端启动客户端，会载入中译英模型，打开系统默认麦克风，开始监听按键（这会占用 400MB 的内存，载入时长约 20 秒）
 3. 按住 `CapsLock` 键，录音开始，松开 `CapsLock` 键，录音结束，识别结果立马被输入（录音时长短于 0.3 秒不算）
 4. 按住 `Left Shift` 再按 `CapsLock` 进行离线翻译，方便同时需要输入中文和英文翻译的场景
@@ -814,7 +843,7 @@ logger_level = "ERROR" # 调试日志级别
 # ======================服务端配置==================================
 [server]
 model = "FunASR"
-# 'FunASR' 、 'Sensevoice' 或 'Paraformer'
+# 'FunASR' 、 'Sensevoice' 、 'Paraformer' 或 'QwenCTC'
 # FunASR 目前的旗舰模型，速度较快，准确率最高,内存占用最多
 # Sensevoice 中粤英日韩多语种，速度最快，准确率最低，内存占用最少
 # Paraformer 中英，速度中速，准确率高，内存占用中
@@ -848,7 +877,7 @@ format_num = true
 # 是否将中文数字转为阿拉伯数字
 
 format_punc = true
-# 使用 'Paraformer' 模型时，输出时是否启用标点符号引擎
+# 使用 'Paraformer' 或 'QwenCTC' 模型时，输出时是否启用标点符号引擎
 
 format_spell = true
 # 是否调整中英之间的空格
@@ -1653,6 +1682,48 @@ debug = false
 
 ```
 
+#### QwenCTC 的可选配置
+
+`QwenCTC` 模型的路径和参数**默认写在代码里**（`util/config.py` 的 `QwenCTCArgs`），上面那份 `config.toml` 里不需要加任何键就能用。
+
+想要改路径或调参数时，往 `config.toml` 里补下面这些键即可（缺哪个就用哪个的默认值）：
+
+```toml
+[model_paths]
+# Qwen3-ASR 编码器（ONNX，int4）
+qwen_ctc_encoder_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-Encoder.q4.onnx"
+# CTC 头。官方 aiinfra4 版会把 AI 领域英文转写成中文译文，建议用 v1 版
+qwen_ctc_ctc_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx"
+# 紧凑词表（base64 原始字节，72466 条）
+qwen_ctc_tokens_path = "models/qwen-ctc-aiinfra4/tokens.txt"
+# 特征提取器配置目录（preprocessor_config.json）
+qwen_ctc_preprocessor_path = "models/qwen-ctc-aiinfra4"
+
+[qwen_ctc_args]
+# CTC blank token id
+blank_id = 72466
+# CTC unknown token id
+unk_id = 72467
+# 编码器 30 秒桶的 mel 帧数
+mel_frames = 3000
+# 使用的线程数
+num_threads = 6
+# 推理设备（cpu, dml）
+provider = "cpu"
+# 时间戳起点补偿（秒），CTC 发射尖峰系统性偏晚
+start_bias = 0.1
+# 时间戳终点补偿（秒），CTC 发射尖峰系统性偏早
+end_bias = 0.0785
+# 是否输出详细日志
+verbose = false
+```
+
+> **为什么这两段不在上面的模板里？**
+>
+> `edit_config_gui` 的测试把配置文件锁死在 **162 个叶子键**上（`edit_config_gui/src-tauri/tests/coverage.rs`），多一个键它的 CI 就红。QwenCTC 的键是按需添加的，所以默认模板里没有，需要时自己往 `config.toml` 里补。
+>
+> GUI 的模型下拉框里目前还没有 `QwenCTC` 这一项（选项写死在 `edit_config_gui/src/lib/schema/server.ts`），在 GUI 里看到「（当前值，不在候选内）」是正常的，用文本编辑器改 `config.toml` 即可。
+
 # 🔧 功能：热词
 
 如果你有专用名词需要替换，可以加入热词文件。规则文件中以 `#` 开头的行以及空行会被忽略，可以用作注释。
@@ -1716,6 +1787,16 @@ debug = false
 ### Paraformer
 
 - [yiyu-earth/sherpa-onnx-paraformer-zh-2024-04-25](https://huggingface.co/yiyu-earth/sherpa-onnx-paraformer-zh-2024-04-25)
+
+### QwenCTC（Qwen3-ASR + CTC 头）
+
+- [JazerJu/glm-asr-ctc-bench](https://huggingface.co/JazerJu/glm-asr-ctc-bench)（模型权重，Apache-2.0）
+- [JazerJu/bench-asr-ctc](https://github.com/JazerJu/bench-asr-ctc)（评测与导出参考实现，Apache-2.0）
+- [JazerJu/Qwen3-ASR-CTC-GGUF](https://github.com/JazerJu/Qwen3-ASR-CTC-GGUF)（参考实现，MIT）
+
+具体文件与 `curl` 命令见 [models/模型下载方式.txt](models/模型下载方式.txt) 的「Qwen3-ASR + CTC 头」一节，下载后放到 `models/qwen-ctc-aiinfra4/`。
+
+> ⚠️ 官方 `qwen-ctc-aiinfra4/` 目录里的 CTC 头会把 AI 技术领域的英文转写成中文译文（`we` → `我们`）。建议改用 `qwen-ctc/` 目录里的 v1 头（`Qwen3-ASR-CTC.fp16.onnx`），排查过程见 [Qwen3-CTC-语言串味问题排查](docs/Qwen3-CTC-语言串味问题排查.md)。
 
 标点符号模型：
 
