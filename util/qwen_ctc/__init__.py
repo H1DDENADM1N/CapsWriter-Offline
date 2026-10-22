@@ -8,6 +8,12 @@ Qwen3-ASR + CTC 头 识别引擎包
     - FRAME_SEC / MEL_FRAMES：帧率与桶大小常量
 """
 
+from .encoder import (
+    FusedEncoder,
+    SplitEncoder,
+    resolve_providers,
+    valid_frames,
+)
 from .engine import (
     DEFAULT_END_BIAS,
     DEFAULT_START_BIAS,
@@ -29,11 +35,15 @@ __all__ = [
     "FRAME_SEC",
     "MEL_FRAMES",
     "SEGMENT_SEC",
+    "FusedEncoder",
     "QwenCTCConfig",
     "QwenCTCEngine",
     "RecognitionResult",
     "RecognitionStream",
+    "SplitEncoder",
     "create_qwen_ctc_engine",
     "decode_bytes",
     "load_tokens",
+    "resolve_providers",
+    "valid_frames",
 ]

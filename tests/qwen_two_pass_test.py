@@ -17,6 +17,14 @@ Task 2 覆盖 `util/qwen_ctc/gguf_embed.py`（按需反量化 token embedding �
 7. 整表缓存 `<gguf>.embd.npy` 写了能复用（mmap），形状不符的旧缓存必须被忽略；
 8. 0.6B 解码器的维度是 n_embd=1024 / n_vocab=151936。
 
+Task 3 覆盖 `util/qwen_ctc/encoder.py`（融合 / 拆分双形态 encoder）：
+9.  `valid_frames` 的 13fps 边界值、provider 选择（cpu / dml 回退）；
+10. 1.7B 融合形态：559 帧 mel → `[73, 2048]`，且与手工流水线逐值一致；
+11. 0.6B 拆分形态：100 帧切块 + 末块补零 + 13 帧/块拼接 + 截断 + 4D 全 1 mask
+    → `[73, 1024]`，且与手工流水线逐值一致；
+12. `close()` 幂等、关闭后再 encode 报 RuntimeError；超过 30s 的音频喂融合
+    encoder 必须显式 ValueError（不能静默截断）。
+
 需要模型文件 models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf
 （0.6B 用例需要 models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
 """
@@ -25,6 +33,7 @@ import contextlib
 import logging
 import sys
 import tempfile
+import wave
 from pathlib import Path
 
 import numpy as np
@@ -35,6 +44,18 @@ sys.path.append(str(ROOT))
 
 DECODER_17B = ROOT / "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
 DECODER_06B = ROOT / "models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf"
+
+MODEL_DIR_17B = ROOT / "models/qwen-ctc-aiinfra4"
+MODEL_DIR_06B = ROOT / "models/qwen-ctc-aiinfra4-06b"
+# 只有 1.7B 目录带 preprocessor_config.json；0.6B 的拆分 encoder 也复用它
+PREPROCESSOR_DIR = MODEL_DIR_17B
+ENCODER_17B = MODEL_DIR_17B / "Qwen3-ASR-Encoder.q4.onnx"
+ENCODER_06B_FRONTEND = MODEL_DIR_06B / "qwen3_asr_encoder_frontend.int4.onnx"
+ENCODER_06B_BACKEND = MODEL_DIR_06B / "qwen3_asr_encoder_backend.int4.onnx"
+AUDIO_ZH = (
+    ROOT
+    / "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/test_wavs/zh.wav"
+)
 
 
 @contextlib.contextmanager
@@ -276,6 +297,282 @@ def test_token_embedding_06b_dimensions():
         te.close()
 
 
+# --------------------------------------------------------------------------
+# Task 3: encoder.py —— 融合 / 拆分双形态 encoder
+# --------------------------------------------------------------------------
+
+
+def _models_available() -> bool:
+    """1.7B 融合 encoder 与特征提取器配置是否齐全"""
+    return ENCODER_17B.is_file() and (
+        PREPROCESSOR_DIR / "preprocessor_config.json"
+    ).is_file()
+
+
+def _split_models_available() -> bool:
+    """0.6B 前后端拆分 encoder 与特征提取器配置是否齐全"""
+    return (
+        ENCODER_06B_FRONTEND.is_file()
+        and ENCODER_06B_BACKEND.is_file()
+        and (PREPROCESSOR_DIR / "preprocessor_config.json").is_file()
+    )
+
+
+def _read_wav(path: Path) -> np.ndarray:
+    """16kHz 单声道 int16 WAV -> [-1, 1) float32"""
+    with wave.open(str(path), "rb") as w:
+        assert w.getnchannels() == 1, f"测试音频必须是单声道：{path}"
+        assert w.getframerate() == 16000, f"测试音频必须是 16kHz：{path}"
+        frames = w.getnframes()
+        return (
+            np.frombuffer(w.readframes(frames), dtype=np.int16).astype(np.float32)
+            / 32768.0
+        )
+
+
+def _make_fused_encoder():
+    from util.qwen_ctc.encoder import FusedEncoder
+
+    return FusedEncoder(
+        str(ENCODER_17B),
+        str(PREPROCESSOR_DIR),
+        num_threads=6,
+        provider="cpu",
+    )
+
+
+def _make_split_encoder():
+    from util.qwen_ctc.encoder import SplitEncoder
+
+    # 0.6B 目录没有 preprocessor_config.json，特征提取器复用 1.7B 目录的配置
+    return SplitEncoder(
+        str(ENCODER_06B_FRONTEND),
+        str(ENCODER_06B_BACKEND),
+        str(PREPROCESSOR_DIR),
+        num_threads=6,
+        provider="cpu",
+    )
+
+
+def test_valid_frames_boundaries():
+    """13fps 换算的边界值：每 100 帧 mel 出 13 帧，尾巴按 8 帧一组"""
+    from util.qwen_ctc.encoder import valid_frames
+
+    assert valid_frames(0) == 0
+    assert valid_frames(99) == 13          # leave=99 → (98)//8+1 = 13
+    assert valid_frames(100) == 13         # leave=0
+    assert valid_frames(101) == 14
+    assert valid_frames(559) == 73
+    assert valid_frames(3000) == 390
+
+
+def test_resolve_providers_selects_cpu_or_dml():
+    import onnxruntime as ort
+
+    from util.qwen_ctc.encoder import resolve_providers
+
+    assert resolve_providers(ort, "cpu") == ["CPUExecutionProvider"]
+    got = resolve_providers(ort, "dml")
+    if "DmlExecutionProvider" in ort.get_available_providers():
+        assert got == ["DmlExecutionProvider", "CPUExecutionProvider"]
+    else:
+        assert got == ["CPUExecutionProvider"], "DML 不可用时必须静默回退 CPU"
+
+
+def test_fused_encoder_shape():
+    """1.7B 融合 encoder：559 帧 mel -> [73, 2048]"""
+    if not _models_available():
+        print("  (跳过：缺少 1.7B 融合 encoder 模型)", flush=True)
+        return
+
+    enc = _make_fused_encoder()
+    try:
+        assert enc.output_dim == 2048
+        out = enc.encode(_read_wav(AUDIO_ZH))
+        assert out.shape == (73, 2048), f"实际 {out.shape}"
+        assert out.dtype == np.float32
+        assert np.isfinite(out).all()
+    finally:
+        enc.close()
+
+
+def test_split_encoder_shape():
+    """0.6B 拆分 encoder：559 帧 mel -> [73, 1024]"""
+    if not _split_models_available():
+        print("  (跳过：缺少 0.6B 拆分 encoder 模型)", flush=True)
+        return
+
+    enc = _make_split_encoder()
+    try:
+        assert enc.output_dim == 1024
+        out = enc.encode(_read_wav(AUDIO_ZH))
+        assert out.shape == (73, 1024), f"实际 {out.shape}"
+        assert out.dtype == np.float32
+        assert np.isfinite(out).all()
+    finally:
+        enc.close()
+
+
+def test_fused_encoder_matches_manual_pipeline():
+    """encode 必须等价于「真实长度 + 补零 3000 + feature_length + 截断」"""
+    if not _models_available():
+        print("  (跳过：缺少 1.7B 融合 encoder 模型)", flush=True)
+        return
+
+    import onnxruntime as ort
+    from transformers import WhisperFeatureExtractor
+
+    from util.qwen_ctc.encoder import valid_frames
+
+    audio = _read_wav(AUDIO_ZH)
+    enc = _make_fused_encoder()
+    try:
+        fe = WhisperFeatureExtractor.from_pretrained(str(PREPROCESSOR_DIR))
+        mel = fe(
+            audio, sampling_rate=16000, padding=False, return_tensors="np"
+        ).input_features[0]
+        t = mel.shape[1]
+        assert t == 559, f"zh.wav 应取到 559 帧 mel，实际 {t}"
+
+        padded = np.zeros((mel.shape[0], 3000), dtype=np.float32)
+        padded[:, :t] = mel
+        so = ort.SessionOptions()
+        so.intra_op_num_threads = 0
+        sess = ort.InferenceSession(
+            str(ENCODER_17B), sess_options=so, providers=["CPUExecutionProvider"]
+        )
+        ref = sess.run(
+            None,
+            {
+                "input_features": padded,
+                "feature_length": np.array([t], np.int64),
+            },
+        )[0]
+        ref = ref[: valid_frames(t)].astype(np.float32)
+
+        got = enc.encode(audio)
+        assert got.shape == ref.shape == (73, 2048)
+        diff = float(np.max(np.abs(got - ref)))
+        assert np.allclose(
+            got, ref, rtol=1e-4, atol=1e-4
+        ), f"与手工流水线不一致，max|diff|={diff}"
+    finally:
+        enc.close()
+
+
+def test_split_encoder_matches_manual_pipeline():
+    """encode 必须等价于「100 帧切块 + 末块补零 + 拼接 + 截断 + 4D 全 1 mask」"""
+    if not _split_models_available():
+        print("  (跳过：缺少 0.6B 拆分 encoder 模型)", flush=True)
+        return
+
+    import onnxruntime as ort
+    from transformers import WhisperFeatureExtractor
+
+    from util.qwen_ctc.encoder import valid_frames
+
+    audio = _read_wav(AUDIO_ZH)
+    enc = _make_split_encoder()
+    try:
+        fe = WhisperFeatureExtractor.from_pretrained(str(PREPROCESSOR_DIR))
+        mel = fe(
+            audio, sampling_rate=16000, padding=False, return_tensors="np"
+        ).input_features[0]
+        t = mel.shape[1]
+        n_chunks = (t + 99) // 100
+        padded = np.zeros((mel.shape[0], n_chunks * 100), dtype=np.float32)
+        padded[:, :t] = mel
+
+        so = ort.SessionOptions()
+        so.intra_op_num_threads = 0
+        front = ort.InferenceSession(
+            str(ENCODER_06B_FRONTEND), sess_options=so, providers=["CPUExecutionProvider"]
+        )
+        back = ort.InferenceSession(
+            str(ENCODER_06B_BACKEND), sess_options=so, providers=["CPUExecutionProvider"]
+        )
+        hidden = np.concatenate(
+            [
+                front.run(
+                    None,
+                    {"chunk_mel": padded[:, i * 100 : (i + 1) * 100][None]},
+                )[0][0]
+                for i in range(n_chunks)
+            ],
+            axis=0,
+        )
+        n = valid_frames(t)
+        assert hidden.shape == (n_chunks * 13, 896), f"实际 {hidden.shape}"
+        hidden = hidden[:n]
+        mask = np.ones((1, 1, n, n), dtype=np.float32)
+        ref = back.run(
+            None, {"hidden_states": hidden[None], "attention_mask": mask}
+        )[0][0].astype(np.float32)
+
+        got = enc.encode(audio)
+        assert got.shape == ref.shape == (73, 1024)
+        diff = float(np.max(np.abs(got - ref)))
+        assert np.allclose(
+            got, ref, rtol=1e-4, atol=1e-4
+        ), f"与手工流水线不一致，max|diff|={diff}"
+    finally:
+        enc.close()
+
+
+def test_encoder_close_is_idempotent():
+    if not _models_available():
+        print("  (跳过：缺少 1.7B 融合 encoder 模型)", flush=True)
+        return
+
+    enc = _make_fused_encoder()
+    enc.close()
+    enc.close()  # 幂等：重复 close 不得抛异常
+    try:
+        enc.encode(np.zeros(1600, dtype=np.float32))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("close() 之后 encode() 必须报 RuntimeError")
+
+
+def test_fused_encoder_rejects_audio_beyond_bucket():
+    """超过 30s 必须显式报错：融合 encoder 是按 3000 帧桶导出的，静默截断会丢字"""
+    if not _models_available():
+        print("  (跳过：缺少 1.7B 融合 encoder 模型)", flush=True)
+        return
+
+    enc = _make_fused_encoder()
+    try:
+        try:
+            enc.encode(np.zeros(16000 * 31, dtype=np.float32))
+        except ValueError as exc:
+            assert "30" in str(exc) or "3000" in str(exc), (
+                f"错误信息要说明 30 秒桶：{exc}"
+            )
+        else:
+            raise AssertionError("超过 30s 的音频必须抛 ValueError")
+    finally:
+        enc.close()
+
+
+def test_split_encoder_rejects_audio_beyond_bucket():
+    """超过 30s 必须显式报错：拆分 encoder 复用 1.7B 的 30 秒预处理器配置"""
+    if not _split_models_available():
+        print("  (跳过：缺少 0.6B 拆分 encoder 模型)", flush=True)
+        return
+
+    enc = _make_split_encoder()
+    try:
+        try:
+            enc.encode(np.zeros(16000 * 31, dtype=np.float32))
+        except ValueError as exc:
+            assert "30" in str(exc), f"错误信息要说明 30 秒桶：{exc}"
+        else:
+            raise AssertionError("超过 30s 的音频必须抛 ValueError")
+    finally:
+        enc.close()
+
+
 def _write_gguf(path_dir: Path, name: str, tensor_name: str, tensor: np.ndarray):
     """写一个只含单个张量的最小 GGUF（用于构造「没有 token_embd.weight」的情形）"""
     import gguf
@@ -344,6 +641,15 @@ if __name__ == "__main__":
         test_token_embedding_cache_file_is_written_and_reused,
         test_token_embedding_rejects_gguf_without_embedding,
         test_token_embedding_06b_dimensions,
+        test_valid_frames_boundaries,
+        test_resolve_providers_selects_cpu_or_dml,
+        test_fused_encoder_shape,
+        test_split_encoder_shape,
+        test_fused_encoder_matches_manual_pipeline,
+        test_split_encoder_matches_manual_pipeline,
+        test_encoder_close_is_idempotent,
+        test_fused_encoder_rejects_audio_beyond_bucket,
+        test_split_encoder_rejects_audio_beyond_bucket,
     ]
     failed = 0
     for t in tests:

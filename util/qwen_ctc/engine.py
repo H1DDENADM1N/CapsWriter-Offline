@@ -30,15 +30,19 @@ import numpy as np
 from loguru import logger as default_logger
 from loguru._logger import Logger
 
+from .encoder import (
+    FRAME_RATE_HZ,
+    MEL_FRAMES,
+    FusedEncoder,
+    resolve_providers,
+    valid_frames,
+)
 from .schema import RecognitionResult, RecognitionStream
 from .tokens import decode_bytes, load_tokens
 
-# Qwen3-ASR 编码器的帧率（13 fps），不是 50 fps
-FRAME_RATE_HZ = 13.0
+# Qwen3-ASR 编码器的帧率（13 fps）与 30 秒桶在 encoder.py 里定义，这里 re-export
 FRAME_SEC = 1.0 / FRAME_RATE_HZ
 
-# 编码器导出时用的 30 秒桶
-MEL_FRAMES = 3000
 SEGMENT_SEC = 30.0
 
 # CTC 尖峰式发射的系统性偏置（对 MFA 词级真值实测：起点晚 100ms、终点早 78.5ms）
@@ -82,84 +86,52 @@ class QwenCTCEngine:
         self.logger = logger if logger is not None else default_logger
         self._enc = None
         self._ctc = None
-        self._fe = None
         self.id2bytes: Dict[int, bytes] = {}
 
     # ── 初始化 ────────────────────────────────────────────────────────
     def initialize(self) -> "QwenCTCEngine":
         """加载 ONNX 会话、特征提取器与紧凑词表"""
         import onnxruntime as ort
-        from transformers import WhisperFeatureExtractor
 
-        providers = self._resolve_providers(ort)
+        providers = resolve_providers(ort, self.config.provider)
 
         so = ort.SessionOptions()
         so.intra_op_num_threads = self.config.num_threads or 0
         so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
-        self._enc = ort.InferenceSession(
-            self.config.encoder_onnx_path,
-            sess_options=so,
-            providers=providers,
-        )
         self._ctc = ort.InferenceSession(
             self.config.ctc_onnx_path,
             sess_options=so,
             providers=providers,
         )
-        self._fe = WhisperFeatureExtractor.from_pretrained(self.config.preprocessor_path)
+        # 编码器（含 WhisperFeatureExtractor 的惰性 import）统一走 encoder.py
+        self._enc = FusedEncoder(
+            self.config.encoder_onnx_path,
+            self.config.preprocessor_path,
+            num_threads=self.config.num_threads,
+            provider=self.config.provider,
+            mel_frames=self.config.mel_frames,
+            logger=self.logger,
+        )
         self.id2bytes = load_tokens(self.config.tokens_path)
 
         self.logger.info(
             f"Qwen3-CTC 引擎载入完成: encoder={Path(self.config.encoder_onnx_path).name}, "
             f"ctc={Path(self.config.ctc_onnx_path).name}, "
-            f"vocab={len(self.id2bytes)}, providers={providers}"
+            f"vocab={len(self.id2bytes)}, encoder_dim={self._enc.output_dim}, "
+            f"providers={providers}"
         )
         return self
-
-    def _resolve_providers(self, ort) -> List[str]:
-        """按配置选择推理后端"""
-        available = ort.get_available_providers()
-        if self.config.provider == "dml" and "DmlExecutionProvider" in available:
-            return ["DmlExecutionProvider", "CPUExecutionProvider"]
-        return ["CPUExecutionProvider"]
 
     # ── 编码 ──────────────────────────────────────────────────────────
     @staticmethod
     def _valid_frames(mel_len: int) -> int:
-        """
-        真实 mel 帧数 -> 编码器有效输出帧数
-
-        Qwen3 每 100 帧 mel 出一帧（13 fps），不是每 8 帧出一帧。
-        """
-        full, leave = divmod(mel_len, 100)
-        return full * 13 + (0 if leave == 0 else (leave - 1) // 8 + 1)
-
-    def _features(self, audio: np.ndarray) -> Tuple[np.ndarray, int]:
-        """
-        音频 -> (零填到 3000 帧桶的 mel, 真实 mel 帧数)
-
-        关键：`padding=False` 取真实长度，再自己零填，并保留真实帧数。
-        """
-        mel = self._fe(
-            audio, sampling_rate=16000, padding=False, return_tensors="np"
-        ).input_features[0]
-        t = mel.shape[1]
-        padded = np.zeros((mel.shape[0], self.config.mel_frames), dtype=np.float32)
-        padded[:, :t] = mel
-        return padded, t
+        """兼容旧调用（实现已迁到 encoder.valid_frames）"""
+        return valid_frames(mel_len)
 
     def _encode(self, audio: np.ndarray) -> np.ndarray:
-        """音频 -> 音频 embedding [valid_frames, 2048]"""
-        padded, t = self._features(audio)
-        enc = self._enc.run(
-            None,
-            {
-                "input_features": padded,
-                "feature_length": np.array([t], np.int64),
-            },
-        )[0]
-        return enc[: self._valid_frames(t)].astype(np.float32)
+        """音频 -> 音频 embedding [valid_frames, output_dim]"""
+        return self._enc.encode(audio)
 
     # ── CTC 解码 ──────────────────────────────────────────────────────
     def _ctc_ids(self, enc_output: np.ndarray) -> np.ndarray:
@@ -332,9 +304,10 @@ class QwenCTCEngine:
 
     def cleanup(self) -> None:
         """释放资源"""
+        if self._enc is not None:
+            self._enc.close()
         self._enc = None
         self._ctc = None
-        self._fe = None
         self.id2bytes = {}
 
 
