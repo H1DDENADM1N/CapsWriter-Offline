@@ -25,6 +25,12 @@ Task 3 覆盖 `util/qwen_ctc/encoder.py`（融合 / 拆分双形态 encoder）�
 12. `close()` 幂等、关闭后再 encode 报 RuntimeError；超过 30s 的音频喂融合
     encoder 必须显式 ValueError（不能静默截断）。
 
+Task 4 覆盖 `util/qwen_ctc/align.py`（CTC 字级时间戳 → LLM 文本）：
+13. 返回长度严格等于 `len(text)`（LLM 会改字、补标点，长度与 CTC 不同）；
+14. 时间戳单调不减、落在 CTC 时间范围内，任何输入都不许抛异常；
+15. 完全一致的两段文本必须原样保留 CTC 起始时间；空 CTC 按 `i*duration/len(text)`
+    均分；LLM 多出来的标点在两侧锚点之间线性插值；大小写 / 全角半角不影响匹配。
+
 需要模型文件 models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf
 （0.6B 用例需要 models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
 """
@@ -573,6 +579,97 @@ def test_split_encoder_rejects_audio_beyond_bucket():
         enc.close()
 
 
+# --------------------------------------------------------------------------
+# Task 4: align.py —— CTC 字级时间戳对齐到 LLM 文本
+# --------------------------------------------------------------------------
+
+
+def test_align_length_always_matches_llm_text():
+    from util.qwen_ctc.align import align_ctc_to_llm
+
+    ts = align_ctc_to_llm(
+        list("開放時間早上九點"), [0.1 * i for i in range(8)], "開放時間：早上九點。", 4.0
+    )
+    assert len(ts) == len("開放時間：早上九點。")
+    assert all(ts[i] <= ts[i + 1] for i in range(len(ts) - 1)), "时间戳必须单调不减"
+
+
+def test_align_empty_ctc_distributes_evenly():
+    from util.qwen_ctc.align import align_ctc_to_llm
+
+    ts = align_ctc_to_llm([], [], "abcd", 4.0)
+    assert ts == [0.0, 1.0, 2.0, 3.0]
+
+
+def test_align_identical_text_keeps_starts():
+    from util.qwen_ctc.align import align_ctc_to_llm
+
+    ts = align_ctc_to_llm(list("abcd"), [0.5, 1.5, 2.5, 3.5], "abcd", 4.0)
+    assert ts == [0.5, 1.5, 2.5, 3.5]
+
+
+def test_align_heavy_mismatch_stays_monotonic():
+    from util.qwen_ctc.align import align_ctc_to_llm
+
+    ts = align_ctc_to_llm(
+        list("一二三四五"), [0.2, 0.4, 0.6, 0.8, 1.0], "ABCDE12345", 6.0
+    )
+    assert len(ts) == 10 and all(ts[i] <= ts[i + 1] for i in range(9))
+
+
+def test_align_empty_text_returns_empty():
+    """空 LLM 文本必须返回空列表（长度严格等于 len(text)），不能抛异常"""
+    from util.qwen_ctc.align import align_ctc_to_llm
+
+    assert align_ctc_to_llm(list("abc"), [0.0, 1.0, 2.0], "", 3.0) == []
+    assert align_ctc_to_llm([], [], "", 0.0) == []
+
+
+def test_align_interpolates_missing_punctuation():
+    """LLM 多出来的标点没有 CTC 锚点，必须在两侧锚点之间线性插值"""
+    from util.qwen_ctc.align import align_ctc_to_llm
+
+    ts = align_ctc_to_llm(list("ab"), [1.0, 3.0], "a：b", 4.0)
+    assert len(ts) == 3
+    assert abs(ts[0] - 1.0) < 1e-6 and abs(ts[2] - 3.0) < 1e-6
+    assert abs(ts[1] - 2.0) < 1e-6, f"标点应插值到 2.0，实际 {ts[1]}"
+
+
+def test_align_is_case_insensitive_and_fullwidth_normalized():
+    """比较前做 casefold + 全角转半角归一，不能因为大小写/全角就丢掉锚点"""
+    from util.qwen_ctc.align import align_ctc_to_llm
+
+    assert align_ctc_to_llm(list("AB"), [0.5, 2.5], "ab", 3.0) == [0.5, 2.5]
+    assert align_ctc_to_llm(list("ab"), [0.5, 2.5], "ａｂ", 3.0) == [0.5, 2.5]
+
+
+def test_align_mixed_cjk_latin_and_length_mismatch():
+    """中英混排 + 长度悬殊：长度正确、单调不减、落在 CTC 时间范围内"""
+    from util.qwen_ctc.align import align_ctc_to_llm
+
+    ctc = list("你好世界")
+    starts = [0.4, 0.9, 1.6, 2.4]
+    ts = align_ctc_to_llm(ctc, starts, "你好, world! 世界。", 3.0)
+    assert len(ts) == len("你好, world! 世界。")
+    assert all(ts[i] <= ts[i + 1] for i in range(len(ts) - 1))
+    assert ts[0] >= 0.0 and ts[-1] <= max(starts) + 1e-6, f"越界：{ts}"
+
+    # LLM 把整段都改写成完全不同的字（全不匹配）也必须给出等长单调结果
+    ts2 = align_ctc_to_llm(ctc, starts, "x" * 40, 3.0)
+    assert len(ts2) == 40
+    assert all(ts2[i] <= ts2[i + 1] for i in range(39))
+    assert ts2[0] >= 0.0 and ts2[-1] <= max(starts) + 1e-6
+
+
+def test_align_prefix_is_not_flattened_to_zero():
+    """LLM 前面多出一串 CTC 覆盖不到的字时要在 [0, 首锚点] 内均分，不能全挤到 0.0"""
+    from util.qwen_ctc.align import align_ctc_to_llm
+
+    ts = align_ctc_to_llm(list("一二三四五"), [0.2, 0.4, 0.6, 0.8, 1.0], "ABCDE12345", 6.0)
+    assert ts[0] == 0.0
+    assert 0.0 < ts[1] < ts[2] < ts[3] < ts[4] <= 0.2 + 1e-9, f"前缀被压平了：{ts}"
+
+
 def _write_gguf(path_dir: Path, name: str, tensor_name: str, tensor: np.ndarray):
     """写一个只含单个张量的最小 GGUF（用于构造「没有 token_embd.weight」的情形）"""
     import gguf
@@ -650,6 +747,15 @@ if __name__ == "__main__":
         test_encoder_close_is_idempotent,
         test_fused_encoder_rejects_audio_beyond_bucket,
         test_split_encoder_rejects_audio_beyond_bucket,
+        test_align_length_always_matches_llm_text,
+        test_align_empty_ctc_distributes_evenly,
+        test_align_identical_text_keeps_starts,
+        test_align_heavy_mismatch_stays_monotonic,
+        test_align_empty_text_returns_empty,
+        test_align_interpolates_missing_punctuation,
+        test_align_is_case_insensitive_and_fullwidth_normalized,
+        test_align_mixed_cjk_latin_and_length_mismatch,
+        test_align_prefix_is_not_flattened_to_zero,
     ]
     failed = 0
     for t in tests:
