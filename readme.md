@@ -146,7 +146,7 @@
 
 > 优化交互逻辑，更方便且安全地修改 服务端、客户端的配置。 抛弃现有 pyside6 + siui 架构 ，toml注释保留，结构保留
 >
-> 覆盖 `config.toml` 的全部 **162 个叶子键**（151 个可编辑固定键 + 9 个派生只读键 + 2 个动态表条目）、**13 个页面**、**13 种控件**、**10 个校验器**。保存流程为「全量校验 → unified diff 预览 → 自动备份 → 原子替换 → 回读校验」，失败自动从 `.bak` 回滚；外部改动后再保存会提示「配置文件已被外部修改」。
+> 覆盖 `config.toml` 的全部 **178 个叶子键**（163 个可编辑固定键 + 13 个派生只读键 + 2 个动态表条目）、**14 个页面**、**13 种控件**、**10 个校验器**。保存流程为「全量校验 → unified diff 预览 → 自动备份 → 原子替换 → 回读校验」，失败自动从 `.bak` 回滚；外部改动后再保存会提示「配置文件已被外部修改」。
 >
 > 单文件 exe（约 10 MB，前端资源已内嵌），**不再需要 PySide6 / siui**，也**不依赖 `runtime/`、不依赖 `.venv`**；运行需系统具备 WebView2 Runtime（Win11 自带，Win10 需 Evergreen Runtime）。
 >
@@ -530,7 +530,7 @@
 25. ADB 控制手机功能：在 `config.toml` 中启用 `enable_adb_control` 后，客户端启动时会自动检查并连接 `adb_addr`（默认 `192.168.3.127:10101`）指向的手机（连接失败仅提示，不重试）；语音输入期间通过 ADB 让手机媒体静音并暂停播放，语音输入结束恢复音量并继续播放。可通过客户端托盘菜单「ADB 控制手机」热切换（位于「AI 优化语言表达」上方），需电脑已安装 `adb` 且手机已开启无线调试并与电脑同网
 26. 文本框多光标编辑：支持 `Alt+点击` 加副光标、`Alt+拖拽` 矩形列选、`Ctrl+Alt+↑/↓` 加光标、`Ctrl+D` 选中当前词并追加下一个相同内容、`Ctrl+Shift+L` 全选相同内容、`Ctrl+U` 撤销最后一个副光标、`Esc` 收敛；方向键、退格、删除、回车同时作用于所有光标，一次输入只占一步撤销。详细键位见「新版客户端界面 → 文本框多光标与快捷键」
 27. 文本框查找与替换：`Ctrl+F` 打开查找栏、`Ctrl+H` 展开 VS Code 风格替换栏（替换语义对齐 VS Code，全部替换只占一步撤销）
-28. 图形化配置界面 `edit_config_gui.exe`：覆盖 `config.toml` 全部 162 个叶子键，采用 Material Design 3 外观并**自动跟随 Windows 深浅色与主题色**（无独立主题开关）；保存前提供 unified diff 预览、自动备份、原子替换与回读校验，失败自动回滚
+28. 图形化配置界面 `edit_config_gui.exe`：覆盖 `config.toml` 全部 178 个叶子键，采用 Material Design 3 外观并**自动跟随 Windows 深浅色与主题色**（无独立主题开关）；保存前提供 unified diff 预览、自动备份、原子替换与回读校验，失败自动回滚
 29. 服务端可选 4 种语音识别模型：`FunASR`（旗舰，速度快准确率高）、`Sensevoice`（中粤英日韩，最快最省内存）、`Paraformer`（中英，准确率高）、`QwenCTC`（Qwen3-ASR + CTC 头，输出带字级时间戳，30 秒音频约 2 秒）。通过 `config.toml` 中 `model` 配置
 
 # ⬇️ 下载地址
@@ -1567,6 +1567,18 @@ opus_mt_dir = "models/Helsinki-NLP--opus-mt-zh-en"
 # 离线翻译模型目录
 
 
+qwen_ctc_encoder_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-Encoder.q4.onnx"
+# Qwen3-ASR 编码器模型路径
+
+qwen_ctc_ctc_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx"
+# Qwen3-ASR CTC 头模型路径
+
+qwen_ctc_tokens_path = "models/qwen-ctc-aiinfra4/tokens.txt"
+# Qwen3-ASR CTC 紧凑词表路径（base64 原始字节）
+
+qwen_ctc_preprocessor_path = "models/qwen-ctc-aiinfra4"
+# Qwen3-ASR 特征提取器配置目录（preprocessor_config.json）
+
 # ======================FunASR 参数配置==================================
 [funasr_args]
 encoder_onnx_path = "${model_paths.funasr_encoder_adaptor_path}"
@@ -1680,49 +1692,55 @@ decoding_method = "greedy_search"
 debug = false
 # 是否启用调试模式
 
-```
 
-#### QwenCTC 的可选配置
-
-`QwenCTC` 模型的路径和参数**默认写在代码里**（`util/config.py` 的 `QwenCTCArgs`），上面那份 `config.toml` 里不需要加任何键就能用。
-
-想要改路径或调参数时，往 `config.toml` 里补下面这些键即可（缺哪个就用哪个的默认值）：
-
-```toml
-[model_paths]
-# Qwen3-ASR 编码器（ONNX，int4）
-qwen_ctc_encoder_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-Encoder.q4.onnx"
-# CTC 头。官方 aiinfra4 版会把 AI 领域英文转写成中文译文，建议用 v1 版
-qwen_ctc_ctc_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx"
-# 紧凑词表（base64 原始字节，72466 条）
-qwen_ctc_tokens_path = "models/qwen-ctc-aiinfra4/tokens.txt"
-# 特征提取器配置目录（preprocessor_config.json）
-qwen_ctc_preprocessor_path = "models/qwen-ctc-aiinfra4"
+# ======================Qwen3-ASR + CTC 头 参数配置==================================
 
 [qwen_ctc_args]
-# CTC blank token id
+encoder_onnx_path = "${model_paths.qwen_ctc_encoder_path}"
+# Qwen3-ASR 编码器模型路径
+
+ctc_onnx_path = "${model_paths.qwen_ctc_ctc_path}"
+# CTC 头模型路径
+
+tokens_path = "${model_paths.qwen_ctc_tokens_path}"
+# 紧凑词表路径
+
+preprocessor_path = "${model_paths.qwen_ctc_preprocessor_path}"
+# 特征提取器配置目录
+
 blank_id = 72466
-# CTC unknown token id
+# CTC blank token id
+
 unk_id = 72467
-# 编码器 30 秒桶的 mel 帧数
+# CTC unknown token id
+
 mel_frames = 3000
-# 使用的线程数
+# 编码器 30 秒桶的 mel 帧数
+
 num_threads = 6
-# 推理设备（cpu, dml）
+# 使用的线程数
+
 provider = "cpu"
-# 时间戳起点补偿（秒），CTC 发射尖峰系统性偏晚
+# 推理设备（cpu, dml）
+
 start_bias = 0.1
-# 时间戳终点补偿（秒），CTC 发射尖峰系统性偏早
+# 时间戳起点补偿（秒），CTC 发射尖峰系统性偏晚
+
 end_bias = 0.0785
-# 是否输出详细日志
+# 时间戳终点补偿（秒），CTC 发射尖峰系统性偏早
+
 verbose = false
+# 是否输出详细日志
 ```
 
-> **为什么这两段不在上面的模板里？**
->
-> `edit_config_gui` 的测试把配置文件锁死在 **162 个叶子键**上（`edit_config_gui/src-tauri/tests/coverage.rs`），多一个键它的 CI 就红。QwenCTC 的键是按需添加的，所以默认模板里没有，需要时自己往 `config.toml` 里补。
->
-> GUI 的模型下拉框里目前还没有 `QwenCTC` 这一项（选项写死在 `edit_config_gui/src/lib/schema/server.ts`），在 GUI 里看到「（当前值，不在候选内）」是正常的，用文本编辑器改 `config.toml` 即可。
+#### QwenCTC 的配置
+
+`QwenCTC` 模型的路径和参数在 `config.toml` 的 `[model_paths]` 与 `[qwen_ctc_args]` 两段里，
+在 `edit_config_gui` 的「模型路径」页和「QwenCTC 参数」页里都能改。
+
+> `[qwen_ctc_args]` 里的 4 个路径是 `${model_paths.…}` 占位符，**改了不生效**——
+> 程序（`util/config.py`）读的是 `[model_paths]` 段里的真实值。GUI 把这 4 项显示成只读，
+> 并标出「实际生效：…」和跳转链接。
 
 # 🔧 功能：热词
 

@@ -162,7 +162,7 @@ fn base_dir_of(path: &Path) -> PathBuf {
 }
 
 /// 装配前端视图。`leaf_fields()` 每次现算：文档可能在命令之间被替换（提交/重载），
-/// 缓存字段列表只会带来失效问题，而 162 个叶子的成本远低于一次文件 IO。
+/// 缓存字段列表只会带来失效问题，而 178 个叶子的成本远低于一次文件 IO。
 fn doc_state(session: &Session) -> DocState {
     DocState {
         path: session.doc.path().to_string_lossy().into_owned(),
@@ -662,7 +662,7 @@ mod tests {
             .open_path(Path::new(TEMPLATE))
             .expect("默认模板必须能打开");
 
-        assert_eq!(view.fields.len(), 162, "模板叶子数必须与文档约定一致");
+        assert_eq!(view.fields.len(), 178, "模板叶子数必须与文档约定一致");
         assert_eq!(Path::new(&view.base_dir), Path::new("../../configs"));
         assert!(
             view.path.ends_with("default config.toml"),

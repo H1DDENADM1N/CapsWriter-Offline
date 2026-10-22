@@ -1,14 +1,14 @@
 import type { FieldMeta, PageMeta, SectionMeta } from './types.ts';
 
 /**
- * 模型路径：4 个目录 + 9 个文件。
+ * 模型路径：5 个目录 + 12 个文件（共 17 个键）。
  *
  * 全部 `warnOnly: true` —— 校验只产出警告、绝不阻断保存。理由：模型文件动辄
  * 几个 GB，用户经常是「先改好配置，回头再下载模型」。旧 GUI 的
  * `ValueCheck.is_file_exist` 失败时也只是弹右侧提示、值照样留着，新版把这个
  * 行为明确成 `warnOnly`，语义一致但不再让人误以为保存失败。
  *
- * 9 个文件都带 `fileSuffix`。旧 GUI 调 `is_file_exist` 时**从不传后缀**
+ * 12 个文件都带 `fileSuffix`。旧 GUI 调 `is_file_exist` 时**从不传后缀**
  * （`model_paths_config_page.py:287,333,377,…`），所以填个 `foo.txt` 也能过；
  * 新版补上后缀检查，但因为 warnOnly，最坏只多一条黄色提示。
  */
@@ -155,6 +155,39 @@ const paraformerFields: FieldMeta[] = [
   ),
 ];
 
+const qwenCtcFields: FieldMeta[] = [
+  fileField(
+    'qwen_ctc_encoder_path',
+    'Qwen3-ASR 编码器模型路径',
+    'Qwen3-ASR 编码器模型路径',
+    '.onnx',
+    'models/qwen-ctc-aiinfra4/Qwen3-ASR-Encoder.q4.onnx',
+    'encoder',
+  ),
+  fileField(
+    'qwen_ctc_ctc_path',
+    'Qwen3-ASR CTC 头模型路径',
+    'Qwen3-ASR CTC 头模型路径',
+    '.onnx',
+    'models/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx',
+    'CTC',
+  ),
+  fileField(
+    'qwen_ctc_tokens_path',
+    'Qwen3-ASR CTC 紧凑词表路径',
+    'Qwen3-ASR CTC 紧凑词表路径（base64 原始字节）',
+    '.txt',
+    'models/qwen-ctc-aiinfra4/tokens.txt',
+    'tokens',
+  ),
+  dirField(
+    'qwen_ctc_preprocessor_path',
+    'Qwen3-ASR 特征提取器配置目录',
+    'models/qwen-ctc-aiinfra4',
+    'preprocessor',
+  ),
+];
+
 const opusMtFields: FieldMeta[] = [
   dirField(
     'opus_mt_dir',
@@ -174,6 +207,7 @@ const sections: SectionMeta[] = [
   { id: 'funasr', title: 'FunASR 语音模型', fields: funasrFields },
   { id: 'sensevoice', title: 'SenseVoice 语音模型', fields: sensevoiceFields },
   { id: 'paraformer', title: 'Paraformer 语音模型', fields: paraformerFields },
+  { id: 'qwenCtc', title: 'Qwen3-ASR + CTC 头 语音模型', fields: qwenCtcFields },
   {
     id: 'opusMt',
     title: 'Helsinki NLP--opus-mt-zh-en 离线翻译模型',

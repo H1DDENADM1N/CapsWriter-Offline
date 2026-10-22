@@ -1,15 +1,15 @@
 import type { FieldMeta, PageMeta } from './types.ts';
 
 /**
- * 三个本地语音识别引擎的参数页（FunASR / SenseVoice / Paraformer）。
+ * 四个本地语音识别引擎的参数页（FunASR / SenseVoice / Paraformer / QwenCTC）。
  *
- * **9 个派生只读键**（`funasr_args.*_path`、`sensevoice_args.model/tokens`、
- * `paraformer_args.paraformer/tokens`）：
+ * **13 个派生只读键**（`funasr_args.*_path`、`sensevoice_args.model/tokens`、
+ * `paraformer_args.paraformer/tokens`、`qwen_ctc_args.*_path`）：
  * 它们在 config.toml 里的值是 `${model_paths.xxx}` 这样的占位符，而仓库里
- * **没有任何代码解析这种占位符**——`util/config.py:241-278` 的
- * `FunASRArgs`/`SenseVoiceArgs`/`ParaformerArgs` 直接去读 `model_paths` 段。
- * 也就是说这 9 个键改了不生效。所以它们在 UI 里是只读的，`derivedFrom` 指到真正
- * 生效的那一项；保存时既不改也不删（保留 TOML 结构）。
+ * **没有任何代码解析这种占位符**——`util/config.py:249-308` 的
+ * `FunASRArgs`/`SenseVoiceArgs`/`ParaformerArgs`/`QwenCTCArgs` 直接去读
+ * `model_paths` 段。也就是说这 13 个键改了不生效。所以它们在 UI 里是只读的，
+ * `derivedFrom` 指到真正生效的那一项；保存时既不改也不删（保留 TOML 结构）。
  */
 
 const SAMPLE_RATE_OPTIONS = [
@@ -31,6 +31,12 @@ const LANGUAGE_OPTIONS = [
   { value: 'ja', label: 'ja（日文）' },
   { value: 'ko', label: 'ko（韩文）' },
   { value: 'yue', label: 'yue（粤语）' },
+];
+
+/** QwenCTC 用的 ONNX Runtime 推理后端（见 util/qwen_ctc/engine.py） */
+const QWEN_PROVIDER_OPTIONS = [
+  { value: 'cpu', label: 'cpu' },
+  { value: 'dml', label: 'dml（DirectML 加速）' },
 ];
 
 /** 派生只读键：只展示「实际生效值」，不写回 TOML */
@@ -293,6 +299,66 @@ const paraformerFields: FieldMeta[] = [
   },
 ];
 
+// ───────────────────────────── QwenCTC ─────────────────────────────
+
+const qwenCtcFields: FieldMeta[] = [
+  derived('qwen_ctc_args', 'encoder_onnx_path', 'Qwen3-ASR 编码器模型路径', 'qwen_ctc_encoder_path'),
+  derived('qwen_ctc_args', 'ctc_onnx_path', 'CTC 头模型路径', 'qwen_ctc_ctc_path'),
+  derived('qwen_ctc_args', 'tokens_path', '紧凑词表路径', 'qwen_ctc_tokens_path'),
+  derived('qwen_ctc_args', 'preprocessor_path', '特征提取器配置目录', 'qwen_ctc_preprocessor_path'),
+  intField('qwen_ctc_args', 'blank_id', 'CTC blank token id', 'CTC blank token id', 0, 100000),
+  intField('qwen_ctc_args', 'unk_id', 'CTC unknown token id', 'CTC unknown token id', 0, 100000),
+  intField('qwen_ctc_args', 'mel_frames', '编码器 30 秒桶的 mel 帧数', '编码器 30 秒桶的 mel 帧数', 1, 10000),
+  intField('qwen_ctc_args', 'num_threads', '使用的线程数', '使用的线程数', 1, 32),
+  {
+    path: 'qwen_ctc_args.provider',
+    segments: ['qwen_ctc_args', 'provider'],
+    title: '推理设备',
+    note: '推理设备（cpu, dml）',
+    type: 'string',
+    widget: 'enum',
+    options: QWEN_PROVIDER_OPTIONS,
+    default: 'cpu',
+    aliases: ['推理设备', 'provider'],
+  },
+  {
+    path: 'qwen_ctc_args.start_bias',
+    segments: ['qwen_ctc_args', 'start_bias'],
+    title: '时间戳起点补偿（秒）',
+    note: '时间戳起点补偿（秒），CTC 发射尖峰系统性偏晚',
+    type: 'float',
+    widget: 'float',
+    min: 0,
+    max: 1,
+    step: 0.001,
+    default: 0.1,
+    aliases: ['起点补偿', 'start_bias'],
+  },
+  {
+    path: 'qwen_ctc_args.end_bias',
+    segments: ['qwen_ctc_args', 'end_bias'],
+    title: '时间戳终点补偿（秒）',
+    note: '时间戳终点补偿（秒），CTC 发射尖峰系统性偏早',
+    type: 'float',
+    widget: 'float',
+    min: 0,
+    max: 1,
+    step: 0.001,
+    default: 0.0785,
+    aliases: ['终点补偿', 'end_bias'],
+  },
+  {
+    path: 'qwen_ctc_args.verbose',
+    segments: ['qwen_ctc_args', 'verbose'],
+    title: '是否输出详细日志',
+    note: '是否输出详细日志',
+    type: 'boolean',
+    widget: 'bool',
+    default: false,
+    aliases: ['调试', 'verbose'],
+  },
+];
+
 export const funasrPage: PageMeta = {
   id: 'funasr',
   title: 'FunASR 参数',
@@ -319,4 +385,18 @@ export const paraformerPage: PageMeta = {
   title: 'Paraformer 参数',
   icon: 'cpu',
   sections: [{ id: 'general', title: '通用', fields: paraformerFields }],
+};
+
+export const qwenCtcPage: PageMeta = {
+  id: 'qwenCtc',
+  title: 'QwenCTC 参数',
+  icon: 'cpu',
+  sections: [
+    {
+      id: 'general',
+      title: '通用',
+      note: '前 4 项是只读派生键，真正生效的是「模型路径」页；其余是 CTC 头推理参数。',
+      fields: qwenCtcFields,
+    },
+  ],
 };

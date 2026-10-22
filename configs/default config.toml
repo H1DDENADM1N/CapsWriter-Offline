@@ -738,6 +738,18 @@ opus_mt_dir = "models/Helsinki-NLP--opus-mt-zh-en"
 # 离线翻译模型目录
 
 
+qwen_ctc_encoder_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-Encoder.q4.onnx"
+# Qwen3-ASR 编码器模型路径
+
+qwen_ctc_ctc_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx"
+# Qwen3-ASR CTC 头模型路径
+
+qwen_ctc_tokens_path = "models/qwen-ctc-aiinfra4/tokens.txt"
+# Qwen3-ASR CTC 紧凑词表路径（base64 原始字节）
+
+qwen_ctc_preprocessor_path = "models/qwen-ctc-aiinfra4"
+# Qwen3-ASR 特征提取器配置目录（preprocessor_config.json）
+
 # ======================FunASR 参数配置==================================
 [funasr_args]
 encoder_onnx_path = "${model_paths.funasr_encoder_adaptor_path}"
@@ -850,3 +862,43 @@ decoding_method = "greedy_search"
 
 debug = false
 # 是否启用调试模式
+
+
+# ======================Qwen3-ASR + CTC 头 参数配置==================================
+
+[qwen_ctc_args]
+encoder_onnx_path = "${model_paths.qwen_ctc_encoder_path}"
+# Qwen3-ASR 编码器模型路径
+
+ctc_onnx_path = "${model_paths.qwen_ctc_ctc_path}"
+# CTC 头模型路径
+
+tokens_path = "${model_paths.qwen_ctc_tokens_path}"
+# 紧凑词表路径
+
+preprocessor_path = "${model_paths.qwen_ctc_preprocessor_path}"
+# 特征提取器配置目录
+
+blank_id = 72466
+# CTC blank token id
+
+unk_id = 72467
+# CTC unknown token id
+
+mel_frames = 3000
+# 编码器 30 秒桶的 mel 帧数
+
+num_threads = 6
+# 使用的线程数
+
+provider = "cpu"
+# 推理设备（cpu, dml）
+
+start_bias = 0.1
+# 时间戳起点补偿（秒），CTC 发射尖峰系统性偏晚
+
+end_bias = 0.0785
+# 时间戳终点补偿（秒），CTC 发射尖峰系统性偏早
+
+verbose = false
+# 是否输出详细日志

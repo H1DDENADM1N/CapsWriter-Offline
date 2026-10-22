@@ -1,21 +1,21 @@
-//! 9 个派生只读键的只读解析（规格 §6.5）。
+//! 13 个派生只读键的只读解析（规格 §6.5）。
 //!
-//! `config.toml` 里这 9 个键的值是 `${model_paths.xxx}` 形式的占位符，
+//! `config.toml` 里这 13 个键的值是 `${model_paths.xxx}` 形式的占位符，
 //! 而真正被业务代码读取的是 `model_paths` 段的对应键（`util/config.py`
-//! 的 `FunASRArgs` / `SenseVoiceArgs` / `ParaformerArgs` 全部直接读
-//! `config["model_paths"][...]`）。也就是说占位符从来没有被任何人解析过。
+//! 的 `FunASRArgs` / `SenseVoiceArgs` / `ParaformerArgs` / `QwenCTCArgs`
+//! 全部直接读 `config["model_paths"][...]`）。也就是说占位符从来没有被任何人解析过。
 //!
 //! 本模块只做「展示用」的解析：界面上给只读字段显示「实际生效：…」，
 //! 并提供一个跳到 `model_paths` 的链接。
 //!
-//! **刻意不提供写入 / 同步函数。** TOML 里这 9 个键保持原样，保存时既不删除
+//! **刻意不提供写入 / 同步函数。** TOML 里这 13 个键保持原样，保存时既不删除
 //! 也不改写。一旦出现「把占位符替换成真实路径」的入口，配置文件就会分叉成
 //! 「有的机器是占位符、有的机器是绝对路径」，那正是这次重构要消灭的旧问题。
 
 use crate::config_doc::ConfigDoc;
 
 /// (派生键 segments, 真实来源键 segments)
-pub const DERIVED: [(&[&str], &[&str]); 9] = [
+pub const DERIVED: [(&[&str], &[&str]); 13] = [
     (
         &["funasr_args", "encoder_onnx_path"],
         &["model_paths", "funasr_encoder_adaptor_path"],
@@ -52,6 +52,22 @@ pub const DERIVED: [(&[&str], &[&str]); 9] = [
         &["paraformer_args", "tokens"],
         &["model_paths", "paraformer_tokens_path"],
     ),
+    (
+        &["qwen_ctc_args", "encoder_onnx_path"],
+        &["model_paths", "qwen_ctc_encoder_path"],
+    ),
+    (
+        &["qwen_ctc_args", "ctc_onnx_path"],
+        &["model_paths", "qwen_ctc_ctc_path"],
+    ),
+    (
+        &["qwen_ctc_args", "tokens_path"],
+        &["model_paths", "qwen_ctc_tokens_path"],
+    ),
+    (
+        &["qwen_ctc_args", "preprocessor_path"],
+        &["model_paths", "qwen_ctc_preprocessor_path"],
+    ),
 ];
 
 /// 派生键当前「应当」显示的值；来源键缺失时返回 `None`。
@@ -75,7 +91,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_all_nine() {
+    fn resolve_all_thirteen() {
         let (doc, _) = load_real();
         for (derived, source) in DERIVED {
             let expect = doc
@@ -96,12 +112,12 @@ mod tests {
             let _ = resolve(&doc, &to_vec(derived));
         }
         assert_eq!(doc.to_toml_string(), before, "resolve 不得改动文档");
-        assert_eq!(comment_line_count(&raw), 306);
+        assert_eq!(comment_line_count(&raw), 323);
     }
 
     #[test]
-    fn all_nine_are_placeholders_in_toml() {
-        // 9 个派生键在 TOML 里必须仍是 ${...} 占位符；若哪天被同步成真实路径，
+    fn all_thirteen_are_placeholders_in_toml() {
+        // 13 个派生键在 TOML 里必须仍是 ${...} 占位符；若哪天被同步成真实路径，
         // 说明有人加了写入入口 —— 那是配置文件分叉，必须在这里红掉
         let (doc, _) = load_real();
         for (derived, _) in DERIVED {

@@ -5,7 +5,7 @@
 //! 同步。这个测试负责链条的另一半：**JSON 与仓库里真实的 config.toml 同步**。
 //!
 //! 只用 `configs/default config.toml` 而不是根目录的 `config.toml`：前者是出厂
-//! 模板，162 个键齐全且不会被用户改坏；后者在某些机器上会被 debug 模板覆盖
+//! 模板，178 个键齐全且不会被用户改坏；后者在某些机器上会被 debug 模板覆盖
 //! （`logger_level` 不同）。
 
 use std::collections::BTreeSet;
@@ -25,8 +25,8 @@ fn is_dynamic_table_entry(segments: &[String]) -> bool {
 
 /// 派生只读键：值仍是 `${model_paths.…}` 占位符。
 ///
-/// 仓库里没有任何代码解析这种占位符（`util/config.py:241-278` 直接读
-/// `model_paths` 段），所以这 9 个键改了不生效 —— UI 把它们显示成只读视图，
+/// 仓库里没有任何代码解析这种占位符（`util/config.py:249-308` 直接读
+/// `model_paths` 段），所以这 13 个键改了不生效 —— UI 把它们显示成只读视图，
 /// 也就不该出现在「可编辑键」清单里。
 fn is_derived_placeholder(field: &edit_config_gui_lib::config_doc::FieldEntry) -> bool {
     field
@@ -84,14 +84,14 @@ fn schema_paths_cover_every_leaf_of_the_shipped_template() {
         extra.iter().map(|k| k.replace('\u{0}', ".")).collect::<Vec<_>>()
     );
 
-    // 151 = 162 个叶子 − 2 条动态表条目 − 9 个派生只读键
-    assert_eq!(schema.len(), 151, "schema_paths.json 应恰好 151 条");
+    // 163 = 178 个叶子 − 2 条动态表条目 − 13 个派生只读键
+    assert_eq!(schema.len(), 163, "schema_paths.json 应恰好 163 条");
 }
 
 #[test]
-fn template_leaf_count_matches_the_documented_162() {
-    // 这个数字是整份规格的基准（162 个叶子键）。它变了就意味着有人动了
-    // config.toml 的结构，那么规格 §3.1、计划里的 149/151/160 全要重算。
+fn template_leaf_count_matches_the_documented_178() {
+    // 这个数字是整份规格的基准（178 个叶子键）。它变了就意味着有人动了
+    // config.toml 的结构，那么规格 §3.1、计划里的 165/163/176 全要重算。
     let path = manifest_dir()
         .join("..")
         .join("..")
@@ -99,12 +99,12 @@ fn template_leaf_count_matches_the_documented_162() {
         .join("default config.toml");
     let doc = ConfigDoc::load(&path).expect("读模板失败");
     let all = doc.leaf_fields();
-    assert_eq!(all.len(), 162, "configs/default config.toml 应恰好 162 个叶子键");
+    assert_eq!(all.len(), 178, "configs/default config.toml 应恰好 178 个叶子键");
 
     let dynamic = all.iter().filter(|f| is_dynamic_table_entry(&f.segments)).count();
     assert_eq!(dynamic, 2, "动态表应贡献 2 条（vlc.exe 的 hotkey 与 name）");
 
-    // 9 个派生只读键：值仍是 ${model_paths.…} 占位符
+    // 13 个派生只读键：值仍是 ${model_paths.…} 占位符
     let placeholders = all
         .iter()
         .filter(|f| {
@@ -114,7 +114,7 @@ fn template_leaf_count_matches_the_documented_162() {
                 .unwrap_or(false)
         })
         .count();
-    assert_eq!(placeholders, 9, "应有 9 个 ${{model_paths.…}} 占位符键");
+    assert_eq!(placeholders, 13, "应有 13 个 ${{model_paths.…}} 占位符键");
 
-    assert_eq!(all.len() - dynamic - placeholders, 151);
+    assert_eq!(all.len() - dynamic - placeholders, 163);
 }

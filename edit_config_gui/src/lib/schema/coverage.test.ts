@@ -30,7 +30,7 @@ const schemaPaths: string[][] = JSON.parse(
 );
 
 describe('schema 覆盖率', () => {
-  it('13 页的 id 与顺序固定', () => {
+  it('14 页的 id 与顺序固定', () => {
     // 页 id / 顺序是 navStore.focus() 反查、Sidebar 顺序、PageView 的 about
     // 特判的共同依据，钉死防漂移
     expect(pages.map((p) => p.id)).toEqual([
@@ -45,29 +45,30 @@ describe('schema 覆盖率', () => {
       'funasr',
       'sensevoice',
       'paraformer',
+      'qwenCtc',
       'debug',
       'about',
     ]);
-    expect(new Set(pages.map((p) => p.id)).size).toBe(13);
+    expect(new Set(pages.map((p) => p.id)).size).toBe(14);
     expect(pages.every((p) => p.title.length > 0 && p.icon.length > 0)).toBe(
       true,
     );
   });
 
-  it('可编辑固定键 151 + 派生只读 9 + 动态表 1 条描述 = 161', () => {
-    // 162 个 TOML 叶子 − 2 条动态表条目 = 160；160 − 9 个派生只读 = 151。
-    // allFields() 是 161 而不是 160，因为动态表在 schema 里占 1 条描述、
+  it('可编辑固定键 163 + 派生只读 13 + 动态表 1 条描述 = 177', () => {
+    // 178 个 TOML 叶子 − 2 条动态表条目 = 176；176 − 13 个派生只读 = 163。
+    // allFields() 是 177 而不是 176，因为动态表在 schema 里占 1 条描述、
     // 却对应 TOML 里的 2 个条目。
-    expect(editableFields().length).toBe(151);
-    expect(derivedFields().length).toBe(9);
-    expect(allFields().length).toBe(161);
+    expect(editableFields().length).toBe(163);
+    expect(derivedFields().length).toBe(13);
+    expect(allFields().length).toBe(177);
   });
 
   it('schema 导出的 segments 与 schema_paths.json 完全一致', () => {
     const fromSchema = editableFields()
       .map((f) => f.segments)
       .sort((x, y) => (fieldId(x) < fieldId(y) ? -1 : 1));
-    expect(schemaPaths.length).toBe(151);
+    expect(schemaPaths.length).toBe(163);
     expect(fromSchema).toEqual(schemaPaths);
   });
 
@@ -127,7 +128,7 @@ describe('schema 覆盖率', () => {
     }
   });
 
-  it('模型路径 13 个键全部 warnOnly（缺文件只警告不阻断）', () => {
+  it('模型路径 17 个键全部 warnOnly（缺文件只警告不阻断）', () => {
     for (const f of allFields()) {
       if (f.segments[0] !== 'model_paths') continue;
       expect(f.warnOnly, `${f.path} 必须 warnOnly`).toBe(true);

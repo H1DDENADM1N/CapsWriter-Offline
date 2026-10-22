@@ -199,7 +199,7 @@ fn collect_table(table: &Table, prefix: &mut Vec<String>, out: &mut Vec<FieldEnt
     }
 }
 
-/// 递归规则（叶子数 162 的口径，逐字照 brief）：
+/// 递归规则（叶子数 178 的口径，逐字照 brief）：
 /// - `Item::Table` → 递归，自身不计；
 /// - `Item::Value(Value::InlineTable)` → 只把每个子字段各输出一条，自身不计；
 /// - `Item::ArrayOfTables` → 一条 Array 叶子；
@@ -339,7 +339,7 @@ mod tests {
     fn parse_real_config() {
         let (doc, _) = load_real();
         let fields = doc.leaf_fields();
-        assert_eq!(fields.len(), 162, "叶子键数必须是 162");
+        assert_eq!(fields.len(), 178, "叶子键数必须是 178");
         // 非 ASCII 键（seg 是各测试模块共用的 helper：Vec<&str> -> Vec<String>）
         assert!(fields
             .iter()
@@ -401,8 +401,8 @@ mod tests {
         );
         assert_eq!(
             comment_line_count(&raw),
-            306,
-            "基准：真实 config.toml 有 306 行整行注释"
+            323,
+            "基准：真实 config.toml 有 323 行整行注释"
         );
     }
 

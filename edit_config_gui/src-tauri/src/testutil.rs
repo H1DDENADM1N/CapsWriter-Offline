@@ -61,7 +61,7 @@ pub fn patch(parts: &[&str], v: crate::patch::PatchValue) -> crate::patch::Patch
     }
 }
 
-/// 单行标量键的探针补丁集合：149 = 162 叶子 − 8 个多行 prompt 正文 − 3 个数组 − 2 条内联表条目
+/// 单行标量键的探针补丁集合：165 = 178 叶子 − 8 个多行 prompt 正文 − 3 个数组 − 2 条内联表条目
 pub fn single_line_probe_patches(doc: &crate::config_doc::ConfigDoc) -> Vec<crate::patch::Patch> {
     use crate::config_doc::TomlType::*;
     use crate::patch::PatchValue as P;

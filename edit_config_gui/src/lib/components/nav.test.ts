@@ -41,11 +41,11 @@ beforeEach(() => {
 });
 
 describe('Sidebar', () => {
-  it('13 个导航项按 pages 顺序渲染', () => {
+  it('14 个导航项按 pages 顺序渲染', () => {
     const { getAllByRole } = render(Sidebar);
     const items = getAllByRole('tab').map((el) => el.textContent?.trim() ?? '');
 
-    expect(items).toHaveLength(13);
+    expect(items).toHaveLength(14);
     expect(items[0]).toContain(pages[0]!.title);
   });
 
@@ -106,11 +106,11 @@ describe('Sidebar', () => {
     const { getAllByRole, container } = render(Sidebar);
     const tabs = getAllByRole('tab');
 
-    expect(tabs).toHaveLength(13);
+    expect(tabs).toHaveLength(14);
     expect(tabs.at(-1)!.getAttribute('aria-label')).toBe('关于');
     // 结构上也得分开：主列表只放配置页
     const list = container.querySelector('.list')!;
-    expect(list.querySelectorAll('[role="tab"]')).toHaveLength(12);
+    expect(list.querySelectorAll('[role="tab"]')).toHaveLength(13);
     expect(container.querySelector('.foot')!.textContent).toContain('关于');
   });
 

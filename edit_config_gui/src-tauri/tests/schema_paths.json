@@ -498,6 +498,22 @@
   ],
   [
     "model_paths",
+    "qwen_ctc_ctc_path"
+  ],
+  [
+    "model_paths",
+    "qwen_ctc_encoder_path"
+  ],
+  [
+    "model_paths",
+    "qwen_ctc_preprocessor_path"
+  ],
+  [
+    "model_paths",
+    "qwen_ctc_tokens_path"
+  ],
+  [
+    "model_paths",
     "sensevoice_path"
   ],
   [
@@ -523,6 +539,38 @@
   [
     "paraformer_args",
     "sample_rate"
+  ],
+  [
+    "qwen_ctc_args",
+    "blank_id"
+  ],
+  [
+    "qwen_ctc_args",
+    "end_bias"
+  ],
+  [
+    "qwen_ctc_args",
+    "mel_frames"
+  ],
+  [
+    "qwen_ctc_args",
+    "num_threads"
+  ],
+  [
+    "qwen_ctc_args",
+    "provider"
+  ],
+  [
+    "qwen_ctc_args",
+    "start_bias"
+  ],
+  [
+    "qwen_ctc_args",
+    "unk_id"
+  ],
+  [
+    "qwen_ctc_args",
+    "verbose"
   ],
   [
     "sensevoice_args",
