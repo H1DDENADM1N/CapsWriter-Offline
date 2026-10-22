@@ -2054,18 +2054,24 @@ def test_recognize_pure_ctc_still_calls_punctuation_model():
     import util.server.recognize_qwen_ctc as m
     from util.config import ServerConfig as Config
 
-    assert Config.format_punc is True, "本用例前提是配置打开了标点"
-    punc = _CountingPunc()
-    r = m.recognize(
-        _FakeRecognizer(
-            "ctc",
-            text="你好世界",
-            tokens=list("你好世界"),
-            timestamps=[0.0, 0.1, 0.2, 0.3],
-        ),
-        punc_model=punc,
-        task=_qwen_task("task9-pure-ctc"),
-    )
+    # 本用例验的是「纯 CTC 时仍会调标点模型」，与环境里 format_punc 的取值无关；
+    # 临时钉住再还原，免得用户关掉 format_punc 后这条回归凭空变红。
+    _saved_format_punc = Config.format_punc
+    Config.format_punc = True
+    try:
+        punc = _CountingPunc()
+        r = m.recognize(
+            _FakeRecognizer(
+                "ctc",
+                text="你好世界",
+                tokens=list("你好世界"),
+                timestamps=[0.0, 0.1, 0.2, 0.3],
+            ),
+            punc_model=punc,
+            task=_qwen_task("task9-pure-ctc"),
+        )
+    finally:
+        Config.format_punc = _saved_format_punc
 
     # 现有实现里 text / text_accu 各过一遍 format_text，所以是两次调用
     assert punc.calls == 2, "纯 CTC 必须照旧调用标点模型（text / text_accu 各一次）"
@@ -2073,6 +2079,132 @@ def test_recognize_pure_ctc_still_calls_punctuation_model():
     assert r.text == "你好世界。", r.text
     assert r.text_accu == "你好世界。", r.text_accu
     assert r.tokens == list("你好世界"), r.tokens
+
+
+def test_format_text_skipping_punc_keeps_spacing_and_numbers():
+    """spec §10.2 第 2 点：use_punc=False 只跳标点，adjust_space 与 chinese_to_num 照做
+
+    Task 9 评审 I3：把 `chinese_to_num` 或两个 `adjust_space` 删掉，原有 74 条用例
+    全绿 —— 这个「最易写错处」原先零覆盖。
+    """
+    import util.server.recognize_qwen_ctc as m
+
+    punc = _CountingPunc()
+    out = m.format_text("二零二五年hello世界", punc, use_punc=False)
+
+    assert out == "2025年 hello 世界", f"跳标点不得跳过空格与数字转换：{out!r}"
+    assert punc.calls == 0, f"use_punc=False 不得调用标点模型：{punc.calls}"
+
+    # 反向保护：use_punc=True 时标点确实参与
+    punc2 = _CountingPunc()
+    assert m.format_text("你好世界", punc2, use_punc=True) == "你好世界。"
+    assert punc2.calls == 1
+
+
+def test_recognize_llm_mode_english_overlap_merges_once():
+    """纯 LLM 的英文跨段拼接：≤16 字符重叠必须只出现一次
+
+    merge_by_text 的窗口是 5 字符，长重叠会退化（见 recognize_qwen_ctc.py 里
+    的「已知限制」注释）；这条用例钉住**没有退化**的那一侧，中文侧见
+    `test_recognize_llm_mode_accumulates_across_segments`。
+    """
+    import util.server.recognize_qwen_ctc as m
+
+    # 同一个 task_id：`_results` 按 task_id 缓存，换 id 就是另一段独立录音。
+    task_id = "task9-en-overlap"
+
+    r1 = m.recognize(
+        _FakeRecognizer("llm", text="we also looked at the"),
+        punc_model=_CountingPunc(),
+        task=_qwen_task(task_id, is_final=False),
+    )
+    assert r1.text == "we also looked at the", r1.text
+
+    r2 = m.recognize(
+        _FakeRecognizer("llm", text="looked at the audio quality"),
+        punc_model=_CountingPunc(),
+        task=_qwen_task(task_id),
+    )
+    assert r2.text == "we also looked at the audio quality", r2.text
+
+
+def test_recognize_use_punc_follows_mode_constant():
+    """三模式的加标点策略由 MODE_CTC 常量决定（不硬编码字符串）"""
+    import util.server.recognize_qwen_ctc as m
+    from util.qwen_ctc.engine import MODE_CTC, MODE_LLM, MODE_TWO_PASS
+
+    assert (MODE_CTC, MODE_TWO_PASS, MODE_LLM) == ("ctc", "two_pass", "llm")
+
+    for mode, expect_calls in ((MODE_CTC, 2), (MODE_TWO_PASS, 0), (MODE_LLM, 0)):
+        punc = _CountingPunc()
+        kwargs = (
+            dict(tokens=list("你好世界"), timestamps=[0.0, 0.1, 0.2, 0.3])
+            if mode != MODE_LLM
+            else dict(tokens=[], timestamps=[])
+        )
+        r = m.recognize(
+            _FakeRecognizer(mode, text="你好世界", **kwargs),
+            punc_model=punc,
+            task=_qwen_task(f"task9-punc-{mode}"),
+        )
+        assert punc.calls == expect_calls, f"{mode}: {punc.calls} != {expect_calls}"
+        assert ("。" in r.text) is (expect_calls > 0), f"{mode}: {r.text!r}"
+
+
+def test_recognize_llm_mode_clears_stale_tokens_from_cache():
+    """切到纯 LLM 时必须清空缓存里的 tokens / 时间戳
+
+    评审 M-3：删掉 `result.tokens = []` / `result.timestamps = []` 两行，原有
+    用例全绿 —— 而后果是把上一段 CTC 的 tokens 与时间戳泄漏进纯 LLM 结果，
+    违反 spec §7.2「纯 LLM 不产时间戳」。模式在生产里不会中途切换（engine
+    启动时固化），但缓存是按 task_id 跨请求存活的，这条护栏必须被钉住。
+    """
+    import util.server.recognize_qwen_ctc as m
+
+    task_id = "task9-stale-tokens"
+    r1 = m.recognize(
+        _FakeRecognizer(
+            "ctc", text="今天天气", tokens=list("今天天气"), timestamps=[0, 1, 2, 3]
+        ),
+        punc_model=None,
+        task=_qwen_task(task_id, is_final=False),
+    )
+    assert r1.tokens == list("今天天气"), r1.tokens
+
+    r2 = m.recognize(
+        _FakeRecognizer("llm", text="不错"),
+        punc_model=None,
+        task=_qwen_task(task_id),
+    )
+    assert r2.tokens == [], f"纯 LLM 不得残留 CTC tokens：{r2.tokens}"
+    assert r2.timestamps == [], f"纯 LLM 不得残留时间戳：{r2.timestamps}"
+    assert r2.text == "今天天气不错", r2.text
+
+
+def test_recognize_two_pass_empty_llm_segment_keeps_previous_text():
+    """两遍模式某一段 LLM 返回空（生产可达）：不得把已累积的文本抹掉"""
+    import util.server.recognize_qwen_ctc as m
+
+    task_id = "task9-two-pass-empty"
+    r1 = m.recognize(
+        _FakeRecognizer(
+            "two_pass",
+            text="你好，世界。",
+            tokens=list("你好世界"),
+            timestamps=[0.0, 0.1, 0.2, 0.3],
+        ),
+        punc_model=None,
+        task=_qwen_task(task_id, is_final=False),
+    )
+    assert r1.text == "你好世界", r1.text
+
+    r2 = m.recognize(
+        _FakeRecognizer("two_pass", text="", tokens=[], timestamps=[]),
+        punc_model=None,
+        task=_qwen_task(task_id),
+    )
+    assert r2.text, "空 LLM 段不得把已累积文本抹成空串"
+    assert len(r2.tokens) == len(r2.timestamps) > 0, (r2.tokens, r2.timestamps)
 
 
 if __name__ == "__main__":
@@ -2165,6 +2297,11 @@ if __name__ == "__main__":
         test_recognize_two_pass_skips_punctuation_model,
         test_recognize_two_pass_mid_segment_skips_punctuation,
         test_recognize_pure_ctc_still_calls_punctuation_model,
+        test_format_text_skipping_punc_keeps_spacing_and_numbers,
+        test_recognize_llm_mode_english_overlap_merges_once,
+        test_recognize_use_punc_follows_mode_constant,
+        test_recognize_llm_mode_clears_stale_tokens_from_cache,
+        test_recognize_two_pass_empty_llm_segment_keeps_previous_text,
     ]
     failed = 0
     for t in tests:

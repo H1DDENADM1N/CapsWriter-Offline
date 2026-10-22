@@ -8,7 +8,7 @@ Qwen3-ASR + CTC 头 语音识别处理模块
     recognizer.decode_stream(stream)
     stream.result.text / .tokens / .timestamps
 
-差异点（三种引擎模式，由 `recognizer.mode` / `recognizer.has_timestamps` 区分）：
+差异点（前 3 条按 `recognizer.mode` / `has_timestamps` 区分三种引擎模式，后 2 条是三模式共有的约束）：
 1. 纯 CTC（`ctc`）：CTC 头**没有标点**，输出纯文本 + 字级时间戳。标点由服务端
    复用的 sherpa-onnx 标点模型补齐（与 Paraformer 共用 ModelPaths.punc_model_dir，
    仅在 Config.format_punc 打开时加载）。
@@ -38,6 +38,7 @@ from loguru import logger as default_logger
 from loguru._logger import Logger
 
 from util.config import ServerConfig as Config
+from util.qwen_ctc.engine import MODE_CTC
 from util.server.chinese_itn import chinese_to_num
 from util.server.classes import Result, Task
 from util.server.format_tools import adjust_space
@@ -182,6 +183,15 @@ def recognize(
             if joined or not result.text:
                 result.text = joined
         else:
+            # 已知限制（规格 §7.2 的取舍）：merge_by_text 的重叠搜索窗口只有
+            # TextMerge.OVERLAP_CHARS(=5) 个字符。中文短重叠（3-4 字）与英文
+            # ≤16 字符的重叠都能正确合并；但英文长句的片段重叠往往超过 5 个
+            # 字符，此时找不到重叠、整段会重复一遍（实测：
+            # "the transcription was accurate and fast" +
+            # "accurate and fast in most cases" →
+            # "…accurate and fastaccurate and fast in most cases"）。
+            # 纯 LLM 模式既没有 token 也没有时间戳，没有更可靠的拼接依据，
+            # 这里宁可重复也不丢字 —— 这是规格认可的退化，不是 bug。
             result.text = merge_by_text(
                 result.text, stream.result.text, logger=_logger
             )
@@ -199,7 +209,7 @@ def recognize(
         #
         # 两遍 / 纯 LLM 的文本由 LLM 生成、自带标点，再过标点模型会出 `。。`，
         # 所以只有纯 CTC 才允许加标点（是否真加仍由 Config.format_punc 决定）。
-        use_punc = recognizer.mode == "ctc"
+        use_punc = recognizer.mode == MODE_CTC
         result.text = format_text(result.text, punc_model, use_punc=use_punc)
         result.text_accu = format_text(result.text_accu, punc_model, use_punc=use_punc)
         result = _results.pop(task.task_id)
