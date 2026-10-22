@@ -535,6 +535,9 @@ class QwenCTCEngine:
 
         llm_text = llm_text or ""
         if not llm_text:
+            # 空串当作静音段：两遍模式丢这一段（CTC 文本也不回退），避免把
+            # CTC 的噪声字混进来。只有 LLM **抛异常** 时才回退 CTC 文本（见上面的
+            # except 分支，规格 §7.6）。
             return "", [], []
 
         duration = len(chunk) / float(SAMPLE_RATE)

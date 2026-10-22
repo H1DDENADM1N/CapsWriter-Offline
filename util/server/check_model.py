@@ -90,6 +90,7 @@ def qwen_mode_errors(
     *,
     ctc_configured: bool = True,
     tokens_configured: bool = True,
+    ctc_file_exists: bool = True,
 ) -> list[str]:
     """
     模式层面（与文件是否存在无关）的硬错误，必须在加载引擎之前就暴露。
@@ -153,6 +154,7 @@ def qwen_mode_errors(
         has_decoder
         and enable_ctc
         and ctc_configured
+        and ctc_file_exists
         and not tokens_configured
         and not (has_frontend and has_backend)
     ):
@@ -193,6 +195,11 @@ def _qwen_plan() -> tuple[dict, list[str]]:
         QwenCTCArgs.enable_ctc,
         ctc_configured=_configured(paths["ctc"]),
         tokens_configured=_configured(paths["tokens"]),
+        # `ctc_file_exists` 让 ⑤ 与引擎对齐：引擎在 CTC 头**文件缺失**时只
+        # WARNING 降级为纯 LLM（不需要词表），此时不该用「两遍模式缺 tokens_path」
+        # 把服务端拦下来 —— 那个报错指向了错误的方向。CTC 头文件缺失本身由下面的
+        # 缺失文件检查报告，文案才是准确的。
+        ctc_file_exists=_configured(paths["ctc"]) and Path(paths["ctc"]).is_file(),
     )
     files = required_qwen_files(
         split_encoder, has_decoder, QwenCTCArgs.enable_ctc, paths

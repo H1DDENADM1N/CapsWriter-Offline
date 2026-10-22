@@ -76,6 +76,7 @@ def init_recognizer(
         )
     elif Config.model == "QwenCTC":
         from util.qwen_ctc import create_qwen_ctc_engine
+        from util.qwen_ctc.engine import MODE_CTC
         from util.server.recognize_qwen_ctc import recognize
 
         recognizer = create_qwen_ctc_engine(
@@ -143,7 +144,9 @@ def init_recognizer(
         # 一条覆盖整段音频的超长字幕。
         log.trace("标点模型载入中...")
         punc_model = None
-        if Config.format_punc:
+        # 只有纯 CTC 会用到标点模型：两遍 / 纯 LLM 的文本由 LLM 生成、自带标点，
+        # recognize() 里也只会对 mode == ctc 传 use_punc=True。不加载可省约 100 MB。
+        if Config.format_punc and recognizer.mode == MODE_CTC:
             console.print("[yellow]标点模型载入中…")
             punc_model = sherpa_onnx.OfflinePunctuation(
                 sherpa_onnx.OfflinePunctuationConfig(

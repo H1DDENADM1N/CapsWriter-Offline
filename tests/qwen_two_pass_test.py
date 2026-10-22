@@ -2207,6 +2207,89 @@ def test_recognize_two_pass_empty_llm_segment_keeps_previous_text():
     assert len(r2.tokens) == len(r2.timestamps) > 0, (r2.tokens, r2.timestamps)
 
 
+def test_save_results_without_tokens_skips_srt():
+    """纯 LLM 模式没有 tokens：文件转录必须跳过 SRT 而不是崩掉整个文件
+
+    最终评审的 Critical：`save_results` 用 `zip(timestamps, tokens)` 造 words，
+    纯 LLM 两个列表都为空 → words=[] → `srt_from_txt.generate_srt_file` 在
+    `min(last_word_idx + 1, len(words) - 1)` 得到 -1 → `words[-1]["start"]`
+    抛 IndexError，被 core_client 外层 except 吞成「处理文件 xx 时出错」，
+    用户拿不到 srt 也不知道原因。
+    """
+    import pathlib
+    import tempfile
+
+    from util.client.transcribe.result_handler import ResultHandler
+    from util.config import ClientConfig as CC
+
+    saved = (
+        CC.file_save_srt,
+        CC.file_save_json,
+        CC.file_save_txt,
+        CC.file_save_merge,
+        CC.use_hot_sub_when_transcribe_file,
+    )
+    tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="qwen-srt-"))
+    media = tmp_dir / "pure_llm.wav"
+    try:
+        CC.file_save_srt = True
+        CC.file_save_json = False
+        CC.file_save_txt = True
+        CC.file_save_merge = False
+        CC.use_hot_sub_when_transcribe_file = False
+        message = {
+            "text": "你好世界，这是纯 LLM 模式。",
+            "text_accu": "你好世界，这是纯 LLM 模式。",
+            "timestamps": [],
+            "tokens": [],
+        }
+        ResultHandler.save_results(media, message)  # 不得抛异常
+        assert not media.with_suffix(".srt").exists(), "无时间戳时不应生成 srt"
+        assert media.with_suffix(".txt").exists(), "txt 仍应照常落盘"
+    finally:
+        CC.file_save_srt, CC.file_save_json, CC.file_save_txt = saved[0], saved[1], saved[2]
+        CC.file_save_merge, CC.use_hot_sub_when_transcribe_file = saved[3], saved[4]
+        for leftover in tmp_dir.iterdir():
+            leftover.unlink()
+        tmp_dir.rmdir()
+
+
+def test_qwen_mode_errors_ignores_missing_tokens_when_ctc_file_absent():
+    """CTC 头**文件缺失**时不该报「两遍模式缺 tokens_path」
+
+    最终评审的 Important-2：check_model 的 ctc_configured 看「路径非空」，
+    引擎看「文件存在且能加载」。CTC 头路径非空但文件没下载、tokens 又留空时，
+    引擎会 WARNING 后按纯 LLM 正常跑，而体检却用一条指向 tokens_path 的错误
+    把服务端拦下来。加了 ctc_file_exists 之后，这种情况交给缺失文件检查去报
+    「CTC 头文件不存在」，文案才是准确的。
+    """
+    from util.server.check_model import qwen_mode_errors
+
+    # CTC 头路径非空但文件不存在 + 有解码器 + 启用 CTC + tokens 留空
+    errors = qwen_mode_errors(
+        False,
+        False,
+        True,
+        True,
+        ctc_configured=True,
+        tokens_configured=False,
+        ctc_file_exists=False,
+    )
+    assert errors == [], f"不该报模式错误（交给缺失文件检查）：{errors}"
+
+    # 文件确实存在时，缺 tokens 仍然是硬错误
+    errors = qwen_mode_errors(
+        False,
+        False,
+        True,
+        True,
+        ctc_configured=True,
+        tokens_configured=False,
+        ctc_file_exists=True,
+    )
+    assert len(errors) == 1 and "tokens_path" in errors[0], errors
+
+
 if __name__ == "__main__":
     # Windows 控制台默认 GBK，输出中文/符号前先切到 UTF-8
     try:
@@ -2302,6 +2385,8 @@ if __name__ == "__main__":
         test_recognize_use_punc_follows_mode_constant,
         test_recognize_llm_mode_clears_stale_tokens_from_cache,
         test_recognize_two_pass_empty_llm_segment_keeps_previous_text,
+        test_save_results_without_tokens_skips_srt,
+        test_qwen_mode_errors_ignores_missing_tokens_when_ctc_file_absent,
     ]
     failed = 0
     for t in tests:

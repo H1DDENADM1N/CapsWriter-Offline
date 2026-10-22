@@ -139,8 +139,15 @@ class ResultHandler:
             text_lines = text_split.splitlines()
             srt_filename = file.with_suffix(".srt")
 
-            srt_from_txt.generate_srt_file(words, text_lines, srt_filename)
-            _logger.debug(f"保存 SRT 字幕: {srt_filename}")
+            if not words:
+                # 纯 LLM 模式（含 0.6B）不产出 tokens，也就没有字级时间戳。
+                # generate_srt_file 拿空 words 会在定行首时间时索引 -1 抛
+                # IndexError，让整个文件转录失败 —— 这里直接跳过硬字幕并说明原因，
+                # txt / json / merge.txt 照常落盘。
+                _logger.info("当前识别模式没有字级时间戳，未生成 SRT 字幕")
+            else:
+                srt_from_txt.generate_srt_file(words, text_lines, srt_filename)
+                _logger.debug(f"保存 SRT 字幕: {srt_filename}")
 
         # 5. 清理中间生成的 txt
         if not Config.file_save_txt and txt_filename.exists():
