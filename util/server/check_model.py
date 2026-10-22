@@ -145,6 +145,23 @@ def qwen_mode_errors(
             "或填写 model_paths.qwen_llm_path 配置解码器改用两遍 / 纯 LLM"
         )
 
+    # ⑤ 两遍模式缺词表：解码器与 CTC 头都配了，引擎就会走 two_pass，而 two_pass
+    #    必须载入 tokens.txt（`engine.py` 只在 ctc/two_pass 时载入词表），留空会让
+    #    引擎初始化抛 `FileNotFoundError`。CTC 头没配时引擎会 WARNING 降级为纯 LLM，
+    #    那时不需要词表，所以这里以「CTC 头已配」为前提。
+    if (
+        has_decoder
+        and enable_ctc
+        and ctc_configured
+        and not tokens_configured
+        and not (has_frontend and has_backend)
+    ):
+        errors.append(
+            "两遍模式必须配置 tokens_path：已配置解码器与 CTC 头即按两遍模式运行，"
+            "需要在 config.toml 的 qwen_ctc_args 段填写 tokens_path（CTC 紧凑词表），"
+            "或把 ctc_onnx_path 留空以纯 LLM 模式运行"
+        )
+
     return errors
 
 

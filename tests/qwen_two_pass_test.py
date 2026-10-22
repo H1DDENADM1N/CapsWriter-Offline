@@ -1761,6 +1761,33 @@ def test_qwen_mode_errors_split_skips_pure_ctc_head_error():
     )
 
 
+def test_qwen_mode_errors_reject_two_pass_without_tokens():
+    """解码器 + CTC 头都配了就是两遍模式，词表留空会让引擎 load_tokens("") 抛异常
+
+    `required_qwen_files` 对未配置项是跳过的，所以这条只能由模式错误兜住；
+    引擎侧 `util/qwen_ctc/engine.py` 只在 ctc/two_pass 时载入词表。
+    """
+    from util.server.check_model import qwen_mode_errors
+
+    errors = qwen_mode_errors(
+        False, False, True, True, ctc_configured=True, tokens_configured=False
+    )
+    assert any("tokens_path" in e for e in errors), errors
+    assert any("两遍" in e for e in errors), errors
+
+
+def test_qwen_mode_errors_accepts_two_pass_without_ctc_head():
+    """两遍模式缺 CTC 头是合法的：引擎 WARNING 降级为纯 LLM，此时不需要词表"""
+    from util.server.check_model import qwen_mode_errors
+
+    assert (
+        qwen_mode_errors(
+            False, False, True, True, ctc_configured=False, tokens_configured=False
+        )
+        == []
+    ), "CTC 头没配 = 引擎降级纯 LLM，不该要求词表，也不该报错"
+
+
 def _stub_qwen_ctc_args(**overrides):
     """QwenCTCArgs 替身：默认是「老配置形态」的纯 CTC，可任意覆盖字段"""
     fields = dict(
@@ -1909,6 +1936,8 @@ if __name__ == "__main__":
         test_qwen_mode_errors_split_missing_decoder_precedes_ctc_disabled,
         test_qwen_mode_errors_reject_pure_ctc_without_ctc_head,
         test_qwen_mode_errors_split_skips_pure_ctc_head_error,
+        test_qwen_mode_errors_reject_two_pass_without_tokens,
+        test_qwen_mode_errors_accepts_two_pass_without_ctc_head,
         test_qwen_plan_paths_come_from_qwen_ctc_args,
         test_qwen_plan_reports_pure_ctc_without_ctc_head,
         test_qwen_download_commands_are_verbatim_from_spec,
