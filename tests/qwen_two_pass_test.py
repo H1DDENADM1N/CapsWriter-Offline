@@ -42,6 +42,18 @@ Task 5 覆盖 `util/qwen_ctc/llm.py`（Qwen3-ASR LLM 二遍解码器）：
 20. `warmup()` 正常路径不抛异常，且同一段音频连续两次生成结果一致（KV 清理生效）；
 21. `warmup()` 遇真实错误时先记 ERROR 日志再原样抛出，绝不吞错（规格 §12.2）。
 
+Task 6 覆盖 `util/qwen_ctc/engine.py`（三模式编排）：
+22. 模式判定矩阵（规格 §7.2 每一行）+ 非法组合必须抛 `ValueError`；且 0.6B 前端的
+    「无 CTC 头」检查必须先于「纯 CTC」分支（否则 `(True, False, True, False)` 会被
+    误判成纯 CTC）；
+23. `QwenCTCConfig` 的 7 个新字段默认值，以及 `create_qwen_ctc_engine` 暴露的 7 个
+    关键字参数（全部有默认值）；
+24. 引擎端到端三模式：纯 CTC / 两遍 / 纯 LLM 的 `mode`、`has_timestamps` 与输出形态
+    （两遍 tokens 逐字符、时间戳单调且与 tokens 等长；纯 LLM 的 tokens/timestamps 为空）；
+25. 静音不崩、>30s 长音频切块偏移连续、同一引擎连续两次识别结果一致；
+26. 0.6B 拆分 encoder 无 CTC 头时自动降级纯 LLM（能正常启动）；解码器维度不符、
+    0.6B 只配一端、纯 CTC 缺 CTC 头都必须显式抛错。
+
 需要模型文件 models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf
 （0.6B 用例需要 models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
 """
@@ -50,6 +62,7 @@ import contextlib
 import logging
 import sys
 import tempfile
+import time
 import wave
 from pathlib import Path
 
@@ -73,6 +86,12 @@ AUDIO_ZH = (
     ROOT
     / "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/test_wavs/zh.wav"
 )
+AUDIO_EN = (
+    ROOT
+    / "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/test_wavs/en.wav"
+)
+CTC_17B = MODEL_DIR_17B / "Qwen3-ASR-CTC.fp16.onnx"
+TOKENS_17B = MODEL_DIR_17B / "tokens.txt"
 
 
 @contextlib.contextmanager
@@ -810,6 +829,309 @@ def test_llm_warmup_propagates_real_errors():
         dec.close()
 
 
+# --------------------------------------------------------------------------
+# Task 6: engine.py —— 三模式编排（纯 CTC / 两遍 / 纯 LLM）
+# --------------------------------------------------------------------------
+
+_NEW_CONFIG_FIELDS = (
+    "decoder_gguf_path",
+    "encoder_frontend_path",
+    "encoder_backend_path",
+    "enable_ctc",
+    "llm_n_ctx",
+    "llm_n_threads",
+    "llm_n_predict",
+)
+
+
+def _engine_models_available() -> bool:
+    """纯 CTC / 两遍都能跑：融合 encoder + CTC 头 + tokens + 测试音频"""
+    return _models_available() and CTC_17B.is_file() and TOKENS_17B.is_file()
+
+
+def _long_audio(min_sec: float = 31.0) -> np.ndarray:
+    """把 zh.wav 重复拼到 > min_sec 秒，只为跨过 30 s 切段边界"""
+    audio = _read_wav(AUDIO_ZH)
+    reps = max(1, int(np.ceil(min_sec * 16000.0 / max(len(audio), 1))))
+    return np.concatenate([audio] * reps).astype(np.float32)
+
+
+def _make_engine(
+    decoder=DECODER_17B,
+    enable_ctc: bool = True,
+    encoder=ENCODER_17B,
+    ctc=CTC_17B,
+    frontend="",
+    backend="",
+    **kwargs,
+):
+    """按 create_qwen_ctc_engine 的真实关键字建引擎（decoder 传空串 = 纯 CTC）"""
+    from util.qwen_ctc.engine import create_qwen_ctc_engine
+
+    return create_qwen_ctc_engine(
+        encoder_onnx_path=str(encoder),
+        ctc_onnx_path=str(ctc) if ctc else "",
+        tokens_path=str(TOKENS_17B),
+        preprocessor_path=str(PREPROCESSOR_DIR),
+        decoder_gguf_path=str(decoder) if decoder else "",
+        encoder_frontend_path=str(frontend) if frontend else "",
+        encoder_backend_path=str(backend) if backend else "",
+        enable_ctc=enable_ctc,
+        num_threads=6,
+        **kwargs,
+    )
+
+
+def test_engine_config_exposes_new_fields_and_factory_kwargs():
+    """7 个新配置字段要有默认值，create_qwen_ctc_engine 要原样暴露这 7 个关键字"""
+    import inspect
+
+    from util.qwen_ctc.engine import QwenCTCConfig, create_qwen_ctc_engine
+
+    cfg = QwenCTCConfig(
+        encoder_onnx_path="e.onnx",
+        ctc_onnx_path="c.onnx",
+        tokens_path="tokens.txt",
+        preprocessor_path="pp",
+    )
+    assert cfg.decoder_gguf_path == ""
+    assert cfg.encoder_frontend_path == ""
+    assert cfg.encoder_backend_path == ""
+    assert cfg.enable_ctc is True
+    assert cfg.llm_n_ctx == 4096
+    assert cfg.llm_n_threads == 6
+    assert cfg.llm_n_predict == 256
+
+    params = inspect.signature(create_qwen_ctc_engine).parameters
+    for name in _NEW_CONFIG_FIELDS:
+        assert name in params, f"create_qwen_ctc_engine 缺少关键字参数 {name}"
+        assert params[name].default is not inspect.Parameter.empty, f"{name} 必须有默认值"
+
+
+def test_engine_resolve_mode_matrix():
+    """规格 §7.2 的模式矩阵逐行断言，顺序（split 检查先行）必须错不开"""
+    from util.qwen_ctc.engine import resolve_mode
+
+    assert resolve_mode(False, True, True, True) == "two_pass"
+    assert resolve_mode(False, True, True, False) == "llm", "CTC 头不可用时降级纯 LLM"
+    assert resolve_mode(False, True, False, False) == "llm"
+    assert resolve_mode(False, True, False, True) == "llm", "enable_ctc=False 时 CTC 头不该被用"
+    assert resolve_mode(False, False, True, True) == "ctc"
+    assert resolve_mode(True, True, True, False) == "llm"
+    assert resolve_mode(True, True, False, True) == "llm"
+    assert resolve_mode(True, True, True, True) == "llm", "0.6B 拆分 encoder 没有 CTC 头，必须降级"
+
+
+def test_engine_resolve_mode_rejects_impossible_combos():
+    """没有任何推理路径的组合必须抛 ValueError，且信息带可操作的提示"""
+    from util.qwen_ctc.engine import resolve_mode
+
+    try:
+        resolve_mode(True, False, True, False)
+    except ValueError as exc:
+        msg = str(exc)
+        assert "0.6B" in msg and "CTC" in msg, f"0.6B 缺解码器应提示没有 CTC 头：{msg}"
+    else:
+        raise AssertionError("0.6B 拆分 encoder 没配解码器时必须抛错")
+
+    try:
+        resolve_mode(False, False, False, False)
+    except ValueError as exc:
+        assert "未配置解码器" in str(exc), f"应提示未配置解码器：{exc}"
+    else:
+        raise AssertionError("既没有解码器又禁用 CTC 时必须抛错")
+
+
+def test_engine_modes_end_to_end():
+    """纯 CTC / 两遍 / 纯 LLM 的 mode、has_timestamps 与输出形态"""
+    if not _engine_models_available() or not DECODER_17B.is_file():
+        print("  (跳过：缺少 CTC 头 / 解码器 / tokens / 测试音频)", flush=True)
+        return
+
+    audio = _read_wav(AUDIO_ZH)
+
+    started = time.perf_counter()
+    eng = _make_engine(decoder="", enable_ctc=True)
+    try:
+        assert eng.mode == "ctc", f"纯 CTC 模式判定错了：{eng.mode}"
+        assert eng.has_timestamps is True
+        res = eng.transcribe(audio)
+        assert res.text, "纯 CTC 必须出文本"
+        assert len(res.tokens) == len(res.timestamps)
+        assert "".join(res.tokens) == res.text
+        print(f"  [ctc] {time.perf_counter() - started:.2f}s 文本: {res.text!r}", flush=True)
+    finally:
+        eng.cleanup()
+
+    started = time.perf_counter()
+    eng = _make_engine(decoder=DECODER_17B, enable_ctc=True)
+    try:
+        assert eng.mode == "two_pass", f"两遍模式判定错了：{eng.mode}"
+        assert eng.has_timestamps is True
+        res = eng.transcribe(audio)
+        assert res.text, "两遍模式必须出文本"
+        assert len(res.tokens) == len(res.text), "两遍模式 tokens 必须是逐字符拆分"
+        assert "".join(res.tokens) == res.text
+        assert len(res.timestamps) == len(res.tokens)
+        assert all(
+            res.timestamps[i] <= res.timestamps[i + 1]
+            for i in range(len(res.timestamps) - 1)
+        ), "两遍模式时间戳必须单调不减"
+        print(f"  [two_pass] {time.perf_counter() - started:.2f}s 文本: {res.text!r}", flush=True)
+    finally:
+        eng.cleanup()
+
+    started = time.perf_counter()
+    eng = _make_engine(decoder=DECODER_17B, enable_ctc=False)
+    try:
+        assert eng.mode == "llm", f"纯 LLM 模式判定错了：{eng.mode}"
+        assert eng.has_timestamps is False
+        res = eng.transcribe(audio)
+        assert res.text, "纯 LLM 必须出文本"
+        assert res.tokens == [] and res.timestamps == [], "纯 LLM 不带时间戳"
+        print(f"  [llm] {time.perf_counter() - started:.2f}s 文本: {res.text!r}", flush=True)
+    finally:
+        eng.cleanup()
+
+
+def test_engine_silence_does_not_crash():
+    """静音段没有 CTC 锚点，两遍模式也不能崩（时间戳退化由 align 兜底）"""
+    if not _engine_models_available() or not DECODER_17B.is_file():
+        print("  (跳过：缺少 CTC 头 / 解码器 / tokens)", flush=True)
+        return
+
+    eng = _make_engine(decoder=DECODER_17B, enable_ctc=True)
+    try:
+        assert eng.mode == "two_pass"
+        res = eng.transcribe(np.zeros(16000, np.float32))
+        assert isinstance(res.text, str)
+        assert len(res.tokens) == len(res.timestamps)
+        assert "".join(res.tokens) == res.text
+    finally:
+        eng.cleanup()
+
+
+def test_engine_long_audio_offsets_are_continuous():
+    """>30 s 音频的第二段必须整体后移 30 s（两遍模式的 offset 也要加对）"""
+    if not _engine_models_available() or not DECODER_17B.is_file():
+        print("  (跳过：缺少 CTC 头 / 解码器 / tokens / 测试音频)", flush=True)
+        return
+
+    audio = _long_audio(31.0)
+    assert len(audio) / 16000.0 > 30.0
+    eng = _make_engine(decoder=DECODER_17B, enable_ctc=True)
+    try:
+        res = eng.transcribe(audio)
+        assert res.text, "两遍模式长音频必须出文本"
+        assert len(res.tokens) == len(res.timestamps)
+        assert max(res.timestamps) > 30.0, f"第二段起始时间没加上偏移：max={max(res.timestamps)}"
+        assert all(
+            res.timestamps[i] <= res.timestamps[i + 1]
+            for i in range(len(res.timestamps) - 1)
+        ), "跨段拼起来的时间戳也必须单调不减"
+    finally:
+        eng.cleanup()
+
+
+def test_engine_repeat_calls_are_stable():
+    """同一个引擎连着识别两次必须一致（两遍模式的 KV 缓存要清干净）"""
+    if not _engine_models_available() or not DECODER_17B.is_file():
+        print("  (跳过：缺少 CTC 头 / 解码器 / tokens / 测试音频)", flush=True)
+        return
+
+    audio = _read_wav(AUDIO_ZH)
+    eng = _make_engine(decoder=DECODER_17B, enable_ctc=True)
+    try:
+        first = eng.transcribe(audio)
+        second = eng.transcribe(audio)
+        assert first.text == second.text, f"连续两次识别不一致：\n{first.text!r}\n{second.text!r}"
+        assert first.timestamps == second.timestamps
+    finally:
+        eng.cleanup()
+
+
+def test_engine_06b_without_ctc_head_degrades_to_llm():
+    """0.6B 的 encoder 输出 1024 维、没有匹配的 CTC 头 → 必须降级纯 LLM 而不是启动失败"""
+    if not (
+        DECODER_06B.is_file()
+        and _split_models_available()
+        and AUDIO_ZH.is_file()
+    ):
+        print("  (跳过：缺少 0.6B 解码器 / 拆分 encoder / 测试音频)", flush=True)
+        return
+
+    eng = _make_engine(
+        decoder=DECODER_06B,
+        encoder=ENCODER_17B,
+        frontend=ENCODER_06B_FRONTEND,
+        backend=ENCODER_06B_BACKEND,
+        ctc=CTC_17B,
+        enable_ctc=True,
+    )
+    try:
+        assert eng.mode == "llm", f"0.6B 缺 CTC 头必须降级纯 LLM，实际 {eng.mode}"
+        assert eng.has_timestamps is False
+        res = eng.transcribe(_read_wav(AUDIO_ZH))
+        assert res.text, "降级后的纯 LLM 仍必须出文本"
+        assert res.tokens == [] and res.timestamps == []
+        print(f"  [0.6B→llm] 文本: {res.text!r}", flush=True)
+    finally:
+        eng.cleanup()
+
+
+def test_engine_rejects_decoder_encoder_dim_mismatch():
+    """0.6B(1024) encoder 配 1.7B(2048) 解码器必须硬失败，信息要带两侧维度"""
+    if not (DECODER_17B.is_file() and _split_models_available()):
+        print("  (跳过：缺少 0.6B 拆分 encoder / 1.7B 解码器)", flush=True)
+        return
+
+    try:
+        _make_engine(
+            decoder=DECODER_17B,
+            enable_ctc=False,
+            frontend=ENCODER_06B_FRONTEND,
+            backend=ENCODER_06B_BACKEND,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        assert "2048" in msg and "1024" in msg, f"维度冲突信息要带两侧数值：{msg}"
+    else:
+        raise AssertionError("解码器 n_embd ≠ encoder 输出维度时必须抛 ValueError")
+
+
+def test_engine_rejects_half_split_encoder():
+    """0.6B 前后端只配一端 = 无法装配 encoder，必须硬失败"""
+    if not _split_models_available():
+        print("  (跳过：缺少 0.6B 拆分 encoder)", flush=True)
+        return
+
+    try:
+        _make_engine(
+            decoder="",
+            enable_ctc=True,
+            frontend=ENCODER_06B_FRONTEND,
+            backend="",
+        )
+    except ValueError as exc:
+        assert "成对" in str(exc) or "前后端" in str(exc), f"应提示前后端要成对配置：{exc}"
+    else:
+        raise AssertionError("只配一半 0.6B encoder 时必须抛 ValueError")
+
+
+def test_engine_pure_ctc_requires_ctc_head():
+    """纯 CTC 模式没有 CTC 头就没有推理路径，必须启动时硬失败"""
+    if not _models_available():
+        print("  (跳过：缺少融合 encoder / 测试音频)", flush=True)
+        return
+
+    try:
+        _make_engine(decoder="", enable_ctc=True, ctc="")
+    except ValueError as exc:
+        assert "CTC" in str(exc), f"应提示纯 CTC 模式缺少 CTC 头：{exc}"
+    else:
+        raise AssertionError("纯 CTC 模式缺 CTC 头时必须抛 ValueError")
+
+
 def _write_gguf(path_dir: Path, name: str, tensor_name: str, tensor: np.ndarray):
     """写一个只含单个张量的最小 GGUF（用于构造「没有 token_embd.weight」的情形）"""
     import gguf
@@ -902,6 +1224,17 @@ if __name__ == "__main__":
         test_llm_generates_transcript_06b,
         test_llm_warmup_and_repeat_generate_are_stable,
         test_llm_warmup_propagates_real_errors,
+        test_engine_config_exposes_new_fields_and_factory_kwargs,
+        test_engine_resolve_mode_matrix,
+        test_engine_resolve_mode_rejects_impossible_combos,
+        test_engine_modes_end_to_end,
+        test_engine_silence_does_not_crash,
+        test_engine_long_audio_offsets_are_continuous,
+        test_engine_repeat_calls_are_stable,
+        test_engine_06b_without_ctc_head_degrades_to_llm,
+        test_engine_rejects_decoder_encoder_dim_mismatch,
+        test_engine_rejects_half_split_encoder,
+        test_engine_pure_ctc_requires_ctc_head,
     ]
     failed = 0
     for t in tests:

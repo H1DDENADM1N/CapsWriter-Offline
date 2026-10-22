@@ -1,25 +1,46 @@
 # coding: utf-8
 """
-Qwen3-ASR + CTC 头 推理引擎
+Qwen3-ASR 推理引擎：纯 CTC / 两遍 / 纯 LLM 三模式编排
 
-流程：音频 → Whisper 特征 → Qwen3-ASR 编码器（ONNX）→ CTC 头（ONNX）
-      → 贪心折叠 → 字节级反解 → 文本 + 字级时间戳
+数据流（按模式）：
 
-本模块直接对应 Qwen3-ASR-CTC-GGUF 的 `Qwen3CtcEngine`，但去掉了 llama.cpp
-二遍部分（纯 CTC 首遍），并把三个「静默出错」的坑固化在实现里：
+- ``ctc``      ：音频 → Whisper 特征 → Qwen3-ASR 编码器（ONNX）→ CTC 头（ONNX）
+                 → 贪心折叠 → 字节级反解 → 文本 + 字级时间戳
+- ``two_pass`` ：同一次编码器输出既喂 CTC 首遍（选字符 + 起始帧），又喂 LLM 二遍
+                 （出完整文本含标点），两者用 NW 对齐合成「LLM 文本 + 字级时间戳」
+- ``llm``      ：编码器输出直接喂 LLM 二遍，只有文本、没有时间戳
 
-1. **帧率是 13 fps，不是 50**：有效输出帧数 = `full*13 + ceil(leave/8)`，
-   其中 `full, leave = divmod(mel_frames, 100)`。写成 T/8 会得到完全错误的
-   时间轴（不报错，只是时间戳对不上）。
-2. **特征不补到 30 秒**：特征提取用 `padding=False` 取真实长度，再自己
-   零填到导出时的 3000 帧桶，并把真实帧数作为 `feature_length` 传进去。
-   直接让特征提取器补齐会丢掉「真实长度」这个信号。
-3. **反解走字节**：`tokens.txt` 存的是 base64 原始字节，一个中文字符可能
-   横跨多个 token，必须先拼字节再整体 decode。
+模式不是配置直接决定的：CTC 头可能不存在，也可能维度不匹配（0.6B 的编码器
+输出 1024 维，没有任何 CTC 头）。所以 `initialize()` 先如实探测「CTC 头可用性」，
+再交给 `resolve_mode()` 按规格 §7.2 的矩阵判定，并把结果固化到 `mode` /
+`has_timestamps` 两个属性上。`enable_ctc` 只是**请求**而非门槛：请求了两遍但
+CTC 头不可用时降级为纯 LLM 并打 WARNING，不是启动失败。
+
+加载顺序（规格 §5.3，顺序本身是正确性的一部分）：
+
+1. llama.cpp 运行时（DLL + backend）——必须在任何 torch/transformers 导入之前；
+2. 解码器 GGUF + LlamaContext；
+3. ONNX 编码器（这一步才惰性 import transformers 的 WhisperFeatureExtractor）；
+4. ONNX CTC 头；
+5. 维度校验 + 模式判定；
+6. 解码器预热（把 ~2s 的首帧开销挪到启动阶段，失败向上抛、绝不吞掉）。
+
+本模块保留规格里三个「静默出错」的坑的固化实现：
+
+1. **帧率是 13 fps，不是 50**：有效输出帧数 = `full*13 + ceil(leave/8)`。
+2. **特征不补到 30 秒**：`padding=False` 取真实长度，再零填到 3000 帧桶。
+3. **反解走字节**：`tokens.txt` 存的是 base64 原始字节，一个中文字符可能横跨
+   多个 token，必须先拼字节再整体 decode。
 
 另外：**编码器是按 30 秒桶导出的**，超过 30 秒的音频必须按 30 秒切段，
 否则 WhisperFeatureExtractor 会静默截断（特征提取器的 padding 行为）。
 """
+
+import os
+
+# 必须在任何 onnxruntime 导入之前设置：Windows 上 onnxruntime 与 llama.cpp
+# 各带一份 OpenMP 运行时，重复载入会让进程直接 abort（不是抛异常）。
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import time
 from dataclasses import dataclass
@@ -30,10 +51,13 @@ import numpy as np
 from loguru import logger as default_logger
 from loguru._logger import Logger
 
+from . import llama_cpp
+from .align import align_ctc_to_llm
 from .encoder import (
     FRAME_RATE_HZ,
     MEL_FRAMES,
     FusedEncoder,
+    SplitEncoder,
     resolve_providers,
     valid_frames,
 )
@@ -45,15 +69,25 @@ FRAME_SEC = 1.0 / FRAME_RATE_HZ
 
 SEGMENT_SEC = 30.0
 
+SAMPLE_RATE = 16000
+
 # CTC 尖峰式发射的系统性偏置（对 MFA 词级真值实测：起点晚 100ms、终点早 78.5ms）
 DEFAULT_START_BIAS = 0.100
 DEFAULT_END_BIAS = 0.0785
 
+# 三种推理模式（resolve_mode 的返回值，也是 engine.mode 的取值域）
+MODE_CTC = "ctc"
+MODE_TWO_PASS = "two_pass"
+MODE_LLM = "llm"
+MODES = (MODE_CTC, MODE_TWO_PASS, MODE_LLM)
+
 
 @dataclass
 class QwenCTCConfig:
-    """Qwen3-CTC 引擎配置"""
+    """Qwen3-ASR 引擎配置（纯 CTC / 两遍 / 纯 LLM 共用）"""
 
+    # 编码器：融合（1.7B）用 encoder_onnx_path；
+    # 0.6B 拆分版用 encoder_frontend_path + encoder_backend_path（必须成对）
     encoder_onnx_path: str
     ctc_onnx_path: str
     tokens_path: str
@@ -66,62 +100,282 @@ class QwenCTCConfig:
     start_bias: float = DEFAULT_START_BIAS
     end_bias: float = DEFAULT_END_BIAS
     verbose: bool = False
+    # 解码器（GGUF）。空 = 纯 CTC 模式；非空 = 两遍（CTC 头可用）或纯 LLM
+    decoder_gguf_path: str = ""
+    # 0.6B 拆分编码器（两者都非空才启用；只配一端是硬错误）
+    encoder_frontend_path: str = ""
+    encoder_backend_path: str = ""
+    # 是否请求 CTC 首遍（只有配了解码器时才有意义；CTC 头不可用会自动降级）
+    enable_ctc: bool = True
+    llm_n_ctx: int = 4096
+    llm_n_threads: int = 6
+    llm_n_predict: int = 256
+
+
+def resolve_mode(
+    split_encoder: bool,
+    has_decoder: bool,
+    enable_ctc: bool,
+    ctc_usable: bool,
+) -> str:
+    """
+    按规格 §7.2 的模式矩阵判定推理模式。
+
+    **判定顺序本身是语义的一部分**，不能重排：
+
+    1. 0.6B 拆分编码器没有 CTC 头，没配解码器就没有任何推理路径 —— 这个检查
+       必须排在最前面，否则 ``(split=True, has_decoder=False, ctc_usable=False)``
+       会被后面的「纯 CTC」分支误判成一个能跑的模式；
+    2. 既没解码器又禁用 CTC，同样没有推理路径；
+    3. 有解码器 + 请求两遍 + CTC 头可用 → ``two_pass``；
+    4. 有解码器（其余情况）→ ``llm``；
+    5. 没解码器但启用 CTC → ``ctc``。
+
+    Args:
+        split_encoder: 是否使用 0.6B 前后端拆分编码器
+        has_decoder: 是否成功加载了 LLM 解码器
+        enable_ctc: 配置里的 `enable_ctc`
+        ctc_usable: CTC 头文件存在且输入维度与编码器输出维度一致
+
+    Returns:
+        ``"ctc"`` / ``"two_pass"`` / ``"llm"``
+
+    Raises:
+        ValueError: 组合下没有任何推理路径
+    """
+    if split_encoder:
+        # 0.6B 编码器输出 1024 维，没有任何 CTC 头与之匹配：即便有文件、
+        # 维度凑巧相等，也一律按不可用处理
+        ctc_usable = False
+
+    if split_encoder and not has_decoder:
+        raise ValueError(
+            "0.6B 编码器（前后端拆分）没有 CTC 头，必须配置解码器"
+            "（decoder_gguf_path），否则无推理路径"
+        )
+
+    if not has_decoder and not enable_ctc:
+        raise ValueError(
+            "既未配置解码器（decoder_gguf_path 为空），又禁用了 CTC"
+            "（enable_ctc=False），无推理路径"
+        )
+
+    if has_decoder and enable_ctc and ctc_usable:
+        return MODE_TWO_PASS
+
+    if has_decoder:
+        return MODE_LLM
+
+    if enable_ctc:
+        return MODE_CTC
+
+    # 理论上不可达（上面的分支已覆盖全部组合），留作防御
+    raise ValueError(
+        f"无法判定推理模式: split_encoder={split_encoder}, has_decoder={has_decoder}, "
+        f"enable_ctc={enable_ctc}, ctc_usable={ctc_usable}"
+    )
+
+
+def _session_input_dim(session) -> Optional[int]:
+    """ONNX 会话首个输入的最后一维；动态/未知维度返回 None"""
+    try:
+        return int(session.get_inputs()[0].shape[-1])
+    except (IndexError, TypeError, ValueError):
+        return None
 
 
 class QwenCTCEngine:
     """
-    Qwen3-ASR + CTC 头 推理引擎
+    Qwen3-ASR 推理引擎（纯 CTC / 两遍 / 纯 LLM）
 
     对外接口与 sherpa-onnx 兼容：
         engine.create_stream() -> stream
         stream.accept_waveform(sample_rate, audio)
         engine.decode_stream(stream)
         stream.result.text / .tokens / .timestamps
+
+    模式相关属性（`initialize()` 之后才有意义）：
+        engine.mode            ∈ {"ctc", "two_pass", "llm"}
+        engine.has_timestamps  == mode in ("ctc", "two_pass")
     """
 
     FRAME_SEC = FRAME_SEC
+    SAMPLE_RATE = SAMPLE_RATE
 
     def __init__(self, config: QwenCTCConfig, logger: Optional[Logger] = None):
         self.config = config
         self.logger = logger if logger is not None else default_logger
         self._enc = None
         self._ctc = None
+        self._llm = None
+        self._is_split = False
+        self.mode: str = ""
+        self.has_timestamps: bool = False
         self.id2bytes: Dict[int, bytes] = {}
 
     # ── 初始化 ────────────────────────────────────────────────────────
     def initialize(self) -> "QwenCTCEngine":
-        """加载 ONNX 会话、特征提取器与紧凑词表"""
-        import onnxruntime as ort
+        """
+        按规格 §5.3 的顺序装配引擎并判定模式。
 
-        providers = resolve_providers(ort, self.config.provider)
+        任何一步失败都会把已建好的资源关掉再原样抛出（不吞错）。
+        """
+        if self._enc is not None:
+            return self
 
-        so = ort.SessionOptions()
-        so.intra_op_num_threads = self.config.num_threads or 0
-        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        try:
+            self._initialize_impl()
+        except BaseException:
+            # 半初始化状态下不能把句柄留着：关掉再抛，错误照旧向上传播
+            self.cleanup()
+            raise
+        return self
 
-        self._ctc = ort.InferenceSession(
-            self.config.ctc_onnx_path,
-            sess_options=so,
-            providers=providers,
+    def _initialize_impl(self) -> None:
+        cfg = self.config
+
+        # ① llama.cpp 运行时（DLL + backend_init）：必须早于 transformers，
+        #    也必须早于解码器 GGUF 的加载
+        llama_cpp.init_lib()
+
+        # ② 解码器（可选）：纯 CTC 模式不碰 GGUF，省掉 1~2 GB 的加载
+        if cfg.decoder_gguf_path:
+            if Path(cfg.decoder_gguf_path).is_file():
+                # 惰性导入：纯 CTC 模式完全不加载 llm.py 的依赖链
+                from .llm import QwenLLMDecoder
+
+                self._llm = QwenLLMDecoder(
+                    cfg.decoder_gguf_path,
+                    n_ctx=cfg.llm_n_ctx,
+                    n_threads=cfg.llm_n_threads,
+                    n_predict=cfg.llm_n_predict,
+                    verbose=cfg.verbose,
+                    logger=self.logger,
+                )
+            else:
+                # 规格 §7.4 把「配了路径但文件不存在」列为硬错误，但那是
+                # check_model.py 的职责（启动前的配置体检）；引擎里按 best-effort
+                # 处理，避免用户把别人机器的配置抄过来就再也起不来
+                self.logger.warning(
+                    f"解码器 GGUF 不存在，已忽略（将不启用 LLM）: {cfg.decoder_gguf_path}"
+                )
+
+        # ③ 编码器：这一步才真正 import transformers（encoder.py 内惰性导入），
+        #    必须排在 llama.cpp 之后
+        self._enc = self._build_encoder()
+
+        # ④ CTC 头（可选）：文件存在就建会话，可用性留到 ⑤ 用维度判定
+        ctc_path = cfg.ctc_onnx_path or ""
+        if ctc_path and Path(ctc_path).is_file():
+            import onnxruntime as ort
+
+            providers = resolve_providers(ort, cfg.provider)
+            so = ort.SessionOptions()
+            so.intra_op_num_threads = cfg.num_threads or 0
+            so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            self._ctc = ort.InferenceSession(
+                ctc_path, sess_options=so, providers=providers
+            )
+        elif ctc_path:
+            self.logger.warning(f"CTC 头不存在，已忽略: {ctc_path}")
+
+        # ⑤ 维度校验 + CTC 头可用性
+        enc_dim = self._enc.output_dim
+
+        if self._llm is not None and self._llm.n_embd != enc_dim:
+            raise ValueError(
+                f"解码器维度 {self._llm.n_embd} ≠ 编码器输出维度 {enc_dim}："
+                f"decoder_gguf_path（{Path(cfg.decoder_gguf_path).name}）与编码器配置不匹配"
+            )
+
+        ctc_dim = _session_input_dim(self._ctc) if self._ctc is not None else None
+        if self._ctc is not None and self._is_split:
+            # 0.6B 的 1024 维输出没有配套 CTC 头；文件维度恰好为 1024 也不可信
+            self.logger.warning(
+                "0.6B 拆分编码器没有配套的 CTC 头，CTC 首遍已禁用"
+            )
+            self._ctc = None
+        elif self._ctc is not None and ctc_dim != enc_dim:
+            self.logger.warning(
+                f"CTC 头输入维度 {ctc_dim} ≠ 编码器输出维度 {enc_dim}，CTC 首遍已禁用"
+            )
+            self._ctc = None
+
+        ctc_usable = self._ctc is not None
+
+        # ⑥ 模式判定（顺序语义见 resolve_mode 的 docstring）
+        has_decoder = self._llm is not None
+        self.mode = resolve_mode(
+            split_encoder=self._is_split,
+            has_decoder=has_decoder,
+            enable_ctc=cfg.enable_ctc,
+            ctc_usable=ctc_usable,
         )
-        # 编码器（含 WhisperFeatureExtractor 的惰性 import）统一走 encoder.py
-        self._enc = FusedEncoder(
-            self.config.encoder_onnx_path,
-            self.config.preprocessor_path,
-            num_threads=self.config.num_threads,
-            provider=self.config.provider,
-            mel_frames=self.config.mel_frames,
+        self.has_timestamps = self.mode in (MODE_CTC, MODE_TWO_PASS)
+
+        # 纯 CTC 模式没有 CTC 头 = 没有推理路径，必须启动时就硬失败
+        # （而不是等第一段音频进来才抛 KeyError/AttributeError）
+        if self.mode == MODE_CTC and self._ctc is None:
+            raise ValueError(
+                "纯 CTC 模式缺少可用的 CTC 头（ctc_onnx_path 不存在或维度不符），"
+                "无推理路径"
+            )
+
+        # 只有 CTC 首遍会用到紧凑词表；纯 LLM 模式不该因为 tokens 缺失而起不来
+        if self.mode in (MODE_CTC, MODE_TWO_PASS):
+            self.id2bytes = load_tokens(cfg.tokens_path)
+
+        # ⑦ 预热：失败向上抛（真实错误不能吞），把首帧开销挪到启动阶段
+        if self._llm is not None:
+            self._llm.warmup()
+
+        ctc_desc = Path(cfg.ctc_onnx_path).name if self._ctc is not None else "无"
+        llm_desc = Path(cfg.decoder_gguf_path).name if self._llm is not None else "无"
+        self.logger.info(
+            f"Qwen3-ASR 引擎载入完成: mode={self.mode}, "
+            f"encoder={'split' if self._is_split else 'fused'}, "
+            f"encoder_dim={enc_dim}, "
+            f"vocab={len(self.id2bytes)}, ctc={ctc_desc}, llm={llm_desc}, "
+            f"has_timestamps={self.has_timestamps}"
+        )
+
+    def _build_encoder(self):
+        """融合（1.7B）或前后端拆分（0.6B）编码器；只配一端是硬错误"""
+        cfg = self.config
+        frontend = cfg.encoder_frontend_path or ""
+        backend = cfg.encoder_backend_path or ""
+
+        if frontend and backend:
+            for path in (frontend, backend):
+                if not Path(path).is_file():
+                    raise ValueError(f"0.6B 编码器文件不存在: {path}")
+            self._is_split = True
+            return SplitEncoder(
+                frontend,
+                backend,
+                cfg.preprocessor_path,
+                num_threads=cfg.num_threads,
+                provider=cfg.provider,
+                logger=self.logger,
+            )
+
+        if frontend or backend:
+            raise ValueError(
+                "0.6B 编码器前后端必须成对配置：encoder_frontend_path 与 "
+                "encoder_backend_path 只配了其中一个"
+            )
+
+        if not Path(cfg.encoder_onnx_path).is_file():
+            raise ValueError(f"编码器 ONNX 不存在: {cfg.encoder_onnx_path}")
+
+        return FusedEncoder(
+            cfg.encoder_onnx_path,
+            cfg.preprocessor_path,
+            num_threads=cfg.num_threads,
+            provider=cfg.provider,
+            mel_frames=cfg.mel_frames,
             logger=self.logger,
         )
-        self.id2bytes = load_tokens(self.config.tokens_path)
-
-        self.logger.info(
-            f"Qwen3-CTC 引擎载入完成: encoder={Path(self.config.encoder_onnx_path).name}, "
-            f"ctc={Path(self.config.ctc_onnx_path).name}, "
-            f"vocab={len(self.id2bytes)}, encoder_dim={self._enc.output_dim}, "
-            f"providers={providers}"
-        )
-        return self
 
     # ── 编码 ──────────────────────────────────────────────────────────
     @staticmethod
@@ -235,6 +489,48 @@ class QwenCTCEngine:
 
         return "".join(tokens), tokens, timestamps
 
+    # ── 三种模式的单段解码 ────────────────────────────────────────────
+    def _decode_ctc(
+        self, enc: np.ndarray, time_offset: float
+    ) -> Tuple[str, List[str], List[float]]:
+        """纯 CTC：折叠 + 字节反解（时间戳平移到段起点）"""
+        kept = self._collapse(self._ctc_ids(enc))
+        return self._decode_kept(kept, time_offset)
+
+    def _decode_two_pass(
+        self, enc: np.ndarray, chunk: np.ndarray, time_offset: float
+    ) -> Tuple[str, List[str], List[float]]:
+        """
+        两遍：CTC 首遍选字符/起始帧，LLM 二遍出文本，再 NW 对齐合成时间戳。
+
+        同一个 encoder 输出喂两遍（不重复编码）。LLM 失败时回退该段的
+        CTC 文本与时间戳，保证「降级也仍有输出」。
+        """
+        kept = self._collapse(self._ctc_ids(enc))
+        ctc_text, ctc_chars, ctc_starts = self._decode_kept(kept, 0.0)
+
+        try:
+            llm_text = self._llm.generate(enc)
+        except Exception as exc:
+            self.logger.error(
+                f"LLM 二遍生成失败，回退该段 CTC 文本: {exc}"
+            )
+            timestamps = [ts + time_offset for ts in ctc_starts]
+            return ctc_text, list(ctc_chars), timestamps
+
+        llm_text = llm_text or ""
+        if not llm_text:
+            return "", [], []
+
+        duration = len(chunk) / float(SAMPLE_RATE)
+        starts = align_ctc_to_llm(ctc_chars, ctc_starts, llm_text, duration)
+        timestamps = [float(s) + time_offset for s in starts]
+        return llm_text, list(llm_text), timestamps
+
+    def _decode_llm(self, enc: np.ndarray) -> str:
+        """纯 LLM：只有文本，没有时间戳"""
+        return self._llm.generate(enc) or ""
+
     # ── 公开 API ──────────────────────────────────────────────────────
     def decode(self, audio: np.ndarray) -> RecognitionResult:
         """
@@ -244,10 +540,14 @@ class QwenCTCEngine:
             audio: float32 单声道 16kHz 波形
 
         Returns:
-            RecognitionResult（text / tokens / timestamps）
+            RecognitionResult（text / tokens / timestamps）。
+            纯 LLM 模式下 tokens / timestamps 为空列表。
         """
+        if not self.mode:
+            raise RuntimeError("引擎尚未初始化：请先调用 initialize()")
+
         audio = np.asarray(audio, dtype=np.float32).reshape(-1)
-        seg_len = int(SEGMENT_SEC * 16000)
+        seg_len = int(SEGMENT_SEC * SAMPLE_RATE)
 
         all_tokens: List[str] = []
         all_timestamps: List[float] = []
@@ -259,8 +559,16 @@ class QwenCTCEngine:
                 break
             offset = i * SEGMENT_SEC
             enc = self._encode(chunk)
-            kept = self._collapse(self._ctc_ids(enc))
-            chunk_text, tokens, timestamps = self._decode_kept(kept, offset)
+
+            if self.mode == MODE_CTC:
+                chunk_text, tokens, timestamps = self._decode_ctc(enc, offset)
+            elif self.mode == MODE_TWO_PASS:
+                chunk_text, tokens, timestamps = self._decode_two_pass(
+                    enc, chunk, offset
+                )
+            else:
+                chunk_text, tokens, timestamps = self._decode_llm(enc), [], []
+
             text_parts.append(chunk_text)
             all_tokens += tokens
             all_timestamps += timestamps
@@ -271,7 +579,7 @@ class QwenCTCEngine:
 
     def create_stream(self) -> RecognitionStream:
         """创建识别流（兼容 sherpa-onnx API）"""
-        return RecognitionStream(sample_rate=16000)
+        return RecognitionStream(sample_rate=SAMPLE_RATE)
 
     def decode_stream(self, stream: RecognitionStream) -> RecognitionResult:
         """
@@ -293,7 +601,7 @@ class QwenCTCEngine:
         )
         if self.config.verbose:
             self.logger.debug(
-                f"Qwen3-CTC 解码耗时 {elapsed:.3f}s, "
+                f"Qwen3-ASR[{self.mode}] 解码耗时 {elapsed:.3f}s, "
                 f"{len(result.tokens)} tokens, 文本 {result.text[:50]!r}"
             )
         return stream.result
@@ -303,12 +611,19 @@ class QwenCTCEngine:
         return self.decode(audio)
 
     def cleanup(self) -> None:
-        """释放资源"""
-        if self._enc is not None:
-            self._enc.close()
-        self._enc = None
+        """释放资源：解码器 → 编码器 → CTC 头（llama 侧先放）"""
+        for attr in ("_llm", "_enc"):
+            obj = getattr(self, attr, None)
+            setattr(self, attr, None)
+            if obj is not None:
+                try:
+                    obj.close()
+                except Exception as exc:  # 释放失败不该打断调用方的收尾流程
+                    self.logger.debug(f"关闭 {attr} 失败: {exc}")
         self._ctc = None
         self.id2bytes = {}
+        self.mode = ""
+        self.has_timestamps = False
 
 
 def create_qwen_ctc_engine(
@@ -325,8 +640,15 @@ def create_qwen_ctc_engine(
     end_bias: float = DEFAULT_END_BIAS,
     verbose: bool = False,
     logger: Optional[Logger] = None,
+    decoder_gguf_path: str = "",
+    encoder_frontend_path: str = "",
+    encoder_backend_path: str = "",
+    enable_ctc: bool = True,
+    llm_n_ctx: int = 4096,
+    llm_n_threads: int = 6,
+    llm_n_predict: int = 256,
 ) -> QwenCTCEngine:
-    """便捷构造：返回已初始化的引擎"""
+    """便捷构造：返回已初始化（含模式判定与预热）的引擎"""
     engine = QwenCTCEngine(
         QwenCTCConfig(
             encoder_onnx_path=encoder_onnx_path,
@@ -341,6 +663,13 @@ def create_qwen_ctc_engine(
             start_bias=start_bias,
             end_bias=end_bias,
             verbose=verbose,
+            decoder_gguf_path=decoder_gguf_path,
+            encoder_frontend_path=encoder_frontend_path,
+            encoder_backend_path=encoder_backend_path,
+            enable_ctc=enable_ctc,
+            llm_n_ctx=llm_n_ctx,
+            llm_n_threads=llm_n_threads,
+            llm_n_predict=llm_n_predict,
         ),
         logger=logger,
     )
