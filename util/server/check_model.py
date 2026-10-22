@@ -87,25 +87,60 @@ def qwen_mode_errors(
     has_backend: bool,
     has_decoder: bool,
     enable_ctc: bool,
+    *,
+    ctc_configured: bool = True,
+    tokens_configured: bool = True,
 ) -> list[str]:
     """
     模式层面（与文件是否存在无关）的硬错误，必须在加载引擎之前就暴露。
+
+    **错误顺序本身是语义的一部分**：0.6B 前后端的「没有 CTC 头」必须排在
+    「既未配置解码器又禁用了 CTC」之前，与引擎 `resolve_mode()` 的判定顺序一致；
+    两者同时命中时，拆分那条更具体、更可执行。
+
+    `ctc_configured` / `tokens_configured` 只在「纯 CTC（无解码器且启用 CTC）」
+    时才有意义：那时缺 CTC 头 / 词表就没有推理路径。默认 `True` 表示调用方
+    未提供该项信息时不额外判定；`_qwen_plan()` 会显式传入真实配置。
 
     文案要能直接照着做，并包含规格 §7.2 的关键句。返回空列表表示模式合法。
     """
     errors: list[str] = []
 
+    # ① 0.6B 拆分编码器没有 CTC 头：没配解码器就一条推理路径都没有。
+    #    不看 enable_ctc —— 这条路径上 CTC 头必然不可用（引擎 resolve_mode 同样
+    #    先判这一条再判下面的「既无解码器又禁 CTC」）。
+    if has_frontend and has_backend and not has_decoder:
+        errors.append(
+            "0.6B 编码器（前后端拆分）没有 CTC 头，无推理路径：请在 config.toml 的"
+            " model_paths 段填写 qwen_llm_path 以配置解码器，或把"
+            " qwen_ctc_encoder_frontend_path 与 qwen_ctc_encoder_backend_path"
+            " 留空，改用 1.7B 融合编码器"
+        )
+
+    # ② 既没解码器又禁用 CTC
     if not has_decoder and not enable_ctc:
         errors.append(
             "既未配置解码器又禁用了 CTC，无推理路径：请在 config.toml 的 model_paths 段"
             "填写 qwen_llm_path，或在 qwen_ctc_args 段把 enable_ctc 设为 true"
         )
 
+    # ③ 0.6B 前后端只配一端
     if has_frontend != has_backend:
         errors.append(
             "0.6B 编码器前后端必须成对配置：请在 config.toml 的 model_paths 段同时填写"
             " qwen_ctc_encoder_frontend_path 与 qwen_ctc_encoder_backend_path，"
             "或两者都留空改用 1.7B 融合编码器"
+        )
+
+    # ④ 纯 CTC（无解码器 + 启用 CTC）但缺 CTC 头 / 词表：引擎初始化时硬失败。
+    #    有解码器时缺 CTC 头是合法的（引擎 WARNING 降级为纯 LLM），不在这里报。
+    if not has_decoder and enable_ctc and not (
+        ctc_configured and tokens_configured
+    ):
+        errors.append(
+            "纯 CTC 模式必须配置 ctc_onnx_path 与 tokens_path：请在 config.toml 的"
+            " qwen_ctc_args 段填写 ctc_onnx_path 与 tokens_path（CTC 头与紧凑词表），"
+            "或填写 model_paths.qwen_llm_path 配置解码器改用两遍 / 纯 LLM"
         )
 
     return errors
@@ -133,7 +168,12 @@ def _qwen_plan() -> tuple[dict, list[str]]:
     split_encoder = has_frontend and has_backend
 
     errors = qwen_mode_errors(
-        has_frontend, has_backend, has_decoder, QwenCTCArgs.enable_ctc
+        has_frontend,
+        has_backend,
+        has_decoder,
+        QwenCTCArgs.enable_ctc,
+        ctc_configured=_configured(paths["ctc"]),
+        tokens_configured=_configured(paths["tokens"]),
     )
     files = required_qwen_files(
         split_encoder, has_decoder, QwenCTCArgs.enable_ctc, paths
@@ -235,7 +275,9 @@ def check_model(passed_logger) -> None:
         error_msg += "    \n"
 
         passed_logger.error(f"模型文件检查失败，共 {len(missing_files)} 个文件缺失")
-        console.print(error_msg)
+        # soft_wrap：下载命令里有 `for f in ...; do` 这种长行，默认按终端宽度折行
+        # 后用户复制粘贴会拿到断成两截的命令，必须让 rich 原样单行输出。
+        console.print(error_msg, soft_wrap=True)
         input("按回车退出")
         sys.exit(1)
 

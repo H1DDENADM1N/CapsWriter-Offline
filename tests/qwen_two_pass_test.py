@@ -72,9 +72,13 @@ Task 8 覆盖启动体检（`util/server/check_model.py`）：
 32. `required_qwen_files` 必须按模式给出必需文件：融合 encoder 的纯 CTC / 两遍 /
     纯 LLM、0.6B 拆分 encoder 四种组合逐条断言；空字符串与 None 一律视为
     「未配置」不进列表（`decoder=""` 是合法的纯 CTC）；
-33. 模式层面的硬错误必须早于引擎暴露：「解码器为空 + 禁用 CTC」与
-    「0.6B 前后端只配一端」，且合法组合不许误报；
-34. 缺失文件提示里的 §4.3 下载命令（1.7B 一条 + 0.6B 循环三条）必须逐字保留。
+33. 模式层面的硬错误必须早于引擎暴露：「0.6B 前后端拆分 + 解码器为空」、
+    「既未配置解码器又禁用 CTC」、「0.6B 前后端只配一端」与
+    「纯 CTC 缺 CTC 头 / tokens」，且合法组合不许误报；同时命中的两条错误
+    必须把 0.6B 拆分那条排在前面（与引擎 `resolve_mode` 顺序一致）；
+34. 缺失文件提示里的 §4.3 下载命令（1.7B 一条 + 0.6B 循环三条）必须逐字保留；
+35. `_qwen_plan()` 的必需文件只能来自 `QwenCTCArgs`（引擎真正收到的配置），
+    不能因为 `ModelPaths.qwen_llm_path` 有默认值就去要求引擎不用的 GGUF。
 
 需要模型文件 models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf
 （0.6B 用例需要 models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
@@ -87,6 +91,7 @@ import tempfile
 import time
 import wave
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -1689,6 +1694,105 @@ def test_qwen_mode_errors_accepts_every_valid_mode():
         assert qwen_mode_errors(*args) == [], (args, qwen_mode_errors(*args))
 
 
+def test_qwen_mode_errors_reject_split_encoder_without_decoder():
+    """0.6B 前后端拆分 + 解码器为空：必须报错（引擎 resolve_mode 必抛 ValueError）
+
+    这条组合不看 `enable_ctc`：0.6B 那条路径上 CTC 头必然不可用，开不开 CTC
+    都没有推理路径，体检不能放行。
+    """
+    from util.server.check_model import qwen_mode_errors
+
+    errors = qwen_mode_errors(True, True, False, True)
+    assert errors, "0.6B 拆分 + 空解码器必须报模式错误（否则体检放行、引擎必炸）"
+    assert any("0.6B" in e for e in errors), errors
+    # 文案要点名可执行的出路：填 qwen_llm_path，或改用 1.7B 融合编码器
+    assert any("qwen_llm_path" in e for e in errors), errors
+    assert any("1.7B" in e for e in errors), errors
+
+
+def test_qwen_mode_errors_split_missing_decoder_precedes_ctc_disabled():
+    """同一组合同时命中两条错误时，0.6B 拆分那条必须在前（与引擎判定顺序一致）"""
+    from util.server.check_model import qwen_mode_errors
+
+    errors = qwen_mode_errors(True, True, False, False)
+    assert len(errors) >= 2, f"应同时命中「0.6B 缺解码器」与「既无解码器又禁 CTC」：{errors}"
+    assert "0.6B" in errors[0], f"拆分文案更具体，必须排在前面：{errors}"
+    assert any("既未配置解码器又禁用了 CTC" in e for e in errors), errors
+
+
+def test_qwen_mode_errors_reject_pure_ctc_without_ctc_head():
+    """纯 CTC 但 ctc / tokens 没配 = 无推理路径（引擎初始化时硬失败）"""
+    from util.server.check_model import qwen_mode_errors
+
+    for kwargs in (
+        dict(ctc_configured=False, tokens_configured=True),
+        dict(ctc_configured=True, tokens_configured=False),
+        dict(ctc_configured=False, tokens_configured=False),
+    ):
+        errors = qwen_mode_errors(False, False, False, True, **kwargs)
+        assert any("纯 CTC" in e and "ctc_onnx_path 与 tokens_path" in e for e in errors), (
+            kwargs,
+            errors,
+        )
+    # 有解码器时缺 CTC 头是合法的（引擎 WARNING 降级为纯 LLM），绝不能误报
+    assert (
+        qwen_mode_errors(
+            False,
+            False,
+            True,
+            True,
+            ctc_configured=False,
+            tokens_configured=False,
+        )
+        == []
+    )
+
+
+def _stub_qwen_ctc_args(**overrides):
+    """QwenCTCArgs 替身：默认是「老配置形态」的纯 CTC，可任意覆盖字段"""
+    fields = dict(
+        encoder_onnx_path=str(ENCODER_17B),
+        ctc_onnx_path=str(CTC_17B),
+        tokens_path=str(TOKENS_17B),
+        preprocessor_path=str(PREPROCESSOR_DIR),
+        decoder_gguf_path="",
+        encoder_frontend_path="",
+        encoder_backend_path="",
+        enable_ctc=True,
+    )
+    fields.update(overrides)
+    return type("_StubQwenCTCArgs", (), fields)
+
+
+def test_qwen_plan_paths_come_from_qwen_ctc_args():
+    """老配置形态：`_qwen_plan()` 不能去要求 `ModelPaths.qwen_llm_path` 默认的 GGUF
+
+    引擎侧 `decoder_gguf_path` 空串 = 纯 CTC，根本不读那个文件；体检若照
+    `ModelPaths` 的 1.7B 默认值去查，就会把一个能跑的纯 CTC 判成缺文件。
+    """
+    import util.server.check_model as cm
+
+    with patch.object(cm, "QwenCTCArgs", _stub_qwen_ctc_args()):
+        plan, errors = cm._qwen_plan()
+
+    files = plan["Qwen3-ASR 模型文件（按当前配置解析）"]
+    assert errors == [], errors
+    assert files, "纯 CTC 至少要检查 encoder / ctc / tokens / preprocessor"
+    assert not any(str(f).endswith(".gguf") for f in files), f"不该要求任何 GGUF：{files}"
+    assert not any("qwen3_asr_llm" in str(f) for f in files), files
+
+
+def test_qwen_plan_reports_pure_ctc_without_ctc_head():
+    """`_qwen_plan()` 必须把 ctc 为空传给模式校验，否则「无推理路径」又漏一轮"""
+    import util.server.check_model as cm
+
+    with patch.object(cm, "QwenCTCArgs", _stub_qwen_ctc_args(ctc_onnx_path="")):
+        _plan, errors = cm._qwen_plan()
+
+    assert errors, "纯 CTC + 没有 CTC 头必须报模式错误"
+    assert any("纯 CTC" in e for e in errors), errors
+
+
 def test_qwen_download_commands_are_verbatim_from_spec():
     """缺失提示里的 §4.3 下载命令必须逐字保留，不能改写命令本身"""
     from util.server.check_model import QWEN_DOWNLOAD_COMMANDS as cmds
@@ -1788,6 +1892,11 @@ if __name__ == "__main__":
         test_qwen_mode_errors_reject_no_decoder_and_ctc_disabled,
         test_qwen_mode_errors_reject_half_split_encoder,
         test_qwen_mode_errors_accepts_every_valid_mode,
+        test_qwen_mode_errors_reject_split_encoder_without_decoder,
+        test_qwen_mode_errors_split_missing_decoder_precedes_ctc_disabled,
+        test_qwen_mode_errors_reject_pure_ctc_without_ctc_head,
+        test_qwen_plan_paths_come_from_qwen_ctc_args,
+        test_qwen_plan_reports_pure_ctc_without_ctc_head,
         test_qwen_download_commands_are_verbatim_from_spec,
     ]
     failed = 0
