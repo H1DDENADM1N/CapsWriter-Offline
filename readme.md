@@ -44,13 +44,13 @@
 >
 > 在 `config.toml` 中设置 `model = "QwenCTC"` 启用，模型文件按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载到 `models/qwen-ctc-aiinfra4/`。
 >
-> 特点：纯 CTC 模式无 LLM 二遍，识别速度快（30 秒音频约 2 秒）、内存占用小；支持中英混说；标点由服务端自带的标点模型补全（`format_punc`）。配置 `[model_paths].qwen_llm_path`（LLM 解码器 GGUF）后，还可以切换「CTC 首遍 + LLM 二遍」或「纯 LLM」模式，文本与标点更好，但更慢、更占内存。
+> 特点：纯 CTC 模式无 LLM 二遍，识别速度快（30 秒音频约 2 秒）、内存占用小；支持中英混说；标点由服务端自带的标点模型补全（`format_punc`）。配置 `[model_paths].qwen_llm_path`（LLM 解码器 GGUF）后，还可以切换「CTC 首遍 + LLM 二遍」或「纯 LLM」模式，文本与标点更好，但更慢、更占内存。**注意：`config.toml` 模板里该键已预填 1.7B 解码器路径，所以出厂默认就是「两遍」模式，首次启动需要先按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载 1.28 GB 的解码器；不想要就把它留空退回纯 CTC。**
 >
 > 该模型有三种运行模式，由 `[model_paths].qwen_llm_path` 与 `[qwen_ctc_args].enable_ctc` 共同决定：
 >
 > | `qwen_llm_path` | `enable_ctc` | 模式 | 输出 |
 > | --- | --- | --- | --- |
-> | 留空 | 不生效 | 纯 CTC（默认现状） | 文本 + **字级时间戳** |
+> | 留空 | 不生效 | 纯 CTC（留空即回到 1.0.7 的现状） | 文本 + **字级时间戳** |
 > | 非空 | `true`（默认） | 两遍：CTC 首遍 → LLM 二遍 | LLM 文本（自带标点）+ 经 Needleman-Wunsch（NW）对齐到 LLM 文本的 CTC 字级时间戳 |
 > | 非空 | `false` | 纯 LLM | 只有 LLM 文本，**无时间戳** |
 >
@@ -58,7 +58,7 @@
 >
 > ⚠️ 官方提供的 `aiinfra4` 版 CTC 头在**AI 技术领域的英文内容**上会把英文词转写成对应中文译文（如 `we` → `我们`），详见 [Qwen3-CTC-语言串味问题排查](docs/Qwen3-CTC-语言串味问题排查.md)。建议改用 `Qwen3-ASR-CTC.v1.fp16.onnx`（v1 头），在 `config.toml` 的 `[model_paths]` 里加一行 `qwen_ctc_ctc_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx"` 即可（默认就是 v1 头）。
 >
-> 客户端无需任何改动：服务端/客户端协议未变，转录文件、字幕生成、简繁转换、翻译全部照常工作。
+> 客户端无需任何改动：服务端/客户端协议未变，转录文件、简繁转换、翻译全部照常工作。唯一的差别是**纯 LLM 模式没有字级时间戳**，因此不生成 SRT 字幕（txt / json / merge.txt 照常落盘），客户端日志会说明「当前识别模式没有字级时间戳，未生成 SRT 字幕」。
 
 ## 客户端文本框升级为多光标编辑器，键位与 VS Code 对齐
 >

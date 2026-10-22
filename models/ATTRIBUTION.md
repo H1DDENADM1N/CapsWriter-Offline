@@ -77,7 +77,10 @@
 - **解码器导出产物的许可状态**（如实说明，未替代其声明任何许可）：
   [HaujetZhao/Qwen3-ASR-GGUF](https://github.com/HaujetZhao/Qwen3-ASR-GGUF) 仓库**没有 LICENSE 文件**，
   GitHub API 返回 `license: None`，README 无许可段落；ModelScope 镜像（`luciacx/*`）的 License 字段为空。
-  即**导出产物本身未声明许可证**。本项目未修改权重、仅原样分发，且该模型为**可选**、不随包默认分发。
+  即**导出产物本身未声明许可证**。本项目未修改权重、仅原样分发。该模型**不进源码仓库**
+  （`/models/qwen-ctc-aiinfra4/*.gguf` 已 gitignore），但 `config.toml` 模板已预填它的路径，
+  因此在整合包/本机 `models/` 目录里默认预置了 1.7B 解码器；纯源码检出且未下载该文件时，
+  服务端会在启动体检阶段报缺失并给出下载命令，把 `model_paths.qwen_llm_path` 留空即可退回纯 CTC。
 
 ### 模型文件构成
 
@@ -90,7 +93,7 @@
 | `tokens.txt` | 紧凑词表，每行 `base64(原始字节)\t<id>`，共 72466 条 |
 | `preprocessor_config.json` | WhisperFeatureExtractor 配置（128 mel / hop 160 / 30 秒桶） |
 | `config.json` | CTC 头结构与训练信息 |
-| `qwen3_asr_llm.q4_k.gguf` | Qwen3-ASR LLM 解码器（GGUF，arch `qwen3vl`，Q4_K 量化，1,282,434,624 B ≈ 1.28 GB）；可选，用于「CTC 首遍 + LLM 二遍」或纯 LLM 模式 |
+| `qwen3_asr_llm.q4_k.gguf` | Qwen3-ASR LLM 解码器（GGUF，arch `qwen3vl`，Q4_K 量化，1,282,434,624 B ≈ 1.28 GB）；用于「CTC 首遍 + LLM 二遍」或纯 LLM 模式，路径已由 `config.toml` 模板预填（留空退回纯 CTC） |
 
 ### 0.6B 全套（`qwen-ctc-aiinfra4-06b/`）
 

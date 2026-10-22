@@ -43,7 +43,9 @@ curl -L -o qwen-ctc-aiinfra4/config.json https://huggingface.co/JazerJu/glm-asr-
 
 将 qwen-ctc-aiinfra4 文件夹放到软件根目录的 models\ 下
 
-LLM 解码器（可选；用于「CTC 首遍 + LLM 二遍」或纯 LLM 模式）：
+LLM 解码器（用于「CTC 首遍 + LLM 二遍」或纯 LLM 模式）：
+config.toml 模板里 [model_paths].qwen_llm_path 已预填下面这个路径，
+所以**不下载它，服务端会在启动体检阶段硬错误退出**；不想用就把该键留空退回纯 CTC。
 
 # 1.7B 解码器（GGUF，Q4_K，1,282,434,624 字节 ≈ 1.22 GiB）
 # 与上面的 qwen-ctc-aiinfra4 编码器搭配，放到 models/qwen-ctc-aiinfra4/ 下
@@ -51,9 +53,9 @@ mkdir -p models/qwen-ctc-aiinfra4
 curl -4 -L -C - -o models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf \
   "https://modelscope.cn/models/luciacx/Qwen3-ASR-GGUF-1.7B-mixed/resolve/master/qwen3_asr_llm.q4_k.gguf"
 
-下载后在 config.toml 里把 [model_paths].qwen_llm_path 指向该文件，
+下载后无需改配置（模板已指向该文件），并确认
 [model_paths].qwen_ctc_encoder_frontend_path / qwen_ctc_encoder_backend_path 留空（1.7B 用融合编码器）。
-两个都留空则该模型退回纯 CTC 模式；[qwen_ctc_args].enable_ctc = false 则跳过 CTC 首遍、只跑 LLM。
+把 qwen_llm_path 留空则该模型退回纯 CTC 模式；[qwen_ctc_args].enable_ctc = false 则跳过 CTC 首遍、只跑 LLM。
 
 
 0.6B 全套（可选；0.6B 解码器必须配 0.6B 自己的编码器前后端）：
