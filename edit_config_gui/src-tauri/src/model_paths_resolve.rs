@@ -112,7 +112,7 @@ mod tests {
             let _ = resolve(&doc, &to_vec(derived));
         }
         assert_eq!(doc.to_toml_string(), before, "resolve 不得改动文档");
-        assert_eq!(comment_line_count(&raw), 323);
+        assert_eq!(comment_line_count(&raw), 333);
     }
 
     #[test]

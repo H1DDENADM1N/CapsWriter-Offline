@@ -55,7 +55,7 @@ export function fieldById(id: string): FieldMeta | undefined {
   return allFields().find((f) => fieldId(f.segments) === id);
 }
 
-/** 13 个派生只读键：`derivedFrom` 指向真实生效的 model_paths 键 */
+/** 16 个派生只读键：`derivedFrom` 指向真实生效的 model_paths 键 */
 export function derivedFields(): FieldMeta[] {
   return allFields().filter((f) => f.derivedFrom !== undefined);
 }
@@ -63,8 +63,8 @@ export function derivedFields(): FieldMeta[] {
 /**
  * 可编辑的固定叶子键 = 全部字段 减去动态表描述、减去派生只读键。
  *
- * `schema_paths.json` 断言的就是这一组（163 条）：178 个 TOML 叶子
- * − 2 条动态表条目 − 13 个派生只读键 = 163。
+ * `schema_paths.json` 断言的就是这一组（170 条）：188 个 TOML 叶子
+ * − 2 条动态表条目 − 16 个派生只读键 = 170。
  */
 export function editableFields(): FieldMeta[] {
   return allFields().filter(

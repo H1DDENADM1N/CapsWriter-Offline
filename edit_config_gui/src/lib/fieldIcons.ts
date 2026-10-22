@@ -397,6 +397,9 @@ export const FIELD_ICONS: Record<string, string> = {
   'model_paths.qwen_ctc_ctc_path': 'bolt',
   'model_paths.qwen_ctc_tokens_path': 'text-fields',
   'model_paths.qwen_ctc_preprocessor_path': 'folder',
+  'model_paths.qwen_llm_path': 'psychology',
+  'model_paths.qwen_ctc_encoder_frontend_path': 'file-present',
+  'model_paths.qwen_ctc_encoder_backend_path': 'file-present',
   'model_paths.opus_mt_dir': 'translate',
 
   // ── FunASR 参数（含 5 个派生只读键） ──
@@ -444,6 +447,9 @@ export const FIELD_ICONS: Record<string, string> = {
   'qwen_ctc_args.ctc_onnx_path': 'bolt',
   'qwen_ctc_args.tokens_path': 'text-fields',
   'qwen_ctc_args.preprocessor_path': 'folder',
+  'qwen_ctc_args.decoder_gguf_path': 'psychology',
+  'qwen_ctc_args.encoder_frontend_path': 'file-present',
+  'qwen_ctc_args.encoder_backend_path': 'file-present',
   'qwen_ctc_args.blank_id': 'numbers',
   'qwen_ctc_args.unk_id': 'numbers',
   'qwen_ctc_args.mel_frames': 'straighten',
@@ -451,6 +457,10 @@ export const FIELD_ICONS: Record<string, string> = {
   'qwen_ctc_args.provider': 'computer',
   'qwen_ctc_args.start_bias': 'timer',
   'qwen_ctc_args.end_bias': 'timer',
+  'qwen_ctc_args.enable_ctc': 'bolt',
+  'qwen_ctc_args.llm_n_ctx': 'numbers',
+  'qwen_ctc_args.llm_n_threads': 'memory',
+  'qwen_ctc_args.llm_n_predict': 'numbers',
   'qwen_ctc_args.verbose': 'subject',
 
   // ── 调试 ──

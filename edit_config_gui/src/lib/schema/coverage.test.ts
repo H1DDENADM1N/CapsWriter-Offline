@@ -55,20 +55,20 @@ describe('schema 覆盖率', () => {
     );
   });
 
-  it('可编辑固定键 163 + 派生只读 13 + 动态表 1 条描述 = 177', () => {
-    // 178 个 TOML 叶子 − 2 条动态表条目 = 176；176 − 13 个派生只读 = 163。
-    // allFields() 是 177 而不是 176，因为动态表在 schema 里占 1 条描述、
+  it('可编辑固定键 170 + 派生只读 16 + 动态表 1 条描述 = 187', () => {
+    // 188 个 TOML 叶子 − 2 条动态表条目 = 186；186 − 16 个派生只读 = 170。
+    // allFields() 是 187 而不是 186，因为动态表在 schema 里占 1 条描述、
     // 却对应 TOML 里的 2 个条目。
-    expect(editableFields().length).toBe(163);
-    expect(derivedFields().length).toBe(13);
-    expect(allFields().length).toBe(177);
+    expect(editableFields().length).toBe(170);
+    expect(derivedFields().length).toBe(16);
+    expect(allFields().length).toBe(187);
   });
 
   it('schema 导出的 segments 与 schema_paths.json 完全一致', () => {
     const fromSchema = editableFields()
       .map((f) => f.segments)
       .sort((x, y) => (fieldId(x) < fieldId(y) ? -1 : 1));
-    expect(schemaPaths.length).toBe(163);
+    expect(schemaPaths.length).toBe(170);
     expect(fromSchema).toEqual(schemaPaths);
   });
 
@@ -128,7 +128,7 @@ describe('schema 覆盖率', () => {
     }
   });
 
-  it('模型路径 17 个键全部 warnOnly（缺文件只警告不阻断）', () => {
+  it('模型路径 20 个键全部 warnOnly（缺文件只警告不阻断）', () => {
     for (const f of allFields()) {
       if (f.segments[0] !== 'model_paths') continue;
       expect(f.warnOnly, `${f.path} 必须 warnOnly`).toBe(true);
@@ -181,6 +181,10 @@ describe('schema 覆盖率', () => {
       // 自定义规则文件：「留空表示不使用」
       'sensevoice_args.rule_fsts',
       'sensevoice_args.rule_fars',
+      // QwenCTC 0.6B 拆分形态与 LLM 解码器：留空则退回上一种模式
+      'model_paths.qwen_llm_path',
+      'model_paths.qwen_ctc_encoder_frontend_path',
+      'model_paths.qwen_ctc_encoder_backend_path',
     ].sort();
 
     const actual = allFields()

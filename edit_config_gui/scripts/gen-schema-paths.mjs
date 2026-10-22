@@ -3,7 +3,7 @@
  * 的 segments 列表。
  *
  * 为什么要这么绕一圈：前端 schema 是 TS，Rust 侧的覆盖测试读不了 TS，只能读
- * JSON；而「schema 与 config.toml 的 162 个叶子键一一对应」这条断言需要两边
+ * JSON；而「schema 与 config.toml 的 188 个叶子键一一对应」这条断言需要两边
  * 都能独立核对。于是分工如下 ——
  *
  *   schema（TS）  --本脚本-->  schema_paths.json  --coverage.rs-->  config.toml
@@ -12,8 +12,8 @@
  * 前端测试保证「schema 与 JSON 同步」，Rust 测试保证「JSON 与真实配置文件同步」，
  * 两条链合起来闭合。任何一边加/删/改键而忘了另一边，都会在这里或那里变红。
  *
- * 期望输出：editable 151 / derived 9 / paths 151
- *   （162 个 TOML 叶子 − 2 条动态表条目 = 160；160 − 9 个派生只读键 = 151）
+ * 期望输出：editable 170 / derived 16 / paths 170
+ *   （188 个 TOML 叶子 − 2 条动态表条目 = 186；186 − 16 个派生只读键 = 170）
  */
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

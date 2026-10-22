@@ -502,6 +502,14 @@
   ],
   [
     "model_paths",
+    "qwen_ctc_encoder_backend_path"
+  ],
+  [
+    "model_paths",
+    "qwen_ctc_encoder_frontend_path"
+  ],
+  [
+    "model_paths",
     "qwen_ctc_encoder_path"
   ],
   [
@@ -511,6 +519,10 @@
   [
     "model_paths",
     "qwen_ctc_tokens_path"
+  ],
+  [
+    "model_paths",
+    "qwen_llm_path"
   ],
   [
     "model_paths",
@@ -546,7 +558,23 @@
   ],
   [
     "qwen_ctc_args",
+    "enable_ctc"
+  ],
+  [
+    "qwen_ctc_args",
     "end_bias"
+  ],
+  [
+    "qwen_ctc_args",
+    "llm_n_ctx"
+  ],
+  [
+    "qwen_ctc_args",
+    "llm_n_predict"
+  ],
+  [
+    "qwen_ctc_args",
+    "llm_n_threads"
   ],
   [
     "qwen_ctc_args",

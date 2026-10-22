@@ -3,12 +3,12 @@ import type { FieldMeta, PageMeta } from './types.ts';
 /**
  * 四个本地语音识别引擎的参数页（FunASR / SenseVoice / Paraformer / QwenCTC）。
  *
- * **13 个派生只读键**（`funasr_args.*_path`、`sensevoice_args.model/tokens`、
+ * **16 个派生只读键**（`funasr_args.*_path`、`sensevoice_args.model/tokens`、
  * `paraformer_args.paraformer/tokens`、`qwen_ctc_args.*_path`）：
  * 它们在 config.toml 里的值是 `${model_paths.xxx}` 这样的占位符，而仓库里
  * **没有任何代码解析这种占位符**——`util/config.py:249-308` 的
  * `FunASRArgs`/`SenseVoiceArgs`/`ParaformerArgs`/`QwenCTCArgs` 直接去读
- * `model_paths` 段。也就是说这 13 个键改了不生效。所以它们在 UI 里是只读的，
+ * `model_paths` 段。也就是说这 16 个键改了不生效。所以它们在 UI 里是只读的，
  * `derivedFrom` 指到真正生效的那一项；保存时既不改也不删（保留 TOML 结构）。
  */
 
@@ -306,6 +306,9 @@ const qwenCtcFields: FieldMeta[] = [
   derived('qwen_ctc_args', 'ctc_onnx_path', 'CTC 头模型路径', 'qwen_ctc_ctc_path'),
   derived('qwen_ctc_args', 'tokens_path', '紧凑词表路径', 'qwen_ctc_tokens_path'),
   derived('qwen_ctc_args', 'preprocessor_path', '特征提取器配置目录', 'qwen_ctc_preprocessor_path'),
+  derived('qwen_ctc_args', 'decoder_gguf_path', 'LLM 解码器路径', 'qwen_llm_path'),
+  derived('qwen_ctc_args', 'encoder_frontend_path', '0.6B 编码器前端路径', 'qwen_ctc_encoder_frontend_path'),
+  derived('qwen_ctc_args', 'encoder_backend_path', '0.6B 编码器后端路径', 'qwen_ctc_encoder_backend_path'),
   intField('qwen_ctc_args', 'blank_id', 'CTC blank token id', 'CTC blank token id', 0, 100000),
   intField('qwen_ctc_args', 'unk_id', 'CTC unknown token id', 'CTC unknown token id', 0, 100000),
   intField('qwen_ctc_args', 'mel_frames', '编码器 30 秒桶的 mel 帧数', '编码器 30 秒桶的 mel 帧数', 1, 10000),
@@ -346,6 +349,55 @@ const qwenCtcFields: FieldMeta[] = [
     step: 0.001,
     default: 0.0785,
     aliases: ['终点补偿', 'end_bias'],
+  },
+  {
+    path: 'qwen_ctc_args.enable_ctc',
+    segments: ['qwen_ctc_args', 'enable_ctc'],
+    title: '启用 CTC 首遍',
+    note:
+      '是否启用 CTC 首遍：开启则 CTC 出字级时间戳、LLM 出文本（CTC 头不可用时自动退化为纯 LLM）；' +
+      '关闭则只跑 LLM（不产时间戳），仅在配好解码器（model_paths.qwen_llm_path 非空）时才有意义；' +
+      '解码器路径留空时恒为纯 CTC',
+    type: 'boolean',
+    widget: 'bool',
+    default: true,
+    aliases: ['CTC', '两遍', '首遍'],
+  },
+  {
+    path: 'qwen_ctc_args.llm_n_ctx',
+    segments: ['qwen_ctc_args', 'llm_n_ctx'],
+    title: 'LLM 上下文长度（token 数）',
+    note: 'LLM 上下文长度（token 数）',
+    type: 'integer',
+    widget: 'int',
+    min: 1024,
+    max: 65536,
+    default: 4096,
+    aliases: ['上下文', 'n_ctx'],
+  },
+  {
+    path: 'qwen_ctc_args.llm_n_threads',
+    segments: ['qwen_ctc_args', 'llm_n_threads'],
+    title: 'LLM 推理线程数',
+    note: 'LLM 推理线程数（与上面的 ONNX num_threads 相互独立）',
+    type: 'integer',
+    widget: 'int',
+    min: 1,
+    max: 32,
+    default: 6,
+    aliases: ['LLM 线程'],
+  },
+  {
+    path: 'qwen_ctc_args.llm_n_predict',
+    segments: ['qwen_ctc_args', 'llm_n_predict'],
+    title: 'LLM 单段最多生成 token 数',
+    note: 'LLM 单段最多生成多少个 token',
+    type: 'integer',
+    widget: 'int',
+    min: 1,
+    max: 4096,
+    default: 256,
+    aliases: ['生成上限', 'n_predict'],
   },
   {
     path: 'qwen_ctc_args.verbose',
@@ -395,7 +447,7 @@ export const qwenCtcPage: PageMeta = {
     {
       id: 'general',
       title: '通用',
-      note: '前 4 项是只读派生键，真正生效的是「模型路径」页；其余是 CTC 头推理参数。',
+      note: '前 7 项是只读派生键，真正生效的是「模型路径」页；其余是 CTC/LM 推理参数。',
       fields: qwenCtcFields,
     },
   ],

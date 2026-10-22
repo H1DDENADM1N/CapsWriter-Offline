@@ -1,14 +1,14 @@
 import type { FieldMeta, PageMeta, SectionMeta } from './types.ts';
 
 /**
- * 模型路径：5 个目录 + 12 个文件（共 17 个键）。
+ * 模型路径：5 个目录 + 15 个文件（共 20 个键）。
  *
  * 全部 `warnOnly: true` —— 校验只产出警告、绝不阻断保存。理由：模型文件动辄
  * 几个 GB，用户经常是「先改好配置，回头再下载模型」。旧 GUI 的
  * `ValueCheck.is_file_exist` 失败时也只是弹右侧提示、值照样留着，新版把这个
  * 行为明确成 `warnOnly`，语义一致但不再让人误以为保存失败。
  *
- * 12 个文件都带 `fileSuffix`。旧 GUI 调 `is_file_exist` 时**从不传后缀**
+ * 15 个文件都带 `fileSuffix`。旧 GUI 调 `is_file_exist` 时**从不传后缀**
  * （`model_paths_config_page.py:287,333,377,…`），所以填个 `foo.txt` 也能过；
  * 新版补上后缀检查，但因为 warnOnly，最坏只多一条黄色提示。
  */
@@ -41,6 +41,7 @@ function fileField(
   suffix: string,
   def: string,
   alias: string,
+  allowEmpty?: boolean,
 ): FieldMeta {
   return {
     path: `model_paths.${key}`,
@@ -52,6 +53,7 @@ function fileField(
     pathMode: 'file',
     fileSuffix: suffix,
     default: def,
+    allowEmpty,
     validators: ['fileExist'],
     warnOnly: true,
     aliases: [alias, suffix.replace('.', ''), '路径'],
@@ -185,6 +187,33 @@ const qwenCtcFields: FieldMeta[] = [
     'Qwen3-ASR 特征提取器配置目录',
     'models/qwen-ctc-aiinfra4',
     'preprocessor',
+  ),
+  fileField(
+    'qwen_llm_path',
+    'Qwen3-ASR LLM 解码器（GGUF）路径',
+    'Qwen3-ASR LLM 解码器（GGUF）路径，留空则退回纯 CTC 模式',
+    '.gguf',
+    'models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf',
+    'llm',
+    true,
+  ),
+  fileField(
+    'qwen_ctc_encoder_frontend_path',
+    '0.6B 编码器前端（ONNX）路径',
+    '0.6B 编码器前端（ONNX）路径，留空则用上面的融合编码器（1.7B）',
+    '.onnx',
+    '',
+    'frontend',
+    true,
+  ),
+  fileField(
+    'qwen_ctc_encoder_backend_path',
+    '0.6B 编码器后端（ONNX）路径',
+    '0.6B 编码器后端（ONNX）路径，留空则用上面的融合编码器（1.7B）',
+    '.onnx',
+    '',
+    'backend',
+    true,
   ),
 ];
 
