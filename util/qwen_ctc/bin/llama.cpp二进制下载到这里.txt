@@ -1,0 +1,3 @@
+本目录放 llama.cpp 官方 release 的 llama.dll / ggml*.dll / libomp.dll，
+可直接从 util/fun_asr_gguf/bin 复制，或下载同版本（b11675）官方二进制：
+https://github.com/ggml-org/llama.cpp/releases/download/b11675/llama-b11675-bin-win-vulkan-x64.zip
