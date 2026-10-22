@@ -23,3 +23,6 @@ edit_config_gui/src-tauri/gen
 # 配置编辑器每次保存都会生成这两个运行时产物
 /config.toml.bak
 /config.toml.tmp
+
+# superpowers 计划工作目录（本地草稿，不入库）
+/.superpowers/
