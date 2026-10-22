@@ -17,6 +17,27 @@ git clone https://huggingface.co/yiyu-earth/sherpa-onnx-paraformer-zh-2024-04-25
 git clone https://www.modelscope.cn/csukuangfj/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.git sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12
 
 
+Qwen3-ASR + CTC 头语音模型（可选，config.toml 里 server.model 设为 "QwenCTC"）：
+mkdir qwen-ctc-aiinfra4
+
+# 编码器（int4 量化，30 秒桶）
+curl -L -o qwen-ctc-aiinfra4/Qwen3-ASR-Encoder.q4.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/Qwen3-ASR-Encoder.q4.onnx
+
+# CTC 头（fp16，CPU 推理最快；也可换 .q4.onnx / .q4f16.onnx）
+curl -L -o qwen-ctc-aiinfra4/Qwen3-ASR-CTC.fp16.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.fp16.onnx
+
+# 紧凑词表（base64 原始字节，共 72466 条）
+curl -L -o qwen-ctc-aiinfra4/tokens.txt https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/tokens.txt
+
+# 特征提取器配置
+curl -L -o qwen-ctc-aiinfra4/preprocessor_config.json https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/preprocessor_config.json
+
+# CTC 头结构信息（config.json）
+curl -L -o qwen-ctc-aiinfra4/config.json https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc-aiinfra4/config.json
+
+将 qwen-ctc-aiinfra4 文件夹放到软件根目录的 models\ 下
+
+
 翻译模型：
 https://huggingface.co/Helsinki-NLP/opus-mt-zh-en
 https://object.pouta.csc.fi/Tatoeba-MT-models/zho-eng/opus-2020-07-17.zip

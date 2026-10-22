@@ -41,6 +41,15 @@ def check_model(passed_logger) -> None:
                 ModelPaths.punc_model_dir,
             ],
         }
+    elif model == "QwenCTC":
+        required_files = {
+            "Qwen3-ASR + CTC 头 模型文件": [
+                ModelPaths.qwen_ctc_encoder_path,
+                ModelPaths.qwen_ctc_ctc_path,
+                ModelPaths.qwen_ctc_tokens_path,
+                ModelPaths.qwen_ctc_preprocessor_path,
+            ],
+        }
     else:
         error_msg = f"不支持的模型类型: {Config.model}"
         passed_logger.error(error_msg)
@@ -52,6 +61,7 @@ def check_model(passed_logger) -> None:
     - 'FunASR'
     - 'Sensevoice'
     - 'Paraformer'
+    - 'QwenCTC'
 
         """,
             style="bright_red",
@@ -126,6 +136,15 @@ def check_model_gui(passed_logger) -> None:
                 ModelPaths.punc_model_dir,
             ],
         }
+    elif model == "QwenCTC":
+        required_files = {
+            "Qwen3-ASR + CTC 头 模型文件": [
+                ModelPaths.qwen_ctc_encoder_path,
+                ModelPaths.qwen_ctc_ctc_path,
+                ModelPaths.qwen_ctc_tokens_path,
+                ModelPaths.qwen_ctc_preprocessor_path,
+            ],
+        }
     else:
         error_msg = f"""
     [bold red]不支持的模型类型：{Config.model}[/bold red]
@@ -134,6 +153,7 @@ def check_model_gui(passed_logger) -> None:
     - 'FunASR'
     - 'Sensevoice'
     - 'Paraformer'
+    - 'QwenCTC'
         """
         raise Exception(error_msg)
 

@@ -12,7 +12,7 @@ import jieba
 import sherpa_onnx
 from loguru import logger as default_logger  # 备用 logger
 
-from util.config import FunASRArgs, ModelPaths, ParaformerArgs, SenseVoiceArgs
+from util.config import FunASRArgs, ModelPaths, ParaformerArgs, QwenCTCArgs, SenseVoiceArgs
 from util.config import ServerConfig as Config
 from util.empty_working_set import empty_current_working_set
 from util.server.cosmic import console
@@ -74,6 +74,18 @@ def init_recognizer(
                 if not key.startswith("_")
             }
         )
+    elif Config.model == "QwenCTC":
+        from util.qwen_ctc import create_qwen_ctc_engine
+        from util.server.recognize_qwen_ctc import recognize
+
+        recognizer = create_qwen_ctc_engine(
+            logger=log,
+            **{
+                key: value
+                for key, value in QwenCTCArgs.__dict__.items()
+                if not key.startswith("_")
+            },
+        )
     else:
         from util.fun_asr_gguf.asr_engine import create_asr_engine
         from util.fun_asr_gguf.hotword.manager import get_hotword_manager
@@ -123,6 +135,29 @@ def init_recognizer(
             )
             log.success("标点模型载入完成")
             console.print("[green4]标点模型载入完成", end="\n\n")
+    elif Config.model == "QwenCTC":
+        # 载入标点模型
+        #
+        # Qwen3 的 CTC 头不产出标点，输出的是一整段没有断句的纯文本。
+        # 不加标点的话，客户端的 smart_split 无法分行，生成的字幕会变成
+        # 一条覆盖整段音频的超长字幕。
+        log.trace("标点模型载入中...")
+        punc_model = None
+        if Config.format_punc:
+            console.print("[yellow]标点模型载入中…")
+            punc_model = sherpa_onnx.OfflinePunctuation(
+                sherpa_onnx.OfflinePunctuationConfig(
+                    model=sherpa_onnx.OfflinePunctuationModelConfig(
+                        ct_transformer=(
+                            ModelPaths.punc_model_dir / "model.onnx"
+                        ).as_posix()
+                    ),
+                )
+            )
+            log.success("标点模型载入完成")
+            console.print("[green4]标点模型载入完成", end="\n\n")
+    else:
+        punc_model = None
 
     console.print(f"模型加载耗时 {time.time() - t1:.2f}s", end="\n\n")
     log.success(f"模型加载耗时 {time.time() - t1:.2f}s")
@@ -161,6 +196,10 @@ def init_recognizer(
                 )
             elif Config.model == "Sensevoice":
                 result = recognize(recognizer, task=task, logger=log)
+            elif Config.model == "QwenCTC":
+                result = recognize(
+                    recognizer, punc_model=punc_model, task=task, logger=log
+                )
             else:
                 result = recognize(recognizer, task=task, logger=log)
 

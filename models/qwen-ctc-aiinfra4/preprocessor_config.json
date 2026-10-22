@@ -1,0 +1,14 @@
+{
+  "chunk_length": 30,
+  "dither": 0.0,
+  "feature_extractor_type": "WhisperFeatureExtractor",
+  "feature_size": 128,
+  "hop_length": 160,
+  "n_fft": 400,
+  "n_samples": 480000,
+  "nb_max_frames": 3000,
+  "padding_side": "right",
+  "padding_value": 0.0,
+  "processor_class": "Qwen3ASRProcessor",
+  "return_attention_mask": true
+}

@@ -233,6 +233,13 @@ class ModelPaths:
     sensevoice_tokens_path: Path = Path(config["model_paths"]["sensevoice_tokens_path"])
     paraformer_path: Path = Path(config["model_paths"]["paraformer_path"])
     paraformer_tokens_path: Path = Path(config["model_paths"]["paraformer_tokens_path"])
+    qwen_ctc_dir: Path = Path(config["model_paths"]["qwen_ctc_dir"])
+    qwen_ctc_encoder_path: Path = Path(config["model_paths"]["qwen_ctc_encoder_path"])
+    qwen_ctc_ctc_path: Path = Path(config["model_paths"]["qwen_ctc_ctc_path"])
+    qwen_ctc_tokens_path: Path = Path(config["model_paths"]["qwen_ctc_tokens_path"])
+    qwen_ctc_preprocessor_path: Path = Path(
+        config["model_paths"]["qwen_ctc_preprocessor_path"]
+    )
     punc_model_dir: Path = Path(config["model_paths"]["punc_model_dir"])
     opus_mt_dir: Path = Path(config["model_paths"]["opus_mt_dir"])
 
@@ -283,6 +290,22 @@ class ParaformerArgs:
     debug: bool = config["paraformer_args"]["debug"]
 
 
+# Qwen3-ASR + CTC 头 参数配置
+class QwenCTCArgs:
+    encoder_onnx_path: str = config["model_paths"]["qwen_ctc_encoder_path"]
+    ctc_onnx_path: str = config["model_paths"]["qwen_ctc_ctc_path"]
+    tokens_path: str = config["model_paths"]["qwen_ctc_tokens_path"]
+    preprocessor_path: str = config["model_paths"]["qwen_ctc_preprocessor_path"]
+    blank_id: int = config["qwen_ctc_args"]["blank_id"]
+    unk_id: int = config["qwen_ctc_args"]["unk_id"]
+    mel_frames: int = config["qwen_ctc_args"]["mel_frames"]
+    num_threads: int = config["qwen_ctc_args"]["num_threads"]
+    provider: str = config["qwen_ctc_args"]["provider"]
+    start_bias: float = config["qwen_ctc_args"]["start_bias"]
+    end_bias: float = config["qwen_ctc_args"]["end_bias"]
+    verbose: bool = config["qwen_ctc_args"]["verbose"]
+
+
 def print_config():
     """测试，打印所有配置信息"""
 
@@ -305,6 +328,7 @@ def print_config():
         FunASRArgs,
         SenseVoiceArgs,
         ParaformerArgs,
+        QwenCTCArgs,
     ]
 
     for config_class in config_classes:

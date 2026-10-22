@@ -61,6 +61,34 @@
 > 本项目未对模型权重做任何修改，仅原样打包分发。
 > 许可证全文：<https://creativecommons.org/licenses/by/4.0/legalcode>
 
+## 6. Qwen3-ASR + CTC 头 语音识别模型
+
+- **目录**：`qwen-ctc-aiinfra4/`
+- **编码器上游**：[Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)（阿里巴巴通义千问）
+- **CTC 头与 ONNX 导出**：[JazerJu/qwen3-asr-ctc](https://huggingface.co/JazerJu/qwen3-asr-ctc)、
+  [JazerJu/glm-asr-ctc-bench](https://huggingface.co/JazerJu/glm-asr-ctc-bench)（JazerJu）
+- **参考实现**：[JazerJu/Qwen3-ASR-CTC-GGUF](https://github.com/JazerJu/Qwen3-ASR-CTC-GGUF)（**MIT**）、
+  [JazerJu/bench-asr-ctc](https://github.com/JazerJu/bench-asr-ctc)
+- **上游模型许可**：**Apache-2.0**
+
+### 模型文件构成
+
+| 文件 | 说明 |
+| --- | --- |
+| `Qwen3-ASR-Encoder.q4.onnx` | Qwen3-ASR 编码器（int4 量化，30 秒桶，输入 `input_features [128,3000]`） |
+| `Qwen3-ASR-CTC.fp16.onnx` | CTC 头（fp16，输出 `logits [batch,time,72468]`） |
+| `Qwen3-ASR-CTC.q4.onnx` | CTC 头（int4 量化，可选） |
+| `Qwen3-ASR-CTC.q4f16.onnx` | CTC 头（int4 量化 + fp16 激活，可选） |
+| `tokens.txt` | 紧凑词表，每行 `base64(原始字节)\t<id>`，共 72466 条 |
+| `preprocessor_config.json` | WhisperFeatureExtractor 配置（80 mel / hop 160 / 30 秒桶） |
+| `config.json` | CTC 头结构与训练信息 |
+
+### 署名声明
+
+> Qwen3-ASR 编码器由 **Qwen 团队**（阿里巴巴通义千问）发布，以 **Apache-2.0** 许可发布。
+> CTC 头由 **JazerJu** 训练并导出，参考实现 [Qwen3-ASR-CTC-GGUF](https://github.com/JazerJu/Qwen3-ASR-CTC-GGUF) 以 **MIT** 许可发布。
+> 本项目未对模型权重做任何修改，仅原样打包分发。
+
 ---
 
 ## 汇总表
@@ -72,3 +100,4 @@
 | `sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12` | Apache-2.0 | 需保留版权与许可声明 | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
 | `Fun-ASR-Nano-GGUF-2026-02-09` | FunASR 模型协议 v1.1 | **必须**标注来源并保留模型名称 | [MODEL_LICENSE](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE) |
 | `Helsinki-NLP--opus-mt-zh-en` | **CC-BY-4.0** | **必须**署名 Helsinki-NLP / OPUS-MT / Tatoeba | [CC-BY-4.0.txt](../LICENSES/CC-BY-4.0.txt) |
+| `qwen-ctc-aiinfra4` | Apache-2.0（编码器） / MIT（参考实现） | **必须**标注 Qwen 团队 / JazerJu | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |

@@ -1,0 +1,26 @@
+{
+  "model_type": "ctc-head",
+  "encoder_family": "qwen3-asr",
+  "base_encoder": "Qwen/Qwen3-ASR-1.7B",
+  "encoder_dim": 2048,
+  "proj_hidden": 2048,
+  "ctc_hidden": 512,
+  "num_blocks": 5,
+  "num_heads": 8,
+  "ffn_hidden": 128,
+  "vocab_size": 72468,
+  "self_cond": true,
+  "inter_layers": [
+    1,
+    3
+  ],
+  "blank_id": 72466,
+  "unk_id": 72467,
+  "frame_rate_hz": 13,
+  "frame_shift_sec": 0.076923,
+  "sample_rate": 16000,
+  "global_step": 339707,
+  "val_loss": 0.532074,
+  "params": 85448596,
+  "torch_dtype": "float32"
+}

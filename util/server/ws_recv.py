@@ -90,8 +90,10 @@ async def message_handler(websocket, message, cache: AudioCache):
 
         # 若缓冲已达到分段长度，将片段作为任务提交
         while len(cache.chunks) / 4 / 16000 >= seg_threshold:
-            data = cache.chunks[: 4 * 16000 * (seg_duration + seg_overlap)]
-            cache.chunks = cache.chunks[4 * 16000 * seg_duration :]
+            # seg_duration / seg_overlap 来自客户端，可能是浮点数，
+            # 而这里要用它们做字节切片，必须转成 int
+            data = cache.chunks[: 4 * 16000 * int(seg_duration + seg_overlap)]
+            cache.chunks = cache.chunks[4 * 16000 * int(seg_duration) :]
             task = Task(
                 source=message["source"],
                 data=data,
@@ -225,6 +227,7 @@ async def ws_recv(websocket):
             "util.server.recognize_paraformer",
             "util.server.recognize_sensevoice",
             "util.server.recognize_funasr",
+            "util.server.recognize_qwen_ctc",
         ):
             try:
                 _clear = __import__(
