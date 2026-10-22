@@ -12,6 +12,11 @@ with config_toml_path.open("r", encoding="utf-8") as f:
     config_str = f.read()
     config = parse(config_str)
 
+# Qwen3-ASR LLM 解码器（GGUF）的默认下载位置。
+# 只给 ModelPaths 的展示/校验用；QwenCTCArgs 里解码器路径的默认值是空串（= 纯 CTC），
+# 保证从旧版本升级上来的配置行为不变。
+DEFAULT_QWEN_LLM_PATH = "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
+
 
 # 调试配置
 class DebugConfig:
@@ -241,6 +246,16 @@ class ModelPaths:
     qwen_ctc_preprocessor_path: Path = Path(
         config["model_paths"]["qwen_ctc_preprocessor_path"]
     )
+    # 老配置文件可能没有这 3 个键，一律 .get 回退，不能 KeyError
+    qwen_llm_path: Path = Path(
+        config["model_paths"].get("qwen_llm_path", DEFAULT_QWEN_LLM_PATH)
+    )
+    qwen_ctc_encoder_frontend_path: Path = Path(
+        config["model_paths"].get("qwen_ctc_encoder_frontend_path", "")
+    )
+    qwen_ctc_encoder_backend_path: Path = Path(
+        config["model_paths"].get("qwen_ctc_encoder_backend_path", "")
+    )
     punc_model_dir: Path = Path(config["model_paths"]["punc_model_dir"])
     opus_mt_dir: Path = Path(config["model_paths"]["opus_mt_dir"])
 
@@ -297,6 +312,11 @@ class QwenCTCArgs:
     ctc_onnx_path: str = config["model_paths"]["qwen_ctc_ctc_path"]
     tokens_path: str = config["model_paths"]["qwen_ctc_tokens_path"]
     preprocessor_path: str = config["model_paths"]["qwen_ctc_preprocessor_path"]
+    # 模板里这 3 个是 `${model_paths.*}` 只读派生键（给 GUI 展示），Python 侧一律
+    # 从 model_paths 取真值，绝不能把未展开的占位符字符串当成路径
+    decoder_gguf_path: str = config["model_paths"].get("qwen_llm_path", "")
+    encoder_frontend_path: str = config["model_paths"].get("qwen_ctc_encoder_frontend_path", "")
+    encoder_backend_path: str = config["model_paths"].get("qwen_ctc_encoder_backend_path", "")
     blank_id: int = config["qwen_ctc_args"]["blank_id"]
     unk_id: int = config["qwen_ctc_args"]["unk_id"]
     mel_frames: int = config["qwen_ctc_args"]["mel_frames"]
@@ -304,6 +324,12 @@ class QwenCTCArgs:
     provider: str = config["qwen_ctc_args"]["provider"]
     start_bias: float = config["qwen_ctc_args"]["start_bias"]
     end_bias: float = config["qwen_ctc_args"]["end_bias"]
+    # 老配置文件没有这 4 个键，一律 .get 回退：enable_ctc 默认 True + 解码器路径空
+    # = 纯 CTC，行为与改动前完全一致
+    enable_ctc: bool = config["qwen_ctc_args"].get("enable_ctc", True)
+    llm_n_ctx: int = config["qwen_ctc_args"].get("llm_n_ctx", 4096)
+    llm_n_threads: int = config["qwen_ctc_args"].get("llm_n_threads", 6)
+    llm_n_predict: int = config["qwen_ctc_args"].get("llm_n_predict", 256)
     verbose: bool = config["qwen_ctc_args"]["verbose"]
 
 

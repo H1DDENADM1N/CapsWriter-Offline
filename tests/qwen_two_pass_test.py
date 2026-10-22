@@ -57,6 +57,17 @@ Task 6 覆盖 `util/qwen_ctc/engine.py`（三模式编排）：
     运行时（`bin/` 缺 DLL 也能起，§7.2 / §10.2）；两遍文本必须 == 纯 LLM 文本
     且 != 纯 CTC 文本（§12.3）。
 
+Task 7 覆盖「配置面」（`util/config.py` + 四个模板）：
+28. 四个模板都必须有 10 个新键，且派生只读键严格写成 `${model_paths.*}` 占位符、
+    顺序固定在既有派生键之后 / `verbose` 之前、每个键都带一行 `#` 注释（两个可为空
+    的 encoder 键的注释必须出现「留空」），四者同构；
+29. `configs/default config.toml` 的整行注释数 = 333（323 + 10）；
+30. `ModelPaths` / `QwenCTCArgs` 的 10 个新字段全部用 `.get()`（老配置不能 KeyError），
+    默认值与规格 §6.1 / §6.3 一致，且运行时真值取自 `model_paths`（不能把模板里
+    未展开的 `${...}` 占位符当成路径）；
+31. 拿「删掉 10 个新键」的老配置喂给 `util/config.py` 必须能正常加载，且回退成
+    纯 CTC（`decoder_gguf_path` 空、`enable_ctc` 仍为 True）。
+
 需要模型文件 models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf
 （0.6B 用例需要 models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
 """
@@ -74,6 +85,9 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 # 直接 `python tests/qwen_two_pass_test.py` 运行时，脚本目录才是 sys.path[0]
 sys.path.append(str(ROOT))
+
+# 四个模板必须完全同构：仓库根 + configs/ 下的三个
+TEMPLATES = [ROOT / "config.toml"] + sorted((ROOT / "configs").glob("* config.toml"))
 
 DECODER_17B = ROOT / "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
 DECODER_06B = ROOT / "models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf"
@@ -1215,6 +1229,275 @@ def test_engine_pure_ctc_requires_ctc_head():
         raise AssertionError("纯 CTC 模式缺 CTC 头时必须抛 ValueError")
 
 
+# --------------------------------------------------------------------------
+# Task 7: 配置面 —— util/config.py + 四个模板
+# --------------------------------------------------------------------------
+
+# 四个模板里新增的 10 个叶子键（规格 §6.1）
+_NEW_MODEL_PATH_KEYS = (
+    "qwen_llm_path",
+    "qwen_ctc_encoder_frontend_path",
+    "qwen_ctc_encoder_backend_path",
+)
+# 派生只读键 -> 它必须指向的同名 model_paths 键（GUI 一致性断言依赖这个映射）
+_NEW_DERIVED_KEYS = {
+    "decoder_gguf_path": "qwen_llm_path",
+    "encoder_frontend_path": "qwen_ctc_encoder_frontend_path",
+    "encoder_backend_path": "qwen_ctc_encoder_backend_path",
+}
+_NEW_CTX_KEYS = ("enable_ctc", "llm_n_ctx", "llm_n_threads", "llm_n_predict")
+
+
+def _template_comment_after(text: str, key: str, header: str = "") -> str:
+    """取模板里 `key = ...` 下一行的整行注释，并断言它确实存在（键 → 注释 → 空行）
+
+    传了 header 就只在那一节里找 —— `[funasr_args]` 里也有同名的 `decoder_gguf_path`
+    和 `enable_ctc`，全文搜索会错取到别人的注释。
+    """
+    if header:
+        lines = _section_lines(text, header)
+    else:
+        lines = [line.strip() for line in text.splitlines()]
+    for i, line in enumerate(lines):
+        if line.startswith(f"{key} =") or line.startswith(f"{key}="):
+            nxt = lines[i + 1] if i + 1 < len(lines) else ""
+            assert nxt.startswith("#"), f"键 {key} 后面必须紧跟一行 # 注释，实际 {nxt!r}"
+            return nxt
+    raise AssertionError(f"模板里找不到键 {key}" + (f"（节 {header}）" if header else ""))
+
+
+def _section_lines(text: str, header: str) -> list:
+    """某一节（到下一个 `[...]` 之前）里的非空行，保持原顺序"""
+    out, inside = [], False
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("[") and s.endswith("]"):
+            inside = s == header
+            continue
+        if inside and s:
+            out.append(s)
+    return out
+
+
+def _qwen_model_paths_tail(text: str) -> list:
+    """`[model_paths]` 里从第一个 qwen_ctc 键到节尾的原文片段（比较同构用）"""
+    lines = _section_lines(text, "[model_paths]")
+    for i, s in enumerate(lines):
+        if s.startswith("qwen_ctc_encoder_path ="):
+            return lines[i:]
+    raise AssertionError("[model_paths] 里找不到 qwen_ctc_encoder_path")
+
+
+def _blank_line_after_key(text: str, key: str) -> bool:
+    """`key = ...` → 一行 # 注释 → 空行；同名键有多处时每一处都要满足"""
+    lines = text.splitlines()
+    hits = 0
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if not (s.startswith(f"{key} =") or s.startswith(f"{key}=")):
+            continue
+        hits += 1
+        comment = lines[i + 1].strip() if i + 1 < len(lines) else ""
+        blank = lines[i + 2].strip() if i + 2 < len(lines) else ""
+        if not comment.startswith("#") or blank != "":
+            return False
+    assert hits, f"模板里找不到键 {key}"
+    return True
+
+
+def test_templates_have_new_qwen_keys():
+    """四个模板都要有 10 个新键、正确的占位符 / 默认值 / 顺序 / 注释"""
+    import tomlkit
+
+    assert len(TEMPLATES) == 4, f"模板数应为 4，实际 {[p.name for p in TEMPLATES]}"
+    for p in TEMPLATES:
+        text = p.read_text(encoding="utf-8")
+        doc = tomlkit.parse(text)
+        mp, qa = doc["model_paths"], doc["qwen_ctc_args"]
+
+        for key in _NEW_MODEL_PATH_KEYS:
+            assert key in mp, f"{p} 缺 model_paths.{key}"
+        assert str(mp["qwen_llm_path"]) == (
+            "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
+        ), f"{p} 的 qwen_llm_path 默认值不对：{mp['qwen_llm_path']}"
+        assert str(mp["qwen_ctc_encoder_frontend_path"]) == ""
+        assert str(mp["qwen_ctc_encoder_backend_path"]) == ""
+
+        # 派生只读键必须严格是 `${model_paths.同名键}`
+        for name, target in _NEW_DERIVED_KEYS.items():
+            assert name in qa, f"{p} 缺 qwen_ctc_args.{name}"
+            assert str(qa[name]) == f"${{model_paths.{target}}}", (
+                f"{p} 的 {name} 必须是 ${{model_paths.{target}}}，实际 {qa[name]!r}"
+            )
+
+        assert qa["enable_ctc"] is True, f"{p} 的 enable_ctc 必须是 true"
+        assert int(qa["llm_n_ctx"]) == 4096
+        assert int(qa["llm_n_threads"]) == 6
+        assert int(qa["llm_n_predict"]) == 256
+
+        # 顺序：既有 4 个派生键 → 3 个新派生键 → blank_id → ... → 4 个新键 → verbose
+        keys = list(qa.keys())
+        assert keys.index("preprocessor_path") < keys.index("decoder_gguf_path")
+        assert keys.index("decoder_gguf_path") < keys.index("blank_id"), (
+            "3 个新派生键应紧跟既有派生键、在 blank_id 之前"
+        )
+        for name in _NEW_DERIVED_KEYS:
+            assert keys.index(name) < keys.index("blank_id"), f"{name} 必须在 blank_id 之前"
+        for key in _NEW_CTX_KEYS:
+            assert keys.index(key) < keys.index("verbose"), f"{key} 必须在 verbose 之前"
+
+        # `[model_paths]` 的 3 个新键紧跟 qwen_ctc_preprocessor_path
+        mp_keys = list(mp.keys())
+        assert mp_keys.index("qwen_ctc_preprocessor_path") < mp_keys.index("qwen_llm_path")
+        assert mp_keys.index("qwen_llm_path") < mp_keys.index("qwen_ctc_encoder_frontend_path")
+        assert mp_keys.index("qwen_ctc_encoder_frontend_path") < mp_keys.index(
+            "qwen_ctc_encoder_backend_path"
+        )
+        idx = mp_keys.index("qwen_ctc_preprocessor_path")
+        assert mp_keys[idx + 1 : idx + 4] == list(_NEW_MODEL_PATH_KEYS), (
+            f"{p} 的 3 个新路径键必须紧跟在 qwen_ctc_preprocessor_path 之后"
+        )
+
+        # 每个新键都要有一行注释，且两个可为空的键必须明说「留空」（GUI 会校验）
+        for key in _NEW_MODEL_PATH_KEYS:
+            _template_comment_after(text, key, "[model_paths]")
+        for key in tuple(_NEW_DERIVED_KEYS) + _NEW_CTX_KEYS:
+            _template_comment_after(text, key, "[qwen_ctc_args]")
+        for key in ("qwen_ctc_encoder_frontend_path", "qwen_ctc_encoder_backend_path"):
+            assert "留空" in _template_comment_after(text, key, "[model_paths]"), (
+                f"{p} 的 {key} 注释必须出现「留空」二字"
+            )
+
+        # 注释之后必须跟一个空行（沿用该节现有的 键 / 注释 / 空行 风格）
+        for key in _NEW_MODEL_PATH_KEYS + tuple(_NEW_DERIVED_KEYS) + _NEW_CTX_KEYS:
+            assert _blank_line_after_key(text, key), f"{p} 的 {key} 注释后缺空行"
+
+
+def test_default_template_comment_count_is_333():
+    """默认模板的整行注释数从 323 变成 333（10 个新键各带一行注释）"""
+    p = ROOT / "configs/default config.toml"
+    n = sum(1 for line in p.read_text(encoding="utf-8").splitlines() if line.strip().startswith("#"))
+    assert n == 333, f"整行注释数应为 333，实际 {n}"
+
+
+def test_templates_are_isomorphic():
+    """四个模板在改动区域内必须同构：同样的键、同样的顺序、同样的注释文案"""
+    ref_text = TEMPLATES[0].read_text(encoding="utf-8")
+    ref_qa = _section_lines(ref_text, "[qwen_ctc_args]")
+    ref_mp = _qwen_model_paths_tail(ref_text)
+    for p in TEMPLATES[1:]:
+        text = p.read_text(encoding="utf-8")
+        assert _section_lines(text, "[qwen_ctc_args]") == ref_qa, (
+            f"{p} 的 [qwen_ctc_args] 与 {TEMPLATES[0]} 不同构"
+        )
+        assert _qwen_model_paths_tail(text) == ref_mp, (
+            f"{p} 的 [model_paths] qwen 段与 {TEMPLATES[0]} 不同构"
+        )
+
+
+def test_qwen_ctc_args_reads_new_keys_with_get_fallback():
+    """10 个新字段必须全走 .get()，运行时真值取自 model_paths（不是未展开的占位符）"""
+    src = (ROOT / "util/config.py").read_text(encoding="utf-8")
+
+    for key in _NEW_MODEL_PATH_KEYS:
+        assert f'config["model_paths"].get("{key}"' in src, (
+            f"ModelPaths 必须用 .get 读 {key}"
+        )
+        assert f'config["model_paths"]["{key}"]' not in src, (
+            f"{key} 不能直接下标（老配置会 KeyError）"
+        )
+    for key in _NEW_CTX_KEYS:
+        assert f'config["qwen_ctc_args"].get("{key}"' in src, (
+            f"QwenCTCArgs 必须用 .get 读 {key}"
+        )
+        assert f'config["qwen_ctc_args"]["{key}"]' not in src, (
+            f"{key} 不能直接下标（老配置会 KeyError）"
+        )
+    # 3 个派生属性在 config.py 里没有同名 TOML 键可读，真值一律来自 model_paths
+    for name, target in _NEW_DERIVED_KEYS.items():
+        assert f'{name}: str = config["model_paths"].get("{target}"' in src, (
+            f"QwenCTCArgs.{name} 必须从 model_paths.{target} 用 .get() 取值"
+        )
+
+    from util.config import ModelPaths, QwenCTCArgs
+
+    assert QwenCTCArgs.enable_ctc is True
+    assert (QwenCTCArgs.llm_n_ctx, QwenCTCArgs.llm_n_threads, QwenCTCArgs.llm_n_predict) == (
+        4096,
+        6,
+        256,
+    )
+    assert Path(QwenCTCArgs.decoder_gguf_path) == ModelPaths.qwen_llm_path
+    assert Path(QwenCTCArgs.encoder_frontend_path) == ModelPaths.qwen_ctc_encoder_frontend_path
+    assert Path(QwenCTCArgs.encoder_backend_path) == ModelPaths.qwen_ctc_encoder_backend_path
+    # 模板里的 `${model_paths.*}` 只是给 GUI 看的占位符，绝不能漏进运行时路径
+    for name in _NEW_DERIVED_KEYS:
+        assert "${" not in getattr(QwenCTCArgs, name), (
+            f"QwenCTCArgs.{name} 取到了未展开的占位符：{getattr(QwenCTCArgs, name)!r}"
+        )
+
+
+def test_old_config_without_new_keys_still_loads():
+    """老配置（没有 10 个新键）必须能加载，并回退成纯 CTC（规格 §15.1）"""
+    import importlib.util
+    import shutil
+
+    text = (ROOT / "config.toml").read_text(encoding="utf-8")
+    new_keys = _NEW_MODEL_PATH_KEYS + tuple(_NEW_DERIVED_KEYS) + _NEW_CTX_KEYS
+
+    # 只在 [model_paths] / [qwen_ctc_args] 里删键 —— [funasr_args] 也有 enable_ctc
+    # 之类的同名键，那些是本来就存在的，删了就不是「老配置」了。
+    src_lines = text.splitlines()
+    kept, inside, i = [], False, 0
+    while i < len(src_lines):
+        s = src_lines[i].strip()
+        if s.startswith("[") and s.endswith("]"):
+            inside = s in ("[model_paths]", "[qwen_ctc_args]")
+        if inside and any(s.startswith(f"{key} =") for key in new_keys):
+            i += 1
+            while i < len(src_lines):
+                t = src_lines[i].strip()
+                if t and not t.startswith("#"):
+                    break
+                i += 1
+            continue
+        kept.append(src_lines[i])
+        i += 1
+    old_text = "\n".join(kept) + "\n"
+    import tomlkit
+
+    old_doc = tomlkit.parse(old_text)
+    for key in _NEW_MODEL_PATH_KEYS:
+        assert key not in old_doc["model_paths"], f"构造老配置时没删掉 model_paths.{key}"
+    for key in tuple(_NEW_DERIVED_KEYS) + _NEW_CTX_KEYS:
+        assert key not in old_doc["qwen_ctc_args"], f"构造老配置时没删掉 qwen_ctc_args.{key}"
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "util").mkdir()
+        shutil.copy(ROOT / "util" / "config.py", root / "util" / "config.py")
+        (root / "config.toml").write_text(old_text, encoding="utf-8")
+
+        spec = importlib.util.spec_from_file_location(
+            "old_config_under_test", root / "util" / "config.py"
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # 缺键时抛 KeyError 就在这里炸
+
+    assert mod.QwenCTCArgs.decoder_gguf_path == "", "老配置没有解码器 → 必须是纯 CTC"
+    assert mod.QwenCTCArgs.enable_ctc is True
+    assert (mod.QwenCTCArgs.llm_n_ctx, mod.QwenCTCArgs.llm_n_threads,
+            mod.QwenCTCArgs.llm_n_predict) == (4096, 6, 256)
+    assert mod.QwenCTCArgs.encoder_frontend_path == ""
+    assert mod.QwenCTCArgs.encoder_backend_path == ""
+    # ModelPaths 的 3 个新字段也必须用回退值填充，而不是炸掉
+    assert mod.ModelPaths.qwen_llm_path == Path(
+        "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
+    )
+    assert mod.ModelPaths.qwen_ctc_encoder_frontend_path == Path(".")
+    assert mod.ModelPaths.qwen_ctc_encoder_backend_path == Path(".")
+
+
 def _write_gguf(path_dir: Path, name: str, tensor_name: str, tensor: np.ndarray):
     """写一个只含单个张量的最小 GGUF（用于构造「没有 token_embd.weight」的情形）"""
     import gguf
@@ -1320,6 +1603,11 @@ if __name__ == "__main__":
         test_engine_rejects_decoder_encoder_dim_mismatch,
         test_engine_rejects_half_split_encoder,
         test_engine_pure_ctc_requires_ctc_head,
+        test_templates_have_new_qwen_keys,
+        test_templates_are_isomorphic,
+        test_default_template_comment_count_is_333,
+        test_qwen_ctc_args_reads_new_keys_with_get_fallback,
+        test_old_config_without_new_keys_still_loads,
     ]
     failed = 0
     for t in tests:
