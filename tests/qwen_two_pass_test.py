@@ -33,11 +33,14 @@ Task 4 覆盖 `util/qwen_ctc/align.py`（CTC 字级时间戳 → LLM 文本）�
 
 Task 5 覆盖 `util/qwen_ctc/llm.py`（Qwen3-ASR LLM 二遍解码器）：
 16. ChatML 提示形态与特殊 token：14 + T + 6，首尾落在 `<|audio_start|>` /
-    `<|audio_end|>`，停止符是显式解析的 `{<|im_end|>, <|endoftext|>}`；
-17. 1.7B 解码器能直接吃融合 encoder 的输出并生成非空文本；
+    `<|audio_end|>`，末位落在 `<asr_text>`(151704)，停止符是显式解析的
+    `{<|im_end|>, <|endoftext|>}`；
+17. 1.7B 解码器能直接吃融合 encoder 的输出，并转出期望内容（断言 `開放時間` 子串，
+    而非只断非空——提示顺序 / 音频注入 / pos4 错位时模型仍可能吐出「像样」的乱码）；
 18. `n_prefill + n_predict > n_ctx` 时把上限收紧到 `n_ctx - n_prefill` 并留 WARNING；
-19. 0.6B 解码器（n_embd=1024）能直接吃拆分 encoder 的输出；
-20. `warmup()` 不抛异常，且同一段音频连续两次生成结果一致（KV 清理生效）。
+19. 0.6B 解码器（n_embd=1024）能直接吃拆分 encoder 的输出（只断非空，避开跨尺寸差异）；
+20. `warmup()` 正常路径不抛异常，且同一段音频连续两次生成结果一致（KV 清理生效）；
+21. `warmup()` 遇真实错误时先记 ERROR 日志再原样抛出，绝不吞错（规格 §12.2）。
 
 需要模型文件 models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf
 （0.6B 用例需要 models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
@@ -703,6 +706,9 @@ def test_llm_prompt_special_tokens():
         assert dec.suffix_ids[0] == 151670, "suffix 必须以 <|audio_end|> 开始"
         assert dec.stop_ids == {151645, 151643}
         assert len(dec.prefix_ids) == 14 and len(dec.suffix_ids) == 6
+        # suffix 必须收在 <asr_text>：提示顺序错（suffix 只留 audio_end/im_end/im_start）
+        # 时模型依旧能吐出「像样」的文本，只有这个断言能钉住 pos4 布局里的 asr_text 位
+        assert dec.suffix_ids[-1] == 151704, "suffix 必须收在 <asr_text>(151704)"
         # 停止符不能拿 GGUF 的 eos 元数据凑数：两个都要显式解析出来
         assert 151645 in dec.stop_ids and 151643 in dec.stop_ids
     finally:
@@ -710,6 +716,7 @@ def test_llm_prompt_special_tokens():
 
 
 def test_llm_generates_transcript_from_encoder_output():
+    """1.7B 必须真的转出这段中文音频的内容（只断非空会放过提示顺序/音频注入错位）"""
     if not _llm_models_available():
         print("  (跳过：缺少 1.7B 解码器 / encoder / 测试音频)", flush=True)
         return
@@ -720,6 +727,9 @@ def test_llm_generates_transcript_from_encoder_output():
         text = dec.generate(enc.encode(_read_wav(AUDIO_ZH)))
         assert text, "生成结果不得为空"
         assert "<|im_end|>" not in text and "<|im_start|>" not in text
+        # 本机实测（T=0 贪心，可复现）： '開放時間：早上九點至下午五點。'
+        # 只钉稳定核心子串：完全相等对 llama.cpp 版本/量化后端的数值差异太脆
+        assert "開放時間" in text, f"1.7B 转写缺失期望内容，实际 {text!r}"
         print(f"  LLM 文本: {text!r}", flush=True)
     finally:
         dec.close()
@@ -757,7 +767,7 @@ def test_llm_generates_transcript_06b():
 
 
 def test_llm_warmup_and_repeat_generate_are_stable():
-    """warmup 不得抛异常；同一段音频连续两次生成必须一致（KV 清理生效）"""
+    """正常路径下 warmup 不得抛异常；两次生成必须一致（KV 清理生效）"""
     if not _llm_models_available():
         print("  (跳过：缺少 1.7B 解码器 / encoder / 测试音频)", flush=True)
         return
@@ -773,6 +783,31 @@ def test_llm_warmup_and_repeat_generate_are_stable():
     finally:
         dec.close()
         enc.close()
+
+
+def test_llm_warmup_propagates_real_errors():
+    """预热是启动调用：遇真实错误必须「先记日志、再抛出」，不能吞（规格 §12.2）"""
+    if not _llm_models_available():
+        print("  (跳过：缺少 1.7B 解码器 / encoder / 测试音频)", flush=True)
+        return
+
+    dec = _make_llm_decoder()
+    try:
+        def _boom(_full):
+            raise RuntimeError("模拟预热失败")
+
+        # 实例属性遮蔽绑定的方法：self._prefill(full) 会按 _boom(full) 调用
+        dec._prefill = _boom
+        with _capture_logs("util.qwen_ctc.llm") as records:
+            try:
+                dec.warmup()
+            except RuntimeError as exc:
+                assert "模拟预热失败" in str(exc), f"抛出的不是原始错误：{exc}"
+            else:
+                raise AssertionError("warmup 必须把真实错误抛出，不能吞")
+        assert any(r.levelno >= logging.ERROR for r in records), "抛错前必须先记一条 ERROR 日志"
+    finally:
+        dec.close()
 
 
 def _write_gguf(path_dir: Path, name: str, tensor_name: str, tensor: np.ndarray):
@@ -866,6 +901,7 @@ if __name__ == "__main__":
         test_llm_predict_is_clamped_to_context,
         test_llm_generates_transcript_06b,
         test_llm_warmup_and_repeat_generate_are_stable,
+        test_llm_warmup_propagates_real_errors,
     ]
     failed = 0
     for t in tests:

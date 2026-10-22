@@ -463,7 +463,12 @@ class QwenLLMDecoder:
         预热：1 帧静音跑一次完整 prefill + 1 token 生成
 
         首次 prefill 有约 2 s 的一次性开销（llama 图 reserve），第二次起约 20 ms。
-        预热故意只生成 1 个 token（不在静音上跑到 n_predict），异常只记日志不抛。
+        预热故意只生成 1 个 token（不在静音上跑到 n_predict）。
+
+        Raises:
+            BaseException: 预热过程中出现的任何真实错误都**先记日志再原样抛出**
+                （规格 §12.2：「预热不得吞错」）。预热是启动阶段的一次性调用，
+                吞掉错误只会把故障推迟到第一段音频，还会让坏模型看起来能加载。
         """
         self._ensure_alive()
         try:
@@ -472,13 +477,15 @@ class QwenLLMDecoder:
             prefill_ms = self._prefill(full)
             self._decode_loop(1, 0.0)
             self._ctx.clear_kv()
-            total_ms = (time.perf_counter() - t0) * 1000.0
-            self._log(
-                "info",
-                f"LLM 预热完成：prefill {prefill_ms:.0f} ms（总计 {total_ms:.0f} ms）",
-            )
         except Exception as exc:
-            self._log("warning", f"预热失败（不影响后续生成）: {exc}")
+            # 不吞错：先留痕（启动日志里能直接看到失败原因），再原样向上抛
+            self._log("error", f"LLM 预热失败: {exc}")
+            raise
+        total_ms = (time.perf_counter() - t0) * 1000.0
+        self._log(
+            "info",
+            f"LLM 预热完成：prefill {prefill_ms:.0f} ms（总计 {total_ms:.0f} ms）",
+        )
 
     # ── 日志 ──────────────────────────────────────────────────────────
 
