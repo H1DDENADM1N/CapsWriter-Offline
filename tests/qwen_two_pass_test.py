@@ -31,6 +31,14 @@ Task 4 覆盖 `util/qwen_ctc/align.py`（CTC 字级时间戳 → LLM 文本）�
 15. 完全一致的两段文本必须原样保留 CTC 起始时间；空 CTC 按 `i*duration/len(text)`
     均分；LLM 多出来的标点在两侧锚点之间线性插值；大小写 / 全角半角不影响匹配。
 
+Task 5 覆盖 `util/qwen_ctc/llm.py`（Qwen3-ASR LLM 二遍解码器）：
+16. ChatML 提示形态与特殊 token：14 + T + 6，首尾落在 `<|audio_start|>` /
+    `<|audio_end|>`，停止符是显式解析的 `{<|im_end|>, <|endoftext|>}`；
+17. 1.7B 解码器能直接吃融合 encoder 的输出并生成非空文本；
+18. `n_prefill + n_predict > n_ctx` 时把上限收紧到 `n_ctx - n_prefill` 并留 WARNING；
+19. 0.6B 解码器（n_embd=1024）能直接吃拆分 encoder 的输出；
+20. `warmup()` 不抛异常，且同一段音频连续两次生成结果一致（KV 清理生效）。
+
 需要模型文件 models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf
 （0.6B 用例需要 models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
 """
@@ -670,6 +678,103 @@ def test_align_prefix_is_not_flattened_to_zero():
     assert 0.0 < ts[1] < ts[2] < ts[3] < ts[4] <= 0.2 + 1e-9, f"前缀被压平了：{ts}"
 
 
+# --------------------------------------------------------------------------
+# Task 5: llm.py —— Qwen3-ASR LLM 二遍解码器
+# --------------------------------------------------------------------------
+
+
+def _llm_models_available() -> bool:
+    """1.7B 解码器 + 融合 encoder 是否齐全（LLM 生成用例需要两者）"""
+    return DECODER_17B.is_file() and _models_available() and AUDIO_ZH.is_file()
+
+
+def _make_llm_decoder(gguf=DECODER_17B, **kwargs):
+    from util.qwen_ctc.llm import QwenLLMDecoder
+
+    return QwenLLMDecoder(str(gguf), **kwargs)
+
+
+def test_llm_prompt_special_tokens():
+    """ChatML 提示必须按实测形态拼：14 + T + 6，且首尾落在 audio 分隔符上"""
+    dec = _make_llm_decoder()
+    try:
+        assert dec.n_embd == 2048
+        assert dec.prefix_ids[-1] == 151669, "prefix 必须落在 <|audio_start|>"
+        assert dec.suffix_ids[0] == 151670, "suffix 必须以 <|audio_end|> 开始"
+        assert dec.stop_ids == {151645, 151643}
+        assert len(dec.prefix_ids) == 14 and len(dec.suffix_ids) == 6
+        # 停止符不能拿 GGUF 的 eos 元数据凑数：两个都要显式解析出来
+        assert 151645 in dec.stop_ids and 151643 in dec.stop_ids
+    finally:
+        dec.close()
+
+
+def test_llm_generates_transcript_from_encoder_output():
+    if not _llm_models_available():
+        print("  (跳过：缺少 1.7B 解码器 / encoder / 测试音频)", flush=True)
+        return
+
+    dec = _make_llm_decoder()
+    enc = _make_fused_encoder()
+    try:
+        text = dec.generate(enc.encode(_read_wav(AUDIO_ZH)))
+        assert text, "生成结果不得为空"
+        assert "<|im_end|>" not in text and "<|im_start|>" not in text
+        print(f"  LLM 文本: {text!r}", flush=True)
+    finally:
+        dec.close()
+        enc.close()
+
+
+def test_llm_predict_is_clamped_to_context():
+    """n_prefill + n_predict 超过 n_ctx 时必须收紧上限并留 WARNING，而非让 llama 报错"""
+    with _capture_logs("util.qwen_ctc.llm") as records:
+        dec = _make_llm_decoder(n_ctx=512, n_predict=100000)
+        try:
+            assert dec.effective_n_predict(410) == 512 - 410
+        finally:
+            dec.close()
+    assert any(r.levelno >= logging.WARNING for r in records), "收紧上限时必须留一条 WARNING"
+
+
+def test_llm_generates_transcript_06b():
+    """0.6B 解码器（n_embd=1024）也必须能直接吃 0.6B 拆分 encoder 的输出"""
+    if not (DECODER_06B.is_file() and _split_models_available() and AUDIO_ZH.is_file()):
+        print("  (跳过：缺少 0.6B 解码器 / 拆分 encoder)", flush=True)
+        return
+
+    dec = _make_llm_decoder(DECODER_06B)
+    enc = _make_split_encoder()
+    try:
+        assert dec.n_embd == 1024
+        text = dec.generate(enc.encode(_read_wav(AUDIO_ZH)))
+        assert text, "0.6B 生成结果不得为空"
+        assert "<|im_end|>" not in text
+        print(f"  LLM 文本(0.6B): {text!r}", flush=True)
+    finally:
+        dec.close()
+        enc.close()
+
+
+def test_llm_warmup_and_repeat_generate_are_stable():
+    """warmup 不得抛异常；同一段音频连续两次生成必须一致（KV 清理生效）"""
+    if not _llm_models_available():
+        print("  (跳过：缺少 1.7B 解码器 / encoder / 测试音频)", flush=True)
+        return
+
+    dec = _make_llm_decoder()
+    enc = _make_fused_encoder()
+    try:
+        dec.warmup()  # 吞掉首次 prefill 的图 reserve 开销
+        audio = enc.encode(_read_wav(AUDIO_ZH))
+        first = dec.generate(audio)
+        second = dec.generate(audio)
+        assert first and first == second, "同一段音频两次生成结果必须一致"
+    finally:
+        dec.close()
+        enc.close()
+
+
 def _write_gguf(path_dir: Path, name: str, tensor_name: str, tensor: np.ndarray):
     """写一个只含单个张量的最小 GGUF（用于构造「没有 token_embd.weight」的情形）"""
     import gguf
@@ -756,6 +861,11 @@ if __name__ == "__main__":
         test_align_is_case_insensitive_and_fullwidth_normalized,
         test_align_mixed_cjk_latin_and_length_mismatch,
         test_align_prefix_is_not_flattened_to_zero,
+        test_llm_prompt_special_tokens,
+        test_llm_generates_transcript_from_encoder_output,
+        test_llm_predict_is_clamped_to_context,
+        test_llm_generates_transcript_06b,
+        test_llm_warmup_and_repeat_generate_are_stable,
     ]
     failed = 0
     for t in tests:
