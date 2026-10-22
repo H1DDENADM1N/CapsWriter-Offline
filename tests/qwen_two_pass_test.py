@@ -68,6 +68,14 @@ Task 7 覆盖「配置面」（`util/config.py` + 四个模板）：
 31. 拿「删掉 10 个新键」的老配置喂给 `util/config.py` 必须能正常加载，且回退成
     纯 CTC（`decoder_gguf_path` 空、`enable_ctc` 仍为 True）。
 
+Task 8 覆盖启动体检（`util/server/check_model.py`）：
+32. `required_qwen_files` 必须按模式给出必需文件：融合 encoder 的纯 CTC / 两遍 /
+    纯 LLM、0.6B 拆分 encoder 四种组合逐条断言；空字符串与 None 一律视为
+    「未配置」不进列表（`decoder=""` 是合法的纯 CTC）；
+33. 模式层面的硬错误必须早于引擎暴露：「解码器为空 + 禁用 CTC」与
+    「0.6B 前后端只配一端」，且合法组合不许误报；
+34. 缺失文件提示里的 §4.3 下载命令（1.7B 一条 + 0.6B 循环三条）必须逐字保留。
+
 需要模型文件 models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf
 （0.6B 用例需要 models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
 """
@@ -1546,6 +1554,165 @@ def _write_tiny_decoder_gguf(path_dir: Path, n_vocab: int, n_embd: int):
     return path, ref
 
 
+def test_required_qwen_files_fused_pure_ctc():
+    """融合 encoder + 无解码器 + enable_ctc=True ⇒ encoder/ctc/tokens/preprocessor"""
+    from util.server.check_model import required_qwen_files
+
+    p = dict(
+        encoder="e.onnx",
+        frontend="",
+        backend="",
+        ctc="c.onnx",
+        tokens="t.txt",
+        preprocessor="pp",
+        decoder="",
+    )
+    assert required_qwen_files(False, False, True, p) == [
+        "e.onnx",
+        "c.onnx",
+        "t.txt",
+        "pp",
+    ]
+
+
+def test_required_qwen_files_fused_two_pass_includes_decoder():
+    """融合 encoder + 有解码器 + enable_ctc=True ⇒ encoder/ctc/tokens/preprocessor/decoder"""
+    from util.server.check_model import required_qwen_files
+
+    p = dict(
+        encoder="e.onnx",
+        frontend="",
+        backend="",
+        ctc="c.onnx",
+        tokens="t.txt",
+        preprocessor="pp",
+        decoder="d.gguf",
+    )
+    assert required_qwen_files(False, True, True, p) == [
+        "e.onnx",
+        "c.onnx",
+        "t.txt",
+        "pp",
+        "d.gguf",
+    ]
+
+
+def test_required_qwen_files_fused_llm_only_skips_ctc_head():
+    """融合 encoder + 有解码器 + enable_ctc=False ⇒ encoder/preprocessor/decoder，不要 ctc/tokens"""
+    from util.server.check_model import required_qwen_files
+
+    p = dict(
+        encoder="e.onnx",
+        frontend="",
+        backend="",
+        ctc="c.onnx",
+        tokens="t.txt",
+        preprocessor="pp",
+        decoder="d.gguf",
+    )
+    assert required_qwen_files(False, True, False, p) == ["e.onnx", "pp", "d.gguf"]
+
+
+def test_required_qwen_files_split_encoder_skips_ctc_and_tokens():
+    """0.6B 拆分 encoder ⇒ 前后端 + preprocessor + 解码器，0.6B 没有 CTC 头 / tokens"""
+    from util.server.check_model import required_qwen_files
+
+    p = dict(
+        encoder="e.onnx",
+        frontend="f.onnx",
+        backend="b.onnx",
+        ctc="c.onnx",
+        tokens="t.txt",
+        preprocessor="pp",
+        decoder="d.gguf",
+    )
+    files = required_qwen_files(True, True, True, p)
+    assert files == ["f.onnx", "b.onnx", "pp", "d.gguf"]
+    # 即使调用方误传了 ctc/tokens，拆分形态也绝不能要求它们
+    assert "c.onnx" not in files
+    assert "t.txt" not in files
+
+
+def test_required_qwen_files_empty_string_and_none_are_unconfigured():
+    """空字符串 / None 一律视为「未配置」；decoder="" 是合法的纯 CTC"""
+    from util.server.check_model import required_qwen_files
+
+    p = dict(
+        encoder="e.onnx",
+        frontend="",
+        backend=None,
+        ctc="",
+        tokens=None,
+        preprocessor="pp",
+        decoder="",
+    )
+    assert required_qwen_files(False, False, True, p) == ["e.onnx", "pp"]
+    # has_decoder=True 但 decoder 路径为空：空串不能进必需列表
+    assert required_qwen_files(False, True, False, p) == ["e.onnx", "pp"]
+
+
+def test_qwen_mode_errors_reject_no_decoder_and_ctc_disabled():
+    """解码器为空 + enable_ctc=False ⇒ 模式层面硬错误（§7.2 唯一一行）"""
+    from util.server.check_model import qwen_mode_errors
+
+    errors = qwen_mode_errors(
+        has_frontend=False, has_backend=False, has_decoder=False, enable_ctc=False
+    )
+    assert any("既未配置解码器又禁用了 CTC，无推理路径" in e for e in errors), errors
+
+
+def test_qwen_mode_errors_reject_half_split_encoder():
+    """0.6B 前后端只配一端 ⇒ 模式层面硬错误，两个方向都要拦"""
+    from util.server.check_model import qwen_mode_errors
+
+    for has_frontend, has_backend in ((True, False), (False, True)):
+        errors = qwen_mode_errors(has_frontend, has_backend, True, True)
+        assert any("0.6B 编码器前后端必须成对配置" in e for e in errors), (
+            has_frontend,
+            has_backend,
+            errors,
+        )
+
+
+def test_qwen_mode_errors_accepts_every_valid_mode():
+    """合法的模式组合一个都不许误报（否则启动体检会拦住能跑的模式）"""
+    from util.server.check_model import qwen_mode_errors
+
+    valid = [
+        (False, False, False, True),   # 融合 + 纯 CTC（现状）
+        (False, False, True, True),    # 融合 + 两遍
+        (False, False, True, False),   # 融合 + 纯 LLM
+        (True, True, True, True),      # 0.6B + 请求两遍（无 CTC 头，降级纯 LLM）
+        (True, True, True, False),     # 0.6B + 纯 LLM
+    ]
+    for args in valid:
+        assert qwen_mode_errors(*args) == [], (args, qwen_mode_errors(*args))
+
+
+def test_qwen_download_commands_are_verbatim_from_spec():
+    """缺失提示里的 §4.3 下载命令必须逐字保留，不能改写命令本身"""
+    from util.server.check_model import QWEN_DOWNLOAD_COMMANDS as cmds
+
+    text = cmds.replace("\r\n", "\n")
+    # 1.7B：一条 curl（含续行反斜杠）
+    assert "-o models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf \\\n" in text
+    assert (
+        "https://modelscope.cn/models/luciacx/Qwen3-ASR-GGUF-1.7B-mixed/resolve/master/"
+        "qwen3_asr_llm.q4_k.gguf"
+    ) in text
+    # 0.6B：mkdir + for 循环里的三条 curl
+    assert "mkdir -p models/qwen-ctc-aiinfra4-06b" in text
+    assert (
+        "for f in qwen3_asr_encoder_frontend.int4.onnx "
+        "qwen3_asr_encoder_backend.int4.onnx qwen3_asr_llm.q4_k.gguf; do"
+    ) in text
+    assert 'curl -4 -L -C - -o "models/qwen-ctc-aiinfra4-06b/$f" \\\n' in text
+    assert (
+        "https://modelscope.cn/models/luciacx/Qwen3-ASR-GGUF-0.6B-mixed/resolve/master/$f"
+    ) in text
+    assert text.rstrip().endswith("done")
+
+
 if __name__ == "__main__":
     # Windows 控制台默认 GBK，输出中文/符号前先切到 UTF-8
     try:
@@ -1613,6 +1780,15 @@ if __name__ == "__main__":
         test_default_template_comment_count_is_333,
         test_qwen_ctc_args_reads_new_keys_with_get_fallback,
         test_old_config_without_new_keys_still_loads,
+        test_required_qwen_files_fused_pure_ctc,
+        test_required_qwen_files_fused_two_pass_includes_decoder,
+        test_required_qwen_files_fused_llm_only_skips_ctc_head,
+        test_required_qwen_files_split_encoder_skips_ctc_and_tokens,
+        test_required_qwen_files_empty_string_and_none_are_unconfigured,
+        test_qwen_mode_errors_reject_no_decoder_and_ctc_disabled,
+        test_qwen_mode_errors_reject_half_split_encoder,
+        test_qwen_mode_errors_accepts_every_valid_mode,
+        test_qwen_download_commands_are_verbatim_from_spec,
     ]
     failed = 0
     for t in tests:
