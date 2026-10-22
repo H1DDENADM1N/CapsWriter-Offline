@@ -30,3 +30,5 @@ edit_config_gui/src-tauri/gen
 
 # superpowers 计划工作目录（本地草稿，不入库）
 /.superpowers/
+# token embedding 缓存（可由 write_cache 重新生成的派生产物）
+*.embd.npy
