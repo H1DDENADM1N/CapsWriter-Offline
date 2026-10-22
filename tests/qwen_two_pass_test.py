@@ -80,6 +80,14 @@ Task 8 覆盖启动体检（`util/server/check_model.py`）：
 35. `_qwen_plan()` 的必需文件只能来自 `QwenCTCArgs`（引擎真正收到的配置），
     不能因为 `ModelPaths.qwen_llm_path` 有默认值就去要求引擎不用的 GGUF。
 
+Task 9 覆盖服务端拼接 / 标点分支（`util/server/recognize_qwen_ctc.py`）：
+36. 纯 LLM 模式按 `merge_by_text` 拼文本、不造 token / 时间戳、也不调标点模型；
+37. 纯 LLM 模式跨片段累积（第二段必须接在缓存文本后，不能被 `"".join(空 tokens)`
+    抹成空串）；同一 task_id 从 text 模式切到 token 模式时缓存文本同样不能被抹；
+38. 两遍模式跳过标点模型（LLM 文本自带标点，再过一遍会出 `。。`），token / 时间戳
+    照旧；中间段（`is_final=False`）同样不调标点且 `text_accu == text`；
+39. 纯 CTC 模式行为不变：`Config.format_punc` 打开时仍必须调用标点模型。
+
 需要模型文件 models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf
 （0.6B 用例需要 models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
 """
@@ -91,6 +99,7 @@ import tempfile
 import time
 import wave
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -1857,6 +1866,215 @@ def test_qwen_download_commands_are_verbatim_from_spec():
     assert text.rstrip().endswith("done")
 
 
+# --------------------------------------------------------------------------
+# Task 9: recognize_qwen_ctc.py —— 服务端拼接 / 标点分支
+# --------------------------------------------------------------------------
+
+
+class _FakeStream:
+    """sherpa-onnx 流接口的最小替身"""
+
+    def __init__(self, result):
+        self.result = result
+
+    def accept_waveform(self, samplerate, samples):
+        pass
+
+
+class _FakeRecognizer:
+    """引擎替身：`recognize()` 只依赖 mode / has_timestamps 两个属性
+
+    两遍 / 纯 CTC 的 tokens 与 timestamps 长度天然相等（T6/T7 已由 NW 对齐
+    保证）；纯 LLM 的 tokens / timestamps 为空。
+    """
+
+    def __init__(self, mode, text="", tokens=None, timestamps=None):
+        self.mode = mode
+        self.has_timestamps = mode in ("ctc", "two_pass")
+        self._result = SimpleNamespace(
+            text=text,
+            tokens=list(tokens or []),
+            timestamps=list(timestamps or []),
+        )
+
+    def create_stream(self):
+        return _FakeStream(self._result)
+
+    def decode_stream(self, stream):
+        pass
+
+
+class _CountingPunc:
+    """记录 `add_punctuation` 被调用几次、吃进来的原文"""
+
+    def __init__(self):
+        self.calls = 0
+        self.inputs = []
+
+    def add_punctuation(self, text):
+        self.calls += 1
+        self.inputs.append(text)
+        return text + "。"
+
+
+def _qwen_task(task_id, socket_id=None, is_final=True):
+    return SimpleNamespace(
+        task_id=task_id,
+        socket_id=socket_id or f"sock-{task_id}",
+        source="mic",
+        data=np.zeros(16000, np.float32),
+        offset=0.0,
+        overlap=0.0,
+        is_final=is_final,
+        time_start=0.0,
+        time_submit=0.0,
+        samplerate=16000,
+    )
+
+
+def test_recognize_llm_mode_merges_by_text():
+    """纯 LLM 模式：text 走 merge_by_text，不造 token / 时间戳，也不过标点模型"""
+    import util.server.recognize_qwen_ctc as m
+
+    punc = _CountingPunc()
+    r = m.recognize(
+        _FakeRecognizer("llm", text="你好世界"),
+        punc_model=punc,
+        task=_qwen_task("task9-llm-merge"),
+    )
+
+    assert r.text == "你好世界", f"纯 LLM 的 text 必须来自 merge_by_text：{r.text!r}"
+    assert r.text_accu == "你好世界", r.text_accu
+    assert r.tokens == [] and r.timestamps == [], "纯 LLM 不许伪造 token / 时间戳"
+    assert r.is_final is True
+    assert punc.calls == 0, "纯 LLM 的文本已自带标点，不得再过标点模型"
+
+
+def test_recognize_llm_mode_accumulates_across_segments():
+    """纯 LLM 第二段必须接在缓存文本后面，不能被 `"".join(空 tokens)` 抹成空串"""
+    import util.server.recognize_qwen_ctc as m
+
+    sock_id = "task9-llm-accum"
+    m.clear_results_by_socket_id(sock_id)
+
+    first = m.recognize(
+        _FakeRecognizer("llm", text="你好世界"),
+        punc_model=None,
+        task=_qwen_task(sock_id, socket_id=sock_id, is_final=False),
+    )
+    assert first.text == "你好世界", f"首段纯 LLM 文本不对：{first.text!r}"
+    assert first.tokens == [] and first.timestamps == []
+
+    last = m.recognize(
+        _FakeRecognizer("llm", text="世界再见"),
+        punc_model=None,
+        task=_qwen_task(sock_id, socket_id=sock_id, is_final=True),
+    )
+    assert last.text == "你好世界再见", f"重叠段没按 merge_by_text 拼：{last.text!r}"
+    assert last.text_accu == "你好世界再见", last.text_accu
+    assert last.tokens == [] and last.timestamps == [], "纯 LLM 结束后仍不许有 token"
+
+
+def test_recognize_token_mode_keeps_text_mode_cache():
+    """同一 task_id 由 text 模式切到 token 模式：缓存文本不能被空 tokens 抹掉"""
+    import util.server.recognize_qwen_ctc as m
+
+    sock_id = "task9-mode-switch"
+    m.clear_results_by_socket_id(sock_id)
+
+    first = m.recognize(
+        _FakeRecognizer("llm", text="你好世界"),
+        punc_model=None,
+        task=_qwen_task(sock_id, socket_id=sock_id, is_final=False),
+    )
+    assert first.text == "你好世界"
+
+    # 切到 token 模式，本段是静音（tokens 空）—— `"".join([])` 不能覆盖已有文本
+    last = m.recognize(
+        _FakeRecognizer("two_pass", text="", tokens=[], timestamps=[]),
+        punc_model=None,
+        task=_qwen_task(sock_id, socket_id=sock_id, is_final=True),
+    )
+    assert last.text == "你好世界", f"text 模式的缓存文本被空 tokens 抹掉了：{last.text!r}"
+    assert last.text_accu == "你好世界", last.text_accu
+    assert last.tokens == [] and last.timestamps == []
+
+
+def test_recognize_two_pass_skips_punctuation_model():
+    """两遍模式：LLM 文本已自带标点，format_text 必须 use_punc=False"""
+    import util.server.recognize_qwen_ctc as m
+
+    punc = _CountingPunc()
+    r = m.recognize(
+        _FakeRecognizer(
+            "two_pass",
+            text="你好。",
+            tokens=list("你好。"),
+            timestamps=[0.0, 0.4, 0.8],
+        ),
+        punc_model=punc,
+        task=_qwen_task("task9-two-pass"),
+    )
+
+    assert punc.calls == 0, "两遍模式的 LLM 文本已自带标点，不得再过标点模型"
+    assert r.text == "你好。", r.text
+    assert r.tokens == list("你好。"), r.tokens
+    assert r.timestamps == [0.0, 0.4, 0.8], r.timestamps
+    assert len(r.tokens) == len(r.timestamps)
+
+
+def test_recognize_two_pass_mid_segment_skips_punctuation():
+    """两遍模式中间段：不调标点、text_accu 与 text 一致、结果留在缓存里"""
+    import util.server.recognize_qwen_ctc as m
+
+    sock_id = "task9-two-pass-mid"
+    m.clear_results_by_socket_id(sock_id)
+
+    punc = _CountingPunc()
+    r = m.recognize(
+        _FakeRecognizer(
+            "two_pass",
+            text="你好。",
+            tokens=list("你好。"),
+            timestamps=[0.0, 0.4, 0.8],
+        ),
+        punc_model=punc,
+        task=_qwen_task(sock_id, socket_id=sock_id, is_final=False),
+    )
+
+    assert punc.calls == 0, "中间段不得调标点模型"
+    assert r.text == "你好。", r.text
+    assert r.text_accu == r.text, f"中间段 text_accu 与 text 必须一致：{r.text_accu!r}"
+    assert r.tokens == list("你好。"), r.tokens
+    assert m.clear_results_by_socket_id(sock_id) == 1, "中间段必须留在缓存里等下一段拼接"
+
+
+def test_recognize_pure_ctc_still_calls_punctuation_model():
+    """纯 CTC 行为不变：Config.format_punc 打开时照旧补标点（回归保护）"""
+    import util.server.recognize_qwen_ctc as m
+    from util.config import ServerConfig as Config
+
+    assert Config.format_punc is True, "本用例前提是配置打开了标点"
+    punc = _CountingPunc()
+    r = m.recognize(
+        _FakeRecognizer(
+            "ctc",
+            text="你好世界",
+            tokens=list("你好世界"),
+            timestamps=[0.0, 0.1, 0.2, 0.3],
+        ),
+        punc_model=punc,
+        task=_qwen_task("task9-pure-ctc"),
+    )
+
+    # 现有实现里 text / text_accu 各过一遍 format_text，所以是两次调用
+    assert punc.calls == 2, "纯 CTC 必须照旧调用标点模型（text / text_accu 各一次）"
+    assert punc.inputs == ["你好世界", "你好世界"], punc.inputs
+    assert r.text == "你好世界。", r.text
+    assert r.text_accu == "你好世界。", r.text_accu
+    assert r.tokens == list("你好世界"), r.tokens
+
+
 if __name__ == "__main__":
     # Windows 控制台默认 GBK，输出中文/符号前先切到 UTF-8
     try:
@@ -1941,6 +2159,12 @@ if __name__ == "__main__":
         test_qwen_plan_paths_come_from_qwen_ctc_args,
         test_qwen_plan_reports_pure_ctc_without_ctc_head,
         test_qwen_download_commands_are_verbatim_from_spec,
+        test_recognize_llm_mode_merges_by_text,
+        test_recognize_llm_mode_accumulates_across_segments,
+        test_recognize_token_mode_keeps_text_mode_cache,
+        test_recognize_two_pass_skips_punctuation_model,
+        test_recognize_two_pass_mid_segment_skips_punctuation,
+        test_recognize_pure_ctc_still_calls_punctuation_model,
     ]
     failed = 0
     for t in tests:
