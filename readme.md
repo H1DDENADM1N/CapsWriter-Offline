@@ -23,7 +23,7 @@
 12. 可通过 `config_selector.exe` 选择配置文件
 13. 客户端文本框是一个多光标编辑器：`Alt+点击` 加副光标、`Alt+拖拽` 矩形列选、`Ctrl+D` 选词、`Ctrl+F` 查找、`Ctrl+H` 替换，键位与 VS Code 默认一致；中文按 jieba 词典分词
 14. 客户端文本框使用等宽字体 **Maple Mono NF CN**，长行折行后仍逐格对齐（字号会自动吸附到 2:1 网格点）
-15. 服务端可选 4 种语音识别模型：`FunASR`、`Sensevoice`、`Paraformer`、`QwenCTC`（Qwen3-ASR + CTC 头，输出带字级时间戳）
+15. 服务端可选 4 种语音识别模型：`FunASR`、`Sensevoice`、`Paraformer`、`QwenCTC`（Qwen3-ASR + CTC 头，输出带字级时间戳；可选 CTC 首遍 + LLM 二遍）
 
 - [✨ 特性](#-特性)
 - [⬇️ 下载地址](#-下载地址)
@@ -44,7 +44,17 @@
 >
 > 在 `config.toml` 中设置 `model = "QwenCTC"` 启用，模型文件按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载到 `models/qwen-ctc-aiinfra4/`。
 >
-> 特点：无 LLM 二遍，识别速度快（30 秒音频约 2 秒）、内存占用小；支持中英混说；标点由服务端自带的标点模型补全（`format_punc`）。
+> 特点：纯 CTC 模式无 LLM 二遍，识别速度快（30 秒音频约 2 秒）、内存占用小；支持中英混说；标点由服务端自带的标点模型补全（`format_punc`）。配置 `[model_paths].qwen_llm_path`（LLM 解码器 GGUF）后，还可以切换「CTC 首遍 + LLM 二遍」或「纯 LLM」模式，文本与标点更好，但更慢、更占内存。
+>
+> 该模型有三种运行模式，由 `[model_paths].qwen_llm_path` 与 `[qwen_ctc_args].enable_ctc` 共同决定：
+>
+> | `qwen_llm_path` | `enable_ctc` | 模式 | 输出 |
+> | --- | --- | --- | --- |
+> | 留空 | 不生效 | 纯 CTC（默认现状） | 文本 + **字级时间戳** |
+> | 非空 | `true`（默认） | 两遍：CTC 首遍 → LLM 二遍 | LLM 文本（自带标点）+ 经 Needleman-Wunsch（NW）对齐到 LLM 文本的 CTC 字级时间戳 |
+> | 非空 | `false` | 纯 LLM | 只有 LLM 文本，**无时间戳** |
+>
+> 0.6B 版本：`qwen3_asr_llm.q4_k.gguf`（hidden 1024）**必须配 0.6B 自己的编码器前后端 ONNX**（`models/qwen-ctc-aiinfra4-06b/`，下载命令见 [models/模型下载方式.txt](models/模型下载方式.txt)）；1.7B 的融合编码器输出 2048 维，与 0.6B 解码器不兼容。0.6B **没有 CTC 头**，只能纯 LLM / 两遍模式下 CTC 首遍会被自动跳过（引擎打 WARNING 后按纯 LLM 跑）。
 >
 > ⚠️ 官方提供的 `aiinfra4` 版 CTC 头在**AI 技术领域的英文内容**上会把英文词转写成对应中文译文（如 `we` → `我们`），详见 [Qwen3-CTC-语言串味问题排查](docs/Qwen3-CTC-语言串味问题排查.md)。建议改用 `Qwen3-ASR-CTC.v1.fp16.onnx`（v1 头），在 `config.toml` 的 `[model_paths]` 里加一行 `qwen_ctc_ctc_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx"` 即可（默认就是 v1 头）。
 >
@@ -146,7 +156,7 @@
 
 > 优化交互逻辑，更方便且安全地修改 服务端、客户端的配置。 抛弃现有 pyside6 + siui 架构 ，toml注释保留，结构保留
 >
-> 覆盖 `config.toml` 的全部 **178 个叶子键**（163 个可编辑固定键 + 13 个派生只读键 + 2 个动态表条目）、**14 个页面**、**13 种控件**、**10 个校验器**。保存流程为「全量校验 → unified diff 预览 → 自动备份 → 原子替换 → 回读校验」，失败自动从 `.bak` 回滚；外部改动后再保存会提示「配置文件已被外部修改」。
+> 覆盖 `config.toml` 的全部 **188 个叶子键**（170 个可编辑固定键 + 16 个派生只读键 + 2 个动态表条目）、**14 个页面**、**13 种控件**、**10 个校验器**。保存流程为「全量校验 → unified diff 预览 → 自动备份 → 原子替换 → 回读校验」，失败自动从 `.bak` 回滚；外部改动后再保存会提示「配置文件已被外部修改」。
 >
 > 单文件 exe（约 10 MB，前端资源已内嵌），**不再需要 PySide6 / siui**，也**不依赖 `runtime/`、不依赖 `.venv`**；运行需系统具备 WebView2 Runtime（Win11 自带，Win10 需 Evergreen Runtime）。
 >
@@ -530,8 +540,8 @@
 25. ADB 控制手机功能：在 `config.toml` 中启用 `enable_adb_control` 后，客户端启动时会自动检查并连接 `adb_addr`（默认 `192.168.3.127:10101`）指向的手机（连接失败仅提示，不重试）；语音输入期间通过 ADB 让手机媒体静音并暂停播放，语音输入结束恢复音量并继续播放。可通过客户端托盘菜单「ADB 控制手机」热切换（位于「AI 优化语言表达」上方），需电脑已安装 `adb` 且手机已开启无线调试并与电脑同网
 26. 文本框多光标编辑：支持 `Alt+点击` 加副光标、`Alt+拖拽` 矩形列选、`Ctrl+Alt+↑/↓` 加光标、`Ctrl+D` 选中当前词并追加下一个相同内容、`Ctrl+Shift+L` 全选相同内容、`Ctrl+U` 撤销最后一个副光标、`Esc` 收敛；方向键、退格、删除、回车同时作用于所有光标，一次输入只占一步撤销。详细键位见「新版客户端界面 → 文本框多光标与快捷键」
 27. 文本框查找与替换：`Ctrl+F` 打开查找栏、`Ctrl+H` 展开 VS Code 风格替换栏（替换语义对齐 VS Code，全部替换只占一步撤销）
-28. 图形化配置界面 `edit_config_gui.exe`：覆盖 `config.toml` 全部 178 个叶子键，采用 Material Design 3 外观并**自动跟随 Windows 深浅色与主题色**（无独立主题开关）；保存前提供 unified diff 预览、自动备份、原子替换与回读校验，失败自动回滚
-29. 服务端可选 4 种语音识别模型：`FunASR`（旗舰，速度快准确率高）、`Sensevoice`（中粤英日韩，最快最省内存）、`Paraformer`（中英，准确率高）、`QwenCTC`（Qwen3-ASR + CTC 头，输出带字级时间戳，30 秒音频约 2 秒）。通过 `config.toml` 中 `model` 配置
+28. 图形化配置界面 `edit_config_gui.exe`：覆盖 `config.toml` 全部 188 个叶子键，采用 Material Design 3 外观并**自动跟随 Windows 深浅色与主题色**（无独立主题开关）；保存前提供 unified diff 预览、自动备份、原子替换与回读校验，失败自动回滚
+29. 服务端可选 4 种语音识别模型：`FunASR`（旗舰，速度快准确率高）、`Sensevoice`（中粤英日韩，最快最省内存）、`Paraformer`（中英，准确率高）、`QwenCTC`（Qwen3-ASR + CTC 头，输出带字级时间戳，30 秒音频约 2 秒；可选 CTC 首遍 + LLM 二遍）。通过 `config.toml` 中 `model` 配置
 
 # ⬇️ 下载地址
 
@@ -648,6 +658,7 @@ Copyright (c) 2026 H1DDENADM1N, JoanthanWu (graphical interface package branch)
    - Fun-ASR 权重：适用 [FunASR Model Open Source License Agreement v1.1](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE)，允许自由使用与修改，但**必须标注来源并保留模型名称**。
    - 中译英模型 [Helsinki-NLP/opus-mt-zh-en](https://huggingface.co/Helsinki-NLP/opus-mt-zh-en)：**CC-BY-4.0**，再分发需署名 Helsinki-NLP / OPUS-MT / Tatoeba。
    - Qwen3-ASR + CTC 头（`QwenCTC` 模型）：编码器来自 [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)，CTC 头与 ONNX 导出来自 [JazerJu/glm-asr-ctc-bench](https://huggingface.co/JazerJu/glm-asr-ctc-bench)，均为 **Apache-2.0**；参考实现 [JazerJu/bench-asr-ctc](https://github.com/JazerJu/bench-asr-ctc) 为 Apache-2.0、[JazerJu/Qwen3-ASR-CTC-GGUF](https://github.com/JazerJu/Qwen3-ASR-CTC-GGUF) 为 MIT。**再分发需标注 Qwen 团队与 JazerJu**，详见 [models/ATTRIBUTION.md](models/ATTRIBUTION.md) 第 6 节。
+   - Qwen3-ASR LLM 解码器（`qwen3_asr_llm.q4_k.gguf`，GGUF，arch `qwen3vl`，Q4_K）：导出脚本与参考实现来自 [HaujetZhao/Qwen3-ASR-GGUF](https://github.com/HaujetZhao/Qwen3-ASR-GGUF)，上游权重为 [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) 与 [Qwen/Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)，**Apache-2.0**。HaujetZhao 的导出仓库**未声明许可证**（无 LICENSE 文件、GitHub API `license: None`、README 无许可段落、ModelScope 镜像 `luciacx/*` 的 License 字段为空），即**导出产物本身未声明许可**；本项目未修改权重、仅原样分发，且该模型为**可选**、不随包默认分发。0.6B 三件套（编码器前后端 int4 ONNX + 解码器 GGUF，`models/qwen-ctc-aiinfra4-06b/`）同理。详见 [models/ATTRIBUTION.md](models/ATTRIBUTION.md) 第 6 节。
 
 6. **在线翻译服务**
    [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate)（AGPL-3.0）仅通过 HTTP API 调用，本项目**不复制其代码**，故 AGPL 不传染；[DeepLX](https://github.com/OwO-Network/DeepLX) 以 MIT 许可发布，其 `deeplx_windows_amd64.exe` 随包分发。
@@ -663,7 +674,7 @@ Copyright (c) 2026 H1DDENADM1N, JoanthanWu (graphical interface package branch)
 
 ## 在 整合包 使用 嵌入式python 简单调试
 
-1. 运行 `.\runtime\python.exe .\core_server.py` 脚本 在终端启动服务端，会载入 `config.toml` 里 `model` 指定的语音识别模型（`'FunASR'` / `'Sensevoice'` / `'Paraformer'` / `'QwenCTC'`）和标点模型。这会占用 2GB 的内存，载入时长约 50 秒
+1. 运行 `.\runtime\python.exe .\core_server.py` 脚本 在终端启动服务端，会载入 `config.toml` 里 `model` 指定的语音识别模型（`'FunASR'` / `'Sensevoice'` / `'Paraformer'` / `'QwenCTC'`）和标点模型。这会占用 2GB 的内存，载入时长约 50 秒（`QwenCTC` 的载入时长取决于是否配置 LLM 解码器：配置后需额外载入约 1.28 GB 的 GGUF 文件，载入更久）
 2. 运行 `.\runtime\python.exe .\core_client.py` 脚本 在终端启动客户端，会载入中译英模型，打开系统默认麦克风，开始监听按键（这会占用 400MB 的内存，载入时长约 20 秒）
 3. 按住 `CapsLock` 键，录音开始，松开 `CapsLock` 键，录音结束，识别结果立马被输入（录音时长短于 0.3 秒不算）
 4. 按住 `Left Shift` 再按 `CapsLock` 进行离线翻译，方便同时需要输入中文和英文翻译的场景
@@ -1579,6 +1590,15 @@ qwen_ctc_tokens_path = "models/qwen-ctc-aiinfra4/tokens.txt"
 qwen_ctc_preprocessor_path = "models/qwen-ctc-aiinfra4"
 # Qwen3-ASR 特征提取器配置目录（preprocessor_config.json）
 
+qwen_llm_path = "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
+# Qwen3-ASR LLM 解码器（GGUF）路径，留空则退回纯 CTC 模式
+
+qwen_ctc_encoder_frontend_path = ""
+# 0.6B 编码器前端（ONNX）路径，留空则用上面的融合编码器（1.7B）
+
+qwen_ctc_encoder_backend_path = ""
+# 0.6B 编码器后端（ONNX）路径，留空则用上面的融合编码器（1.7B）
+
 # ======================FunASR 参数配置==================================
 [funasr_args]
 encoder_onnx_path = "${model_paths.funasr_encoder_adaptor_path}"
@@ -1708,6 +1728,15 @@ tokens_path = "${model_paths.qwen_ctc_tokens_path}"
 preprocessor_path = "${model_paths.qwen_ctc_preprocessor_path}"
 # 特征提取器配置目录
 
+decoder_gguf_path = "${model_paths.qwen_llm_path}"
+# LLM 解码器路径（只读派生键，跟随 model_paths.qwen_llm_path）
+
+encoder_frontend_path = "${model_paths.qwen_ctc_encoder_frontend_path}"
+# 0.6B 编码器前端路径（只读派生键，跟随 model_paths.qwen_ctc_encoder_frontend_path）
+
+encoder_backend_path = "${model_paths.qwen_ctc_encoder_backend_path}"
+# 0.6B 编码器后端路径（只读派生键，跟随 model_paths.qwen_ctc_encoder_backend_path）
+
 blank_id = 72466
 # CTC blank token id
 
@@ -1729,6 +1758,18 @@ start_bias = 0.1
 end_bias = 0.0785
 # 时间戳终点补偿（秒），CTC 发射尖峰系统性偏早
 
+enable_ctc = true
+# 是否启用 CTC 首遍：开启则 CTC 出字级时间戳、LLM 出文本（CTC 头不可用时自动退化为纯 LLM）；关闭则只跑 LLM（不产时间戳），仅在配好解码器（model_paths.qwen_llm_path 非空）时才有意义；解码器路径留空时恒为纯 CTC（现状）
+
+llm_n_ctx = 4096
+# LLM 上下文长度（token 数）
+
+llm_n_threads = 6
+# LLM 推理线程数（与上面的 ONNX num_threads 相互独立）
+
+llm_n_predict = 256
+# LLM 单段最多生成多少个 token
+
 verbose = false
 # 是否输出详细日志
 ```
@@ -1738,8 +1779,31 @@ verbose = false
 `QwenCTC` 模型的路径和参数在 `config.toml` 的 `[model_paths]` 与 `[qwen_ctc_args]` 两段里，
 在 `edit_config_gui` 的「模型路径」页和「QwenCTC 参数」页里都能改。
 
-> `[qwen_ctc_args]` 里的 4 个路径是 `${model_paths.…}` 占位符，**改了不生效**——
-> 程序（`util/config.py`）读的是 `[model_paths]` 段里的真实值。GUI 把这 4 项显示成只读，
+本次新增 10 个键（`configs/default config.toml` 为唯一基准）：
+
+- `[model_paths]`（可编辑）
+  - `qwen_llm_path`：LLM 解码器 GGUF 路径，默认 `models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf`；**留空则退回纯 CTC**
+  - `qwen_ctc_encoder_frontend_path` / `qwen_ctc_encoder_backend_path`：0.6B 编码器前端 / 后端 ONNX 路径，默认留空（留空即用 1.7B 融合编码器）
+- `[qwen_ctc_args]`
+  - `enable_ctc`：是否启用 CTC 首遍，默认 `true`
+  - `llm_n_ctx`：LLM 上下文长度（token 数），默认 `4096`
+  - `llm_n_threads`：LLM 推理线程数，默认 `6`（与 ONNX 的 `num_threads` 相互独立）
+  - `llm_n_predict`：LLM 单段最多生成 token 数，默认 `256`
+  - `decoder_gguf_path` / `encoder_frontend_path` / `encoder_backend_path`：**只读派生键**，跟随上面 `[model_paths]` 里的同名键
+
+三种运行模式：
+
+| `qwen_llm_path` | `enable_ctc` | 模式 | 输出 |
+| --- | --- | --- | --- |
+| 留空 | 不生效 | 纯 CTC | 文本 + 字级时间戳 |
+| 非空 | `true` | 两遍：CTC 首遍 → LLM 二遍 | LLM 文本（自带标点）+ NW 对齐后的 CTC 时间戳 |
+| 非空 | `false` | 纯 LLM | LLM 文本，无时间戳 |
+
+0.6B 解码器没有 CTC 头：`enable_ctc = true` 时 CTC 首遍会被自动跳过，引擎打 WARNING 后按纯 LLM 运行。
+0.6B 还必须配 0.6B 自己的编码器前后端 ONNX，1.7B 的融合编码器（2048 维）与 0.6B 解码器（hidden 1024）不兼容。
+
+> `[qwen_ctc_args]` 里的 7 个路径键（4 个原有 + 3 个新增）是 `${model_paths.…}` 占位符，**改了不生效**——
+> 程序（`util/config.py`）读的是 `[model_paths]` 段里的真实值。GUI 把这 7 项显示成只读，
 > 并标出「实际生效：…」和跳转链接。
 
 # 🔧 功能：热词

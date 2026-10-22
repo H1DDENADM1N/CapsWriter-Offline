@@ -70,6 +70,14 @@
 - **参考实现**：[JazerJu/Qwen3-ASR-CTC-GGUF](https://github.com/JazerJu/Qwen3-ASR-CTC-GGUF)（**MIT**）、
   [JazerJu/bench-asr-ctc](https://github.com/JazerJu/bench-asr-ctc)
 - **上游模型许可**：**Apache-2.0**
+- **LLM 解码器来源**：导出脚本与参考实现 [HaujetZhao/Qwen3-ASR-GGUF](https://github.com/HaujetZhao/Qwen3-ASR-GGUF)；
+  **上游权重** [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) 与
+  [Qwen/Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)，**Apache-2.0**；
+  分发镜像 `luciacx/Qwen3-ASR-GGUF-1.7B-mixed` / `luciacx/Qwen3-ASR-GGUF-0.6B-mixed`（ModelScope）
+- **解码器导出产物的许可状态**（如实说明，未替代其声明任何许可）：
+  [HaujetZhao/Qwen3-ASR-GGUF](https://github.com/HaujetZhao/Qwen3-ASR-GGUF) 仓库**没有 LICENSE 文件**，
+  GitHub API 返回 `license: None`，README 无许可段落；ModelScope 镜像（`luciacx/*`）的 License 字段为空。
+  即**导出产物本身未声明许可证**。本项目未修改权重、仅原样分发，且该模型为**可选**、不随包默认分发。
 
 ### 模型文件构成
 
@@ -80,13 +88,28 @@
 | `Qwen3-ASR-CTC.q4.onnx` | CTC 头（int4 量化，可选） |
 | `Qwen3-ASR-CTC.q4f16.onnx` | CTC 头（int4 量化 + fp16 激活，可选） |
 | `tokens.txt` | 紧凑词表，每行 `base64(原始字节)\t<id>`，共 72466 条 |
-| `preprocessor_config.json` | WhisperFeatureExtractor 配置（80 mel / hop 160 / 30 秒桶） |
+| `preprocessor_config.json` | WhisperFeatureExtractor 配置（128 mel / hop 160 / 30 秒桶） |
 | `config.json` | CTC 头结构与训练信息 |
+| `qwen3_asr_llm.q4_k.gguf` | Qwen3-ASR LLM 解码器（GGUF，arch `qwen3vl`，Q4_K 量化，1,282,434,624 B ≈ 1.28 GB）；可选，用于「CTC 首遍 + LLM 二遍」或纯 LLM 模式 |
+
+### 0.6B 全套（`qwen-ctc-aiinfra4-06b/`）
+
+| 文件 | 说明 |
+| --- | --- |
+| `qwen3_asr_encoder_frontend.int4.onnx` | 0.6B 编码器前端（int4，20,343,991 B） |
+| `qwen3_asr_encoder_backend.int4.onnx` | 0.6B 编码器后端（int4，94,750,816 B） |
+| `qwen3_asr_llm.q4_k.gguf` | 0.6B 解码器（GGUF，arch `qwen3vl`，Q4_K，hidden 1024，484,215,360 B） |
+
+> 0.6B 解码器**必须**配 0.6B 自己的编码器前后端：1.7B 的融合编码器输出 2048 维，与 0.6B 解码器不兼容。
+> 0.6B **没有 CTC 头**，因此该组合只能纯 LLM / 两遍时 CTC 首遍被自动跳过（引擎打印 WARNING 后按纯 LLM 运行）。
 
 ### 署名声明
 
 > Qwen3-ASR 编码器由 **Qwen 团队**（阿里巴巴通义千问）发布，以 **Apache-2.0** 许可发布。
 > CTC 头由 **JazerJu** 训练并导出，参考实现 [Qwen3-ASR-CTC-GGUF](https://github.com/JazerJu/Qwen3-ASR-CTC-GGUF) 以 **MIT** 许可发布。
+> LLM 解码器（`qwen3_asr_llm.q4_k.gguf`）的导出脚本与参考实现来自 [HaujetZhao/Qwen3-ASR-GGUF](https://github.com/HaujetZhao/Qwen3-ASR-GGUF)，
+> 上游权重 [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) / [Qwen/Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B) 以 **Apache-2.0** 发布；
+> 但该导出产物本身未声明许可证（仓库无 LICENSE 文件、GitHub `license: None`、ModelScope 镜像 License 字段为空）。
 > 本项目未对模型权重做任何修改，仅原样打包分发。
 
 ---
@@ -100,4 +123,5 @@
 | `sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12` | Apache-2.0 | 需保留版权与许可声明 | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
 | `Fun-ASR-Nano-GGUF-2026-02-09` | FunASR 模型协议 v1.1 | **必须**标注来源并保留模型名称 | [MODEL_LICENSE](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE) |
 | `Helsinki-NLP--opus-mt-zh-en` | **CC-BY-4.0** | **必须**署名 Helsinki-NLP / OPUS-MT / Tatoeba | [CC-BY-4.0.txt](../LICENSES/CC-BY-4.0.txt) |
-| `qwen-ctc-aiinfra4` | Apache-2.0（编码器） / MIT（参考实现） | **必须**标注 Qwen 团队 / JazerJu | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
+| `qwen-ctc-aiinfra4` | Apache-2.0（编码器） / MIT（参考实现） / 导出产物未声明许可（解码器 GGUF） | **必须**标注 Qwen 团队 / JazerJu / HaujetZhao | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
+| `qwen-ctc-aiinfra4-06b` | Apache-2.0（上游权重 Qwen3-ASR-0.6B） / 导出产物未声明许可 | **必须**标注 Qwen 团队 / HaujetZhao | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |

@@ -43,6 +43,38 @@ curl -L -o qwen-ctc-aiinfra4/config.json https://huggingface.co/JazerJu/glm-asr-
 
 将 qwen-ctc-aiinfra4 文件夹放到软件根目录的 models\ 下
 
+LLM 解码器（可选；用于「CTC 首遍 + LLM 二遍」或纯 LLM 模式）：
+
+# 1.7B 解码器（GGUF，Q4_K，1,282,434,624 字节 ≈ 1.22 GiB）
+# 与上面的 qwen-ctc-aiinfra4 编码器搭配，放到 models/qwen-ctc-aiinfra4/ 下
+mkdir -p models/qwen-ctc-aiinfra4
+curl -4 -L -C - -o models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf \
+  "https://modelscope.cn/models/luciacx/Qwen3-ASR-GGUF-1.7B-mixed/resolve/master/qwen3_asr_llm.q4_k.gguf"
+
+下载后在 config.toml 里把 [model_paths].qwen_llm_path 指向该文件，
+[model_paths].qwen_ctc_encoder_frontend_path / qwen_ctc_encoder_backend_path 留空（1.7B 用融合编码器）。
+两个都留空则该模型退回纯 CTC 模式；[qwen_ctc_args].enable_ctc = false 则跳过 CTC 首遍、只跑 LLM。
+
+
+0.6B 全套（可选；0.6B 解码器必须配 0.6B 自己的编码器前后端）：
+
+# 编码器前端 int4 ONNX（20,343,991 字节）
+# 编码器后端 int4 ONNX（94,750,816 字节）
+# 0.6B 解码器 GGUF，Q4_K（484,215,360 字节 ≈ 461 MiB）
+# 三个文件都放到 models/qwen-ctc-aiinfra4-06b/ 下
+mkdir -p models/qwen-ctc-aiinfra4-06b
+for f in qwen3_asr_encoder_frontend.int4.onnx qwen3_asr_encoder_backend.int4.onnx qwen3_asr_llm.q4_k.gguf; do
+  curl -4 -L -C - -o "models/qwen-ctc-aiinfra4-06b/$f" \
+    "https://modelscope.cn/models/luciacx/Qwen3-ASR-GGUF-0.6B-mixed/resolve/master/$f"
+done
+
+必须在 config.toml 里同时配置这三个键（缺一个都会退回 1.7B 的假设，导致维度不匹配）：
+  [model_paths].qwen_llm_path = "models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf"
+  [model_paths].qwen_ctc_encoder_frontend_path = "models/qwen-ctc-aiinfra4-06b/qwen3_asr_encoder_frontend.int4.onnx"
+  [model_paths].qwen_ctc_encoder_backend_path = "models/qwen-ctc-aiinfra4-06b/qwen3_asr_encoder_backend.int4.onnx"
+0.6B 解码器 hidden 为 1024，与 1.7B 融合编码器的 2048 维输出不兼容，不能混用。
+0.6B 没有 CTC 头：即使 [qwen_ctc_args].enable_ctc = true，引擎也会打 WARNING 后按纯 LLM 运行（无字级时间戳）。
+
 
 翻译模型：
 https://huggingface.co/Helsinki-NLP/opus-mt-zh-en
