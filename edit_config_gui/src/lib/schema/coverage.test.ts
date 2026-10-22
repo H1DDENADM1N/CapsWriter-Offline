@@ -193,4 +193,81 @@ describe('schema 覆盖率', () => {
       .sort();
     expect(actual).toEqual(expected);
   });
+
+  it('QwenCTC 十个新键的默认值、note 依据与页内相对顺序都钉死', () => {
+    // Task 10 评审 I1：这三条规格原先没有任何断言 —— 删掉 note 里的
+    // 「num_threads」、交换 frontend/backend、把 llm_n_ctx 默认值改掉，
+    // 202 个测试仍然全绿。schema_paths.json 按 segments 字母序生成、Rust 用
+    // BTreeSet 比较，所以「页内顺序」只有这里能护住；note 文本同理。
+    const byPath = new Map(allFields().map((f) => [f.path, f]));
+
+    // ① 默认值：模板里的值就是 GUI 输入框的初值
+    expect(byPath.get('model_paths.qwen_llm_path')?.default).toBe(
+      'models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf',
+    );
+    expect(byPath.get('model_paths.qwen_ctc_encoder_frontend_path')?.default).toBe(
+      '',
+    );
+    expect(byPath.get('model_paths.qwen_ctc_encoder_backend_path')?.default).toBe(
+      '',
+    );
+    expect(byPath.get('qwen_ctc_args.enable_ctc')?.default).toBe(true);
+    expect(byPath.get('qwen_ctc_args.llm_n_ctx')?.default).toBe(4096);
+    expect(byPath.get('qwen_ctc_args.llm_n_threads')?.default).toBe(6);
+    expect(byPath.get('qwen_ctc_args.llm_n_predict')?.default).toBe(256);
+
+    // ② note 必须让用户看出「留空」的后果，以及 LLM 线程数与 ONNX 的无关
+    for (const key of [
+      'model_paths.qwen_llm_path',
+      'model_paths.qwen_ctc_encoder_frontend_path',
+      'model_paths.qwen_ctc_encoder_backend_path',
+    ]) {
+      expect(byPath.get(key)?.note, key).toContain('留空');
+    }
+    expect(byPath.get('qwen_ctc_args.llm_n_threads')?.note).toContain(
+      'num_threads',
+    );
+    expect(byPath.get('qwen_ctc_args.enable_ctc')?.note).toContain('CTC');
+
+    // ③ 页内相对顺序必须与 config.toml 的键序一致
+    const pageOrder = (pageId: string) =>
+      pages
+        .find((p) => p.id === pageId)!
+        .sections.flatMap((s) => s.fields)
+        .map((f) => f.path);
+
+    expect(pageOrder('modelPaths').filter((p) => p.startsWith('model_paths.qwen'))).toEqual([
+      'model_paths.qwen_ctc_encoder_path',
+      'model_paths.qwen_ctc_ctc_path',
+      'model_paths.qwen_ctc_tokens_path',
+      'model_paths.qwen_ctc_preprocessor_path',
+      'model_paths.qwen_llm_path',
+      'model_paths.qwen_ctc_encoder_frontend_path',
+      'model_paths.qwen_ctc_encoder_backend_path',
+    ]);
+
+    expect(
+      pageOrder('qwenCtc').map((p) => p.replace('qwen_ctc_args.', '')),
+    ).toEqual([
+      'encoder_onnx_path',
+      'ctc_onnx_path',
+      'tokens_path',
+      'preprocessor_path',
+      'decoder_gguf_path',
+      'encoder_frontend_path',
+      'encoder_backend_path',
+      'blank_id',
+      'unk_id',
+      'mel_frames',
+      'num_threads',
+      'provider',
+      'start_bias',
+      'end_bias',
+      'enable_ctc',
+      'llm_n_ctx',
+      'llm_n_threads',
+      'llm_n_predict',
+      'verbose',
+    ]);
+  });
 });

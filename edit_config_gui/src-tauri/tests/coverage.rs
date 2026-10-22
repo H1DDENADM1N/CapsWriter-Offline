@@ -1,7 +1,7 @@
 //! schema ↔ 真实配置文件的闭合断言。
 //!
 //! `schema_paths.json` 由 `edit_config_gui/scripts/gen-schema-paths.mjs` 从前端
-//! schema 生成（167→见脚本头），前端侧的 `coverage.test.ts` 保证 schema 与 JSON
+//! schema 生成（170→见脚本头），前端侧的 `coverage.test.ts` 保证 schema 与 JSON
 //! 同步。这个测试负责链条的另一半：**JSON 与仓库里真实的 config.toml 同步**。
 //!
 //! 只用 `configs/default config.toml` 而不是根目录的 `config.toml`：前者是出厂

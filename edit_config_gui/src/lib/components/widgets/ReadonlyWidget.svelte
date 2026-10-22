@@ -9,7 +9,7 @@
   let { field }: WidgetProps = $props();
 
   /**
-   * 这 9 个键的值长这样：`${model_paths.funasr_llm_path}`。
+   * 这 16 个键的值长这样：`${model_paths.funasr_llm_path}`。
    * 全仓没有任何代码解析这种占位符——`util/config.py:249-308` 的
    * FunASRArgs / SenseVoiceArgs / ParaformerArgs 直接读 `model_paths` 段。
    * 所以这里显示的是**真实生效值**，TOML 里那串占位符只作为「不参与读取」的
