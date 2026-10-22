@@ -1428,8 +1428,11 @@ def test_qwen_ctc_args_reads_new_keys_with_get_fallback():
         256,
     )
     assert Path(QwenCTCArgs.decoder_gguf_path) == ModelPaths.qwen_llm_path
-    assert Path(QwenCTCArgs.encoder_frontend_path) == ModelPaths.qwen_ctc_encoder_frontend_path
-    assert Path(QwenCTCArgs.encoder_backend_path) == ModelPaths.qwen_ctc_encoder_backend_path
+    # 两个 0.6B 路径模板默认留空 ⇒ ModelPaths 侧必须是 None（不是 Path('.')）
+    assert ModelPaths.qwen_ctc_encoder_frontend_path is None
+    assert ModelPaths.qwen_ctc_encoder_backend_path is None
+    assert QwenCTCArgs.encoder_frontend_path == ""
+    assert QwenCTCArgs.encoder_backend_path == ""
     # 模板里的 `${model_paths.*}` 只是给 GUI 看的占位符，绝不能漏进运行时路径
     for name in _NEW_DERIVED_KEYS:
         assert "${" not in getattr(QwenCTCArgs, name), (
@@ -1494,8 +1497,10 @@ def test_old_config_without_new_keys_still_loads():
     assert mod.ModelPaths.qwen_llm_path == Path(
         "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
     )
-    assert mod.ModelPaths.qwen_ctc_encoder_frontend_path == Path(".")
-    assert mod.ModelPaths.qwen_ctc_encoder_backend_path == Path(".")
+    assert mod.ModelPaths.qwen_ctc_encoder_frontend_path is None, (
+        "空路径必须是 None 而不是 Path('.')，否则 if ModelPaths.xxx 会误判成已配置"
+    )
+    assert mod.ModelPaths.qwen_ctc_encoder_backend_path is None
 
 
 def _write_gguf(path_dir: Path, name: str, tensor_name: str, tensor: np.ndarray):

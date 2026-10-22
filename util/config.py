@@ -223,6 +223,15 @@ class DeepLXConfig:
     api: str = config["deeplx"]["api"]
 
 
+def _optional_path(value: str) -> Path | None:
+    """可留空的路径：空字符串表示「未配置」，返回 None。
+
+    不能写成 Path("")，那会得到 Path('.')（truthy 且 .exists() 为 True），
+    任何 `if ModelPaths.xxx` 的判断都会误判成「已配置」。
+    """
+    return Path(value) if value else None
+
+
 # 模型路径配置
 class ModelPaths:
     model_dir: Path = Path(config["model_paths"]["model_dir"])
@@ -247,13 +256,14 @@ class ModelPaths:
         config["model_paths"]["qwen_ctc_preprocessor_path"]
     )
     # 老配置文件可能没有这 3 个键，一律 .get 回退，不能 KeyError
-    qwen_llm_path: Path = Path(
+    # 三者都可留空（留空 = 纯 CTC），空值给 None 而不是 Path('.')
+    qwen_llm_path: Path | None = _optional_path(
         config["model_paths"].get("qwen_llm_path", DEFAULT_QWEN_LLM_PATH)
     )
-    qwen_ctc_encoder_frontend_path: Path = Path(
+    qwen_ctc_encoder_frontend_path: Path | None = _optional_path(
         config["model_paths"].get("qwen_ctc_encoder_frontend_path", "")
     )
-    qwen_ctc_encoder_backend_path: Path = Path(
+    qwen_ctc_encoder_backend_path: Path | None = _optional_path(
         config["model_paths"].get("qwen_ctc_encoder_backend_path", "")
     )
     punc_model_dir: Path = Path(config["model_paths"]["punc_model_dir"])

@@ -919,7 +919,7 @@ end_bias = 0.0785
 # 时间戳终点补偿（秒），CTC 发射尖峰系统性偏早
 
 enable_ctc = true
-# 是否启用 CTC 首遍：开启则 CTC 出字级时间戳、LLM 出文本；关闭则只跑 LLM（不产时间戳），仅在配好解码器（model_paths.qwen_llm_path 非空）时才有意义；解码器路径留空时恒为纯 CTC（现状）
+# 是否启用 CTC 首遍：开启则 CTC 出字级时间戳、LLM 出文本（CTC 头不可用时自动退化为纯 LLM）；关闭则只跑 LLM（不产时间戳），仅在配好解码器（model_paths.qwen_llm_path 非空）时才有意义；解码器路径留空时恒为纯 CTC（现状）
 
 llm_n_ctx = 4096
 # LLM 上下文长度（token 数）
