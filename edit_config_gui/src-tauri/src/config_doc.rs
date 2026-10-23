@@ -401,8 +401,8 @@ mod tests {
         );
         assert_eq!(
             comment_line_count(&raw),
-            333,
-            "基准：真实 config.toml 有 333 行整行注释"
+            334,
+            "基准：真实 config.toml 有 334 行整行注释"
         );
     }
 

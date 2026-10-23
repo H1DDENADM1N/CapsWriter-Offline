@@ -11,7 +11,7 @@ import type { FieldMeta, WidgetKind } from './schema/types.ts';
  *
  * 映射的键是 `FieldMeta.path`（点分展示串）。之所以不写进 schema 的每个字段对象：
  * schema 里大量字段由 `dirField()` / `fileField()` / `mkField()` 这类工厂批量生成，
- * 逐条塞图标会让工厂签名变得又长又吵；集中成一张表反而一眼能看出「这 161 项
+ * 逐条塞图标会让工厂签名变得又长又吵；集中成一张表反而一眼能看出「每个配置项
  * 各自是什么图形」，加字段时也只改一个地方。`fieldIcons.test.ts` 会保证表与
  * `allFields()` 双向对齐（缺项、多出来的陈旧键都会报错）。
  */

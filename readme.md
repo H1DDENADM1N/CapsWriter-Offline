@@ -23,7 +23,7 @@
 12. 可通过 `config_selector.exe` 选择配置文件
 13. 客户端文本框是一个多光标编辑器：`Alt+点击` 加副光标、`Alt+拖拽` 矩形列选、`Ctrl+D` 选词、`Ctrl+F` 查找、`Ctrl+H` 替换，键位与 VS Code 默认一致；中文按 jieba 词典分词
 14. 客户端文本框使用等宽字体 **Maple Mono NF CN**，长行折行后仍逐格对齐（字号会自动吸附到 2:1 网格点）
-15. 服务端可选 4 种语音识别模型：`FunASR`、`Sensevoice`、`Paraformer`、`QwenCTC`（Qwen3-ASR + CTC 头，输出带字级时间戳；可选 CTC 首遍 + LLM 二遍）
+15. 服务端可选 4 种语音识别模型：`QwenCTC`（Qwen3-ASR + CTC 头，输出带字级时间戳；默认 CTC 首遍 + LLM 二遍，也可切纯 CTC / 纯 LLM）、`FunASR`、`Sensevoice`、`Paraformer`
 
 - [✨ 特性](#-特性)
 - [⬇️ 下载地址](#-下载地址)
@@ -38,25 +38,41 @@
 <details>
 <summary><h1">展开最近更新</h1></summary>
 
+## 新增 客户端文本框滚动跟随、上下边缘渐隐、圆角与「回到底部」悬浮按钮
+>
+> 语音输入时日志一直在追加，此前「跟随末尾」只有一个开关：用户用滚轮往上翻看历史，下一条日志一到就被顶回底部。现在跟随拆成两个互不干扰的状态——`follow_caret`（「监听」开关，决定光标跟不跟末尾）与 `stick_to_bottom`（视图贴不贴底，由**滚轮**驱动）。上滚即挂起跟随，日志照常追加但不动视图；滚回距底 **40 px** 内自动恢复。键盘 `PgUp` / `PgDn` / `Home` / `End` / 方向键同样算主动滚动，否则按钮亮着而行为对不上。
+>
+> 挂起时视口底部浮出「回到底部」按钮（自绘 chevron，翻转走 0→180° 缓动旋转，图标字体做不到）；按住 `Shift` 悬停翻成「回到顶部」，鼠标离开窗口时隐藏，点完焦点仍留在文本框里。
+>
+> 视口上下各 **28 px** 边缘渐隐带，只在该方向还有内容时才画——最新一行永远清晰，渐隐本身也成了「上面 / 下面还有内容」的提示。文本框圆角 **10 px**、窗口圆角 **12 px**，渐隐带按控件圆角裁剪，避免把四个角重新涂成直角。
+>
+> 同期修掉「提示框字体被文本框样式表顶掉」「切换时钟模式或调字号后背景不透明度与字体互相冲掉」两个缺陷，详见发布说明的 FixBug 一节。
+
+## 优化 文件转录的 WebSocket 并发与心跳
+>
+> 文件转录此前是「先把整段音频 `send()` 完，再 `receive()` 回包」：客户端在推完之前不读回包，TCP 缓冲区填满后服务端的发送被阻塞，两边互相等待。现改为 `asyncio.gather(send(), receive())` 并发收发。
+>
+> 服务端与客户端都加了 **60 秒** ping 间隔与超时，避免空闲连接被中间设备静默掐断而两端都不知情；`base64` 编码与 `json.dumps` 卸载到线程，且**只在最终结果**里发送 `tokens` / `timestamps`，减少事件循环阻塞。
+
 ## 新增 可选模型 `QwenCTC`（Qwen3-ASR + CTC 头）
 >
 > 服务端新增第 4 个可选语音识别模型 `QwenCTC`：Qwen3-ASR 编码器（ONNX，int4）+ CTC 头，纯 CPU 推理，**输出带字级时间戳**，可直接转录生成 SRT 字幕。
 >
 > 在 `config.toml` 中设置 `model = "QwenCTC"` 启用，模型文件按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载到 `models/qwen-ctc-aiinfra4/`。
 >
-> 特点：纯 CTC 模式无 LLM 二遍，识别速度快（30 秒音频约 2 秒）、内存占用小；支持中英混说；标点由服务端自带的标点模型补全（`format_punc`）。配置 `[model_paths].qwen_llm_path`（LLM 解码器 GGUF）后，还可以切换「CTC 首遍 + LLM 二遍」或「纯 LLM」模式，文本与标点更好，但更慢、更占内存。**注意：`config.toml` 模板里该键已预填 1.7B 解码器路径，所以出厂默认就是「两遍」模式，首次启动需要先按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载 1.28 GB 的解码器；不想要就把它留空退回纯 CTC。**
+> 特点：**出厂默认是「两遍」模式**——CTC 首遍出字级时间戳、LLM 二遍出文本与标点，文本与标点最好，代价是更慢、更占内存。把 `[model_paths].qwen_llm_path` 留空则退回**纯 CTC**：无 LLM 二遍，纯 CPU 推理，识别速度快（30 秒音频约 2 秒）、内存占用小，标点改由服务端自带的标点模型补全（`format_punc`）；把 `[qwen_ctc_args].enable_ctc` 设为 `false` 则是**纯 LLM**：只有文本、没有时间戳。三种模式都支持中英混说。**注意：`config.toml` 模板里 `qwen_llm_path` 已预填 1.7B 解码器路径，所以出厂默认就是「两遍」模式，首次启动需要先按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载 1.28 GB 的解码器；不想要就把它留空退回纯 CTC。**
 >
 > 该模型有三种运行模式，由 `[model_paths].qwen_llm_path` 与 `[qwen_ctc_args].enable_ctc` 共同决定：
 >
 > | `qwen_llm_path` | `enable_ctc` | 模式 | 输出 |
 > | --- | --- | --- | --- |
-> | 留空 | 不生效 | 纯 CTC（留空即回到 1.0.7 的现状） | 文本 + **字级时间戳** |
+> | 留空 | 不生效 | 纯 CTC（等同于旧版的纯 CTC 行为） | 文本 + **字级时间戳** |
 > | 非空 | `true`（默认） | 两遍：CTC 首遍 → LLM 二遍 | LLM 文本（自带标点）+ 经 Needleman-Wunsch（NW）对齐到 LLM 文本的 CTC 字级时间戳 |
 > | 非空 | `false` | 纯 LLM | 只有 LLM 文本，**无时间戳** |
 >
 > 0.6B 版本：`qwen3_asr_llm.q4_k.gguf`（hidden 1024）**必须配 0.6B 自己的编码器前后端 ONNX**（`models/qwen-ctc-aiinfra4-06b/`，下载命令见 [models/模型下载方式.txt](models/模型下载方式.txt)）；1.7B 的融合编码器输出 2048 维，与 0.6B 解码器不兼容。0.6B **没有 CTC 头**，只能纯 LLM / 两遍模式下 CTC 首遍会被自动跳过（引擎打 WARNING 后按纯 LLM 跑）。
 >
-> ⚠️ 官方提供的 `aiinfra4` 版 CTC 头在**AI 技术领域的英文内容**上会把英文词转写成对应中文译文（如 `we` → `我们`），详见 [Qwen3-CTC-语言串味问题排查](docs/Qwen3-CTC-语言串味问题排查.md)。建议改用 `Qwen3-ASR-CTC.v1.fp16.onnx`（v1 头），在 `config.toml` 的 `[model_paths]` 里加一行 `qwen_ctc_ctc_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx"` 即可（默认就是 v1 头）。
+> ⚠️ 官方提供的 `aiinfra4` 版 CTC 头（`Qwen3-ASR-CTC.fp16.onnx`）在**AI 技术领域的英文内容**上会把英文词转写成对应中文译文（如 `we` → `我们`、`or` → `或`、`thank` → `谢谢`）。原因是该头在中英对照字幕语料上续训过，学到了「英文语音 → 中文字幕」这层映射，属**领域偏置**，不是解码错误（同一编码器 + 同一 `tokens.txt`，只换 CTC 头行为就不同）。所以 `config.toml` 默认指向 **v1 头** `Qwen3-ASR-CTC.v1.fp16.onnx`，按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载 v1 那个文件即可；v1 的代价是中文数字写成「二零二六年」这种汉字形式，想要阿拉伯数字再换回 `aiinfra4` 版。
 >
 > 客户端无需任何改动：服务端/客户端协议未变，转录文件、简繁转换、翻译全部照常工作。唯一的差别是**纯 LLM 模式没有字级时间戳**，因此不生成 SRT 字幕（txt / json / merge.txt 照常落盘），客户端日志会说明「当前识别模式没有字级时间戳，未生成 SRT 字幕」。
 
@@ -120,7 +136,7 @@
 >
 > 左侧从「标题 + 说明」改成「图标列 + 文字列」：图标 24px，标题与说明整体右移并与图标左对齐（参照 Windows 设置的排版，说明文字换行时不会从图标下面绕过去）。搜索面板的结果行用同一个图标（保持 16px）。
 >
-> 161 个键逐项登记在 `lib/fieldIcons.ts`（另加按控件类型的兜底表），新增字段忘了配图标会在测试里红。
+> 全部配置项（188 个叶子键）逐项登记在 `lib/fieldIcons.ts`（另加按控件类型的兜底表），新增字段忘了配图标会在测试里红。
 
 ## 配置编辑器：搜索跳转改为定位到目标行并高亮闪烁一次
 >
@@ -150,7 +166,7 @@
 >
 > 同期：枚举下拉列表改为页面内渲染的 MD3 菜单（此前在 WebView2 里是永远浅色的系统菜单，主题管不到）；新增 `Ctrl+=`／`Ctrl+-`／`Ctrl+滚轮` 缩放与顶栏「还原」按钮；搜索快捷键由 `Ctrl+K` 改为 `Ctrl+F`；`PageUp`/`PageDown`/`↑`/`↓` 可滚动页面；初始窗口宽度 1000 → 1188px。
 >
-> 每个配置项左侧配了一张 24px 的 Material Symbols 图形标志，标题与说明整体右移、与图标分两列对齐（参照 Windows 设置的排版），搜索面板的结果行用同一个图标。161 个键逐项登记在 `lib/fieldIcons.ts`，新增字段忘了配图标会在测试里红。
+> 每个配置项左侧配了一张 24px 的 Material Symbols 图形标志，标题与说明整体右移、与图标分两列对齐（参照 Windows 设置的排版），搜索面板的结果行用同一个图标。全部配置项（188 个叶子键）逐项登记在 `lib/fieldIcons.ts`，新增字段忘了配图标会在测试里红。
 
 ## 使用 `Tauri 2` + `Svelte 5` 重构 `edit_config_gui` 
 
@@ -372,13 +388,15 @@
 
 > 第 4 个可选模型，用 `config.toml` 的 `model = "QwenCTC"` 启用
 >
-> Qwen3-ASR 编码器 + CTC 头，纯 CPU 推理，无 LLM 二遍，**输出带字级时间戳**，转录文件时字幕更准
+> Qwen3-ASR 编码器 + CTC 头，纯 CPU 推理，**输出带字级时间戳**，转录文件时字幕更准
 >
-> 模型文件需另行下载，见 [models/模型下载方式.txt](models/模型下载方式.txt) 的「Qwen3-ASR + CTC 头」一节
+> 三种运行模式：纯 CTC（无 LLM 二遍，最快最省内存）/ 两遍（CTC 首遍 + LLM 二遍，**出厂默认**）/ 纯 LLM（只有文本、无时间戳），由 `[model_paths].qwen_llm_path` 与 `[qwen_ctc_args].enable_ctc` 共同决定
 >
-> 标点由服务端自带的标点模型补全（`format_punc = true`）
+> 模型文件需另行下载（含 1.28 GB 的 LLM 解码器），见 [models/模型下载方式.txt](models/模型下载方式.txt) 的「Qwen3-ASR + CTC 头」一节
 >
-> 注意：官方 `aiinfra4` 版 CTC 头在 AI 技术领域的英文上会串味成中文，详见 [排查文档](docs/Qwen3-CTC-语言串味问题排查.md)，建议用 v1 头
+> 标点：纯 CTC 由服务端自带的标点模型补全（`format_punc = true`），两遍 / 纯 LLM 由 LLM 自带
+>
+> 注意：官方 `aiinfra4` 版 CTC 头在 AI 技术领域的英文上会串味成中文，默认已改用 v1 头
 >
 > 不影响简繁转换和翻译
 
@@ -435,6 +453,8 @@
 > > - 字符数、字节数统计：光标已选中字符数 / 总字符数 | 字节数
 
 > 不监听时文本框只作笔记本使用：客户端仍会把新日志写进文本框，但**不再自动把光标和滚动条拉到末尾**，你把光标放到哪里就留在哪里。重新勾上「监听」后恢复自动跟随。
+>
+> 滚动跟随与「监听」是两个独立的状态：即使勾着「监听」，用滚轮往上翻看历史时视图也不会被新日志拽回底部，滚回距底 **40 px** 内才恢复。此时视口底部会浮出「回到底部」按钮，按住 `Shift` 悬停则翻成「回到顶部」。
 >
 > 标题栏的「📌」取消置顶后，窗口会真正让出 Z-order 顶端（此前只清了原生的置顶样式位，窗口仍滞留在置顶的位置，激活别的窗口也抬不过它）。
 
@@ -541,7 +561,7 @@
 26. 文本框多光标编辑：支持 `Alt+点击` 加副光标、`Alt+拖拽` 矩形列选、`Ctrl+Alt+↑/↓` 加光标、`Ctrl+D` 选中当前词并追加下一个相同内容、`Ctrl+Shift+L` 全选相同内容、`Ctrl+U` 撤销最后一个副光标、`Esc` 收敛；方向键、退格、删除、回车同时作用于所有光标，一次输入只占一步撤销。详细键位见「新版客户端界面 → 文本框多光标与快捷键」
 27. 文本框查找与替换：`Ctrl+F` 打开查找栏、`Ctrl+H` 展开 VS Code 风格替换栏（替换语义对齐 VS Code，全部替换只占一步撤销）
 28. 图形化配置界面 `edit_config_gui.exe`：覆盖 `config.toml` 全部 188 个叶子键，采用 Material Design 3 外观并**自动跟随 Windows 深浅色与主题色**（无独立主题开关）；保存前提供 unified diff 预览、自动备份、原子替换与回读校验，失败自动回滚
-29. 服务端可选 4 种语音识别模型：`FunASR`（旗舰，速度快准确率高）、`Sensevoice`（中粤英日韩，最快最省内存）、`Paraformer`（中英，准确率高）、`QwenCTC`（Qwen3-ASR + CTC 头，输出带字级时间戳，30 秒音频约 2 秒；可选 CTC 首遍 + LLM 二遍）。通过 `config.toml` 中 `model` 配置
+29. 服务端可选 4 种语音识别模型：`QwenCTC`（Qwen3-ASR + CTC 头，旗舰，默认 CTC 首遍 + LLM 二遍，准确率最高、内存占用最多；纯 CTC 模式 30 秒音频约 2 秒）、`FunASR`（多语种，准确率较高）、`Sensevoice`（中粤英日韩，最快最省内存）、`Paraformer`（中英，准确率高）。通过 `config.toml` 中 `model` 配置
 
 # ⬇️ 下载地址
 
@@ -556,7 +576,7 @@
 2. 建议先不要修改默认配置，测试能否正常运行
 3. 音视频文件转录功能依赖于 `FFmpeg`，打包版本已内置 `FFmpeg`
 4. 音频播放依赖于 `FFplay`，打包版本已内置 `FFplay`
-5. 默认的快捷键是 `caps lock`，你可以打开 `core_client.py` 进行修改
+5. 默认的快捷键是 `caps lock`，在 `config.toml` 的 `[client]` 段 `speech_recognition_shortcut` 里改（用 `edit_config_gui.exe` 的「客户端」页改最省事）
 6. 输入状态提示功能由 [AutoHotKeyV2](https://www.autohotkey.com/download/) `hint_while_recording.exe` 实现，修改 `config.toml` 默认快捷键并**不会**改变提示的按键设置，编辑  `hint_while_recording.ini` 修改相关配置
 7. 在线翻译基于 [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate) 或 [DeepLX](https://github.com/OwO-Network/DeepLX)）。服务端启动时，会自动检查 config.toml 中 LibreTranslate api 地址是否可用，如果可用，则优先使用 LibreTranslate 在线翻译服务；如果不可用，则会自动切换到 DeepLX 在线翻译服务。[DeepLX](https://github.com/OwO-Network/DeepLX)过于频繁的请求可能导致 IP 被封，如果出现 429 /502 / 503 错误，则表示你的 IP 被 DeepL 暂时屏蔽了，请不要在短时间内频繁请求
 8. 当某程序以管理员权限运行，可能会出现有识别结果但是却无法在那个程序输入文字的状况，例如：`Listary` 、`PixPin` 等。这是因为 `start_client_gui.exe` 默认以用户权限运行客户端，运行在用户权限的程序无法控制管理员权限的程序。你可以关闭用户权限运行的客户端，尝试使用 `start_client_gui_admin.exe` 以管理员权限运行客户端
@@ -604,6 +624,8 @@
 19. 随包字体 **Maple Mono NF CN 7.900**（`assets/fonts/MapleMono-NF-CN-Regular.ttf`，约 19.6 MB，**OFL-1.1**）。OFL 只约束字体本身、不影响项目 MIT 代码，但**再分发时须保留同目录的 `assets/fonts/LICENSE.txt`**，且不得单独售卖该字体。
 
 20. 本版本采用 **MIT License** 发布，并在发布包中随附 `LICENSE`、`LICENSES/`（21 种许可证全文）与 [开源许可.md](docs/开源许可.md)（逐项清单）。二次分发前请先阅读 [开源许可.md](docs/开源许可.md) 第 12 节的合规风险清单与第 13 节的再发布检查清单。
+
+21. **`config.toml` 出厂默认 `model = "QwenCTC"`**，而 `QwenCTC` 的模型文件**不在**随包的 `models_Part1` / `models_Part2` 里，需按 [models/模型下载方式.txt](models/模型下载方式.txt) 的「Qwen3-ASR + CTC 头」一节单独下载：编码器 + CTC 头 + 词表 + 特征提取器（约 330 MB），以及 1.28 GB 的 LLM 解码器。**缺文件时服务端会在启动体检阶段直接报错退出**，并打印可直接粘贴的补救命令；`util/qwen_ctc/bin/`（llama.cpp b11675 的 DLL）整合包已带，无需另外下载。想沿用 `FunASR`，把 `[server]` 的 `model` 改回 `"FunASR"`——用 `edit_config_gui` 的「服务端」页选最快，也可以直接改 `config.toml`。
 
 # 📜 开源许可
 
@@ -853,9 +875,10 @@ logger_level = "ERROR" # 调试日志级别
 
 # ======================服务端配置==================================
 [server]
-model = "FunASR"
+model = "QwenCTC"
 # 'FunASR' 、 'Sensevoice' 、 'Paraformer' 或 'QwenCTC'
-# FunASR 目前的旗舰模型，速度较快，准确率最高,内存占用最多
+# QwenCTC Qwen3-ASR + CTC 头，默认 CTC 首遍 + LLM 二遍，准确率最高,内存占用最多
+# FunASR 多语种，准确率较高,内存占用较多
 # Sensevoice 中粤英日韩多语种，速度最快，准确率最低，内存占用最少
 # Paraformer 中英，速度中速，准确率高，内存占用中
 
@@ -1779,7 +1802,7 @@ verbose = false
 `QwenCTC` 模型的路径和参数在 `config.toml` 的 `[model_paths]` 与 `[qwen_ctc_args]` 两段里，
 在 `edit_config_gui` 的「模型路径」页和「QwenCTC 参数」页里都能改。
 
-本次新增 10 个键（`configs/default config.toml` 为唯一基准）：
+`QwenCTC` 相关共 **26 个键**（`configs/default config.toml` 为唯一基准，完整清单见上面的 `config.toml` 配置块）。最常改的是下面这些：
 
 - `[model_paths]`（可编辑）
   - `qwen_llm_path`：LLM 解码器 GGUF 路径，默认 `models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf`；**留空则退回纯 CTC**
@@ -1848,6 +1871,8 @@ verbose = false
 - `merge.txt` 文件，包含了带标点的整段结果
 - `srt` 文件，字幕文件
 
+> `srt` 依赖字级时间戳，所以只在识别模式产出时间戳时才生成：`FunASR` / `Sensevoice` / `Paraformer` 与 `QwenCTC` 的纯 CTC、两遍模式都会生成；`QwenCTC` 的**纯 LLM** 模式没有时间戳，会跳过 `srt`（其余三个文件照常落盘），客户端日志会说明原因。
+
 如果生成的字幕有微小错误，可以在分行的 `txt` 文件中修改，然后将 `txt` 文件拖动到客户端打开，客户端检测到输入的是 `txt` 文件，就会查到同名的 `json` 文件，结合 `json` 文件中的字级时间戳和 `txt` 文件中修正结果，更新 `srt` 字幕文件。
 
 ---
@@ -1878,7 +1903,7 @@ verbose = false
 
 具体文件与 `curl` 命令见 [models/模型下载方式.txt](models/模型下载方式.txt) 的「Qwen3-ASR + CTC 头」一节，下载后放到 `models/qwen-ctc-aiinfra4/`。
 
-> ⚠️ 官方 `qwen-ctc-aiinfra4/` 目录里的 CTC 头会把 AI 技术领域的英文转写成中文译文（`we` → `我们`）。建议改用 `qwen-ctc/` 目录里的 v1 头（`Qwen3-ASR-CTC.fp16.onnx`），排查过程见 [Qwen3-CTC-语言串味问题排查](docs/Qwen3-CTC-语言串味问题排查.md)。
+> ⚠️ `aiinfra4` 版的 CTC 头（`Qwen3-ASR-CTC.fp16.onnx`）会把 AI 技术领域的英文转写成中文译文（`we` → `我们`），原因见上文「新增 可选模型 `QwenCTC`」。默认配置已指向 v1 头，下载时按 [models/模型下载方式.txt](models/模型下载方式.txt) 取 `Qwen3-ASR-CTC.v1.fp16.onnx` 即可（与 v2 放在同一目录、文件名不同），**无需改配置**。
 
 标点符号模型：
 

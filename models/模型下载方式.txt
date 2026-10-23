@@ -27,9 +27,9 @@ curl -L -o qwen-ctc-aiinfra4/Qwen3-ASR-Encoder.q4.onnx https://huggingface.co/Ja
 curl -L -o qwen-ctc-aiinfra4/Qwen3-ASR-CTC.fp16.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.fp16.onnx
 
 # CTC 头（v1 版，默认使用）
-# v1 与 v2(aiinfra4) 的区别：v1 不会把英文语音转写成中文译文，
-# 在 AI 技术领域的英文内容上尤其明显（详见 docs/Qwen3-CTC-语言串味问题排查.md）。
-# 想要中文数字写成「2026年」这种阿拉伯数字形式，则改用上面的 v2 版。
+# v1 与 v2(aiinfra4) 的区别：v2 在中英对照字幕语料上续训过，会把 AI 技术领域的
+# 英文语音转写成中文译文（we -> 我们），v1 不会；代价是 v1 把中文数字写成
+# 「二零二六年」这种汉字形式。想要阿拉伯数字则改用上面的 v2 版。
 curl -L -o qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/Qwen3-ASR-CTC.fp16.onnx
 
 # 紧凑词表（base64 原始字节，共 72466 条）

@@ -492,7 +492,7 @@ mod tests {
             assert_eq!(out.lines().count(), base_lines, "单行键改动不得改变行数");
             let changed = raw.lines().zip(out.lines()).filter(|(a, b)| a != b).count();
             assert_eq!(changed, 1, "只允许 1 行不同");
-            assert_eq!(comment_line_count(&out), 333);
+            assert_eq!(comment_line_count(&out), 334);
         }
     }
 
@@ -512,7 +512,7 @@ mod tests {
         )
         .unwrap();
         let out = doc.to_toml_string();
-        assert_eq!(comment_line_count(&out), 333);
+        assert_eq!(comment_line_count(&out), 334);
         assert_eq!(
             comment_multiset(&out),
             comment_multiset(&raw),
@@ -684,7 +684,7 @@ mod tests {
         let out = doc.to_toml_string();
         assert_eq!(out.lines().count(), base, "改写既有条目不得改变行数");
         assert!(out.contains(r#""vlc.exe" = { hotkey = "ctrl + alt + f10", name = "VLC Media Player" } # VLC 设置全局快捷键后需要重启 VLC 才能生效"#));
-        assert_eq!(comment_line_count(&out), 333);
+        assert_eq!(comment_line_count(&out), 334);
     }
 
     #[test]
@@ -707,7 +707,7 @@ mod tests {
         .unwrap();
         let out = doc.to_toml_string();
         assert_eq!(out.lines().count(), base + 1);
-        assert_eq!(comment_line_count(&out), 333);
+        assert_eq!(comment_line_count(&out), 334);
         assert!(out.contains("# VLC 设置全局快捷键后需要重启 VLC 才能生效"));
 
         let mut d2 = ConfigDoc::parse(&out).unwrap();
@@ -721,7 +721,7 @@ mod tests {
         .unwrap();
         let out2 = d2.to_toml_string();
         assert_eq!(out2.lines().count(), base);
-        assert_eq!(comment_line_count(&out2), 333, "删条目不得删注释");
+        assert_eq!(comment_line_count(&out2), 334, "删条目不得删注释");
     }
 
     #[test]

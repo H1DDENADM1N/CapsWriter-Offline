@@ -7,10 +7,10 @@ const serverFields: FieldMeta[] = [
     title: '语音识别模型',
     note: [
       "'FunASR' 、 'Sensevoice' 、 'Paraformer' 或 'QwenCTC'",
-      'FunASR 目前的旗舰模型，速度较快，准确率最高,内存占用最多',
+      'QwenCTC Qwen3-ASR + CTC 头，默认 CTC 首遍 + LLM 二遍，准确率最高,内存占用最多',
+      'FunASR 多语种，准确率较高,内存占用较多',
       'Sensevoice 中粤英日韩多语种，速度最快，准确率最低，内存占用最少',
       'Paraformer 中英，速度中速，准确率高，内存占用中',
-      'QwenCTC Qwen3-ASR + CTC 头，无 LLM 二遍，输出带字级时间戳',
     ].join('\n'),
     type: 'string',
     widget: 'enum',
