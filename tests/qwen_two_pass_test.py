@@ -61,7 +61,7 @@ Task 7 覆盖「配置面」（`util/config.py` + 四个模板）：
 28. 四个模板都必须有 10 个新键，且派生只读键严格写成 `${model_paths.*}` 占位符、
     顺序固定在既有派生键之后 / `verbose` 之前、每个键都带一行 `#` 注释（两个可为空
     的 encoder 键的注释必须出现「留空」），四者同构；
-29. `configs/default config.toml` 的整行注释数 = 334（324 + 10）；
+29. `configs/default config.toml` 的整行注释数 = 334（v7.2.0 的 306 + 本版新增）；
 30. `ModelPaths` / `QwenCTCArgs` 的 10 个新字段全部用 `.get()`（老配置不能 KeyError），
     默认值与四个模板的出厂值一致，且运行时真值取自 `model_paths`（不能把模板里
     未展开的 `${...}` 占位符当成路径）；
@@ -1396,7 +1396,7 @@ def test_templates_have_new_qwen_keys():
 
 
 def test_default_template_comment_count_is_334():
-    """默认模板的整行注释数从 324 变成 334（10 个新键各带一行注释）"""
+    """默认模板的整行注释数 333 → 334（`[server].model` 注释块补 1 行）"""
     p = ROOT / "configs/default config.toml"
     n = sum(1 for line in p.read_text(encoding="utf-8").splitlines() if line.strip().startswith("#"))
     assert n == 334, f"整行注释数应为 334，实际 {n}"
