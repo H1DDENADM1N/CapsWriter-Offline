@@ -32,3 +32,5 @@ edit_config_gui/src-tauri/gen
 /.superpowers/
 # token embedding 缓存（可由 write_cache 重新生成的派生产物）
 *.embd.npy
+/.workbuddy-ai
+*.7z
