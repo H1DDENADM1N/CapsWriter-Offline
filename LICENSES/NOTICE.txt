@@ -1,0 +1,63 @@
+Third-Party NOTICE
+
+本文件登记「许可正文必须逐字保留、不能把版权行写进许可文件」的第三方组件。
+MIT / BSD-2 / BSD-3 / ISC 的版权行直接写在各自的许可文件里（见 MIT.txt、
+BSD-2-Clause.txt、BSD-3-Clause.txt、ISC.txt），不在此重复。
+
+================================================================================
+GPL-2.0-or-later —— 许可正文见 GPL-2.0.txt
+================================================================================
+
+ffmpeg.exe
+    Copyright (c) 2000-2026 the FFmpeg developers
+    https://ffmpeg.org/
+    以 --enable-gpl --enable-libmp3lame 构建（完整 ./configure 见 readme.md
+    「FFmpeg & FFplay」章节），故整体为 GPL-2.0-or-later。
+    对应源码获取方式：readme.md 同章节 + https://ffmpeg.org/download.html
+
+ffplay.exe
+    Copyright (c) 2003-2026 the FFmpeg developers
+    https://ffmpeg.org/
+    同上。
+
+================================================================================
+GPL-2.0 —— AutoHotkey 解释器
+================================================================================
+
+hint_while_recording.exe（由 Ahk2Exe 编译，内嵌 AutoHotkey v2.0.19 解释器）
+    解释器：Copyright 2003-2009 Chris Mallett (support@autohotkey.com)
+    https://github.com/AutoHotkey/AutoHotkey
+    解释器部分适用 GPL-2.0（正文见 GPL-2.0.txt）。AutoHotkey 官方对「由 AHK
+    运行 / 编译产生的脚本」另有脚本例外，因此 hint_while_recording.ahk 本身
+    仍按本项目 MIT 分发，不受 GPL 传染。
+
+================================================================================
+AGPL-3.0 —— 许可正文见 AGPL-3.0.txt
+================================================================================
+
+util/ahk/GetCaretPosEx.ahk
+util/ahk/app-list.ahk
+    Copyright (C) 2023-present abgox
+    https://github.com/abgox/InputTip
+    两个脚本派生自 AGPL-3.0 的 InputTip，以明文随包分发，文件头已加 AGPL-3.0
+    声明。修改后的完整源码即这两个文件本身。
+
+================================================================================
+未声明许可（保留所有权利）
+================================================================================
+
+util/ahk/BTTv2.ahk
+    上游 https://github.com/telppa/BeautifulToolTip 无 LICENSE 文件，默认视为
+    保留所有权利。文件头已补加风险说明。再分发前应联系作者取得授权。
+
+================================================================================
+其它随包组件
+================================================================================
+
+- Python 发行版（site-packages/）：各自在 *.dist-info/licenses/ 内自带许可与
+  版权行，见 docs/开源许可.md §4。
+- Rust / npm 依赖（编进 edit_config_gui.exe）：清单见 docs/开源许可.md §5、§6。
+- MSVC 运行库（vcruntime140*.dll）：按 Microsoft Visual C++ 可再发行组件许可
+  分发，见 docs/开源许可.md §3。
+- 模型权重（models/）：署名与许可见 models/ATTRIBUTION.md 与
+  docs/开源许可.md §10。

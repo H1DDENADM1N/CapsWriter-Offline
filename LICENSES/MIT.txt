@@ -1,6 +1,47 @@
 MIT License
 
-Copyright (c) <year> <copyright holders>
+This file supplies both the license terms and the copyright notices required
+by those terms, for the MIT-licensed components distributed with this package.
+The terms at the bottom of this file apply to every component listed below.
+
+--------------------------------------------------------------------------------
+COPYRIGHT NOTICES
+--------------------------------------------------------------------------------
+
+CapsWriter-Offline (this project: all first-party Python / Rust / Svelte code,
+AHK scripts, icons, sounds and documentation)
+    Copyright (c) 2026 Haujet Zhao
+    Copyright (c) 2026 H1DDENADM1N, JoanthanWu (graphical interface package branch)
+    Full text also at the repository root: LICENSE
+
+PyStand (portable exe launcher; the launcher code is embedded in
+start_server_gui.exe, start_client_gui.exe, start_client_gui_admin.exe and
+config_selector.exe)
+    Copyright (c) 2022 Linwei
+    https://github.com/skywind3000/PyStand
+    This package uses the H1DDENADM1N/PyStand fork, whose LICENSE is MIT as well.
+
+llama.cpp / ggml (ggml*.dll, llama*.dll, mtmd.dll under util/fun_asr_gguf/bin/
+and util/qwen_ctc/bin/; prebuilt release b11675, win-vulkan-x64)
+    Copyright (c) 2023-2026 The ggml authors
+    https://github.com/ggml-org/llama.cpp
+
+DeepLX (deeplx_windows_amd64.exe)
+    Copyright (c) 2022 OwO Network Limited
+    https://github.com/OwO-Network/DeepLX
+
+Rust and frontend dependencies bundled inside edit_config_gui.exe are mostly
+MIT or MIT/Apache-2.0 dual-licensed; their inventory is in docs/开源许可.md
+sections 5 and 6. The Apache-2.0 alternative is reproduced in Apache-2.0.txt.
+
+The other MIT-licensed Python distributions under site-packages/ (37 of the 94
+distributions; inventory in docs/开源许可.md section 4) are redistributed
+unmodified and already carry their own license text in
+<package>-<version>.dist-info/LICENSE*, so they are not repeated here.
+
+--------------------------------------------------------------------------------
+LICENSE TERMS
+--------------------------------------------------------------------------------
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction, including

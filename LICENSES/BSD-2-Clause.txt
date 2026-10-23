@@ -1,4 +1,27 @@
-Copyright (c) <year> <owner> 
+BSD 2-Clause License
+
+This file supplies both the license terms and the copyright notices required
+by those terms, for the BSD-2-Clause components distributed with this package.
+
+--------------------------------------------------------------------------------
+COPYRIGHT NOTICES
+--------------------------------------------------------------------------------
+
+entities (npm; compiled into edit_config_gui.exe)
+    Copyright (c) Felix Böhm
+    https://github.com/fb55/entities
+
+webidl-conversions (npm; compiled into edit_config_gui.exe)
+    Copyright (c) 2014, Domenic Denicola
+    https://github.com/jsdom/webidl-conversions
+
+The BSD-2-Clause Python distribution under site-packages/ (numba) is
+redistributed unmodified and already carries its own license text in
+<package>-<version>.dist-info/licenses/, so it is not repeated here.
+
+--------------------------------------------------------------------------------
+LICENSE TERMS
+--------------------------------------------------------------------------------
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 

@@ -1,6 +1,27 @@
 ISC License
 
-Copyright <year> <owner> 
+This file supplies both the license terms and the copyright notices required
+by those terms, for the ISC components distributed with this package.
+
+--------------------------------------------------------------------------------
+COPYRIGHT NOTICES
+--------------------------------------------------------------------------------
+
+picocolors (npm; compiled into edit_config_gui.exe)
+    Copyright (c) 2021-2024 Oleksii Raspopov, Kostiantyn Denysov, Anton Verinov
+    https://github.com/alexeyraspopov/picocolors
+
+saxes (npm; compiled into edit_config_gui.exe)
+    Copyright (c) Contributors
+    https://github.com/lddubeau/saxes
+
+The ISC Python distribution under site-packages/ (shellingham) is redistributed
+unmodified and already carries its own license text in
+<package>-<version>.dist-info/licenses/, so it is not repeated here.
+
+--------------------------------------------------------------------------------
+LICENSE TERMS
+--------------------------------------------------------------------------------
 
 Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
 

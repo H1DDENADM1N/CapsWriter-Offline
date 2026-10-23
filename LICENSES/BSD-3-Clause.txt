@@ -1,4 +1,44 @@
-Copyright (c) <year> <owner>. 
+BSD 3-Clause License
+
+This file supplies both the license terms and the copyright notices required
+by those terms, for the BSD-3-Clause components distributed with this package.
+
+--------------------------------------------------------------------------------
+COPYRIGHT NOTICES
+--------------------------------------------------------------------------------
+
+source-map-js (npm; compiled into edit_config_gui.exe)
+    Copyright (c) 2009-2011, Mozilla Foundation and contributors
+    https://github.com/7rulnik/source-map-js
+
+tough-cookie (npm; compiled into edit_config_gui.exe)
+    Copyright (c) 2015, Salesforce.com, Inc.
+    https://github.com/salesforce/tough-cookie
+
+brotli, brotli-decompressor, alloc-no-stdlib (Rust; compiled into
+edit_config_gui.exe)
+    Copyright (c) 2016 Dropbox, Inc.
+    https://github.com/dropbox/rust-brotli
+    https://github.com/dropbox/rust-alloc-no-stdlib
+    Note: alloc-stdlib belongs to the same crate family and declares
+    license = "BSD-3-Clause" in its Cargo.toml, but its published package
+    contains no LICENSE file, so no separate copyright line can be quoted.
+
+num_enum, num_enum_derive (Rust; compiled into edit_config_gui.exe)
+    Copyright (c) 2018, Daniel Wagner-Hall
+    https://github.com/illicitonion/num_enum
+    Both crates are dual-licensed BSD-3-Clause / Apache-2.0 / MIT; this package
+    relies on the BSD-3-Clause option, whose text follows.
+
+The remaining BSD-3-Clause Python distributions under site-packages/ (Flask,
+Werkzeug, Jinja2, MarkupSafe, itsdangerous, click, colorama, httpx, websockets,
+numpy, sympy, psutil, protobuf, networkx, joblib, Pygments, fsspec, idna,
+pycparser) are redistributed unmodified and already carry their own license
+text in <package>-<version>.dist-info/licenses/, so they are not repeated here.
+
+--------------------------------------------------------------------------------
+LICENSE TERMS
+--------------------------------------------------------------------------------
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
