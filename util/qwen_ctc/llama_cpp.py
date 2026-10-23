@@ -471,7 +471,7 @@ class Model:
 
     @property
     def rope_type(self) -> int:
-        """``n_rope_type`` 的只读别名（规格 §9.4 自检项用 n_rope_type）"""
+        """``n_rope_type`` 的只读别名（自检读的就是这个字段名，别改）"""
         return self.n_rope_type
 
     def tokenize(

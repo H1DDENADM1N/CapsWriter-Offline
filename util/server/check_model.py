@@ -6,7 +6,8 @@ from util.config import ServerConfig as Config
 from util.server.cosmic import console
 
 
-# 规格 §4.3 的下载命令。缺失文件时原样展示，命令本身一个字符都不要改写。
+# 模型下载命令（与 models/模型下载方式.txt、readme 里的同一份，三处必须一致）。
+# 缺失文件时原样展示，命令本身一个字符都不要改写。
 QWEN_DOWNLOAD_COMMANDS = """\
 # 1.7B 解码器
 curl -4 -L -C - -o models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf \\
@@ -103,7 +104,7 @@ def qwen_mode_errors(
     时才有意义：那时缺 CTC 头 / 词表就没有推理路径。默认 `True` 表示调用方
     未提供该项信息时不额外判定；`_qwen_plan()` 会显式传入真实配置。
 
-    文案要能直接照着做，并包含规格 §7.2 的关键句。返回空列表表示模式合法。
+    文案要能直接照着做：写清「填哪个键、填什么、或者怎么留空」。返回空列表表示模式合法。
     """
     errors: list[str] = []
 

@@ -40,7 +40,7 @@ from .llama_cpp import Context, Model
 
 _MODULE_LOGGER = logging.getLogger(__name__)
 
-#: 特殊 token 字面量 → 回退 id（tokenize 解析失败时使用，规格 §9.3）
+#: 特殊 token 字面量 → 回退 id（llama 侧解析失败时用，id 取自本模型词表实测）
 SPECIAL_TOKENS = {
     "<|endoftext|>": 151643,
     "<|im_start|>": 151644,
@@ -60,13 +60,13 @@ IMROPE = 40
 #: 上下文窗口下限（再小连提示都装不下，视为配置错误）
 MIN_N_CTX = 512
 
-#: 单次 decode 的最大 token 数（规格 §9.10：min(n_ctx, 2048)）
+#: 单次 decode 的最大 token 数（运行时按 ``min(n_ctx, 本值)`` 收紧，见 ``_decode_loop``）
 DEFAULT_N_BATCH = 2048
 
-#: 微批大小（规格 §9.10）
+#: 微批大小（llama 内部按此粒度切分批次，须 ≤ 上面的 ``DEFAULT_N_BATCH``）
 DEFAULT_N_UBATCH = 512
 
-#: 复读判定窗口与不同值阈值（规格 §9.7：最近 30 个 token 的不同值 ≤ 3）
+#: 复读熔断：最近 30 个 token 里不同值 ≤ 3 就判定模型在复读，立即停止生成
 REPEAT_WINDOW = 30
 REPEAT_MIN_DISTINCT = 3
 
@@ -83,7 +83,7 @@ class QwenLLMDecoder:
 
     Args:
         gguf_path: 解码器 GGUF 路径（含 ``token_embd.weight`` 与 qwen3vl 权重）
-        n_ctx: 上下文窗口，**不能小于 512**（规格 §9.10）
+        n_ctx: 上下文窗口，**不能小于 512**（再小连音频占位 + 提示都装不下）
         n_threads: llama 推理线程数（与 ONNX encoder 的 num_threads 独立）
         n_predict: 单段音频的最大生成 token 数
         verbose: 为 True 时把每次生成的耗时打到 INFO
@@ -310,7 +310,7 @@ class QwenLLMDecoder:
         """
         一次调用完成整段 embedding 的预填充，返回耗时（毫秒）
 
-        位置**显式**按 4 平面段优先传入（规格 §9.4）：M-RoPE 模型要读
+        位置**显式**按 4 平面段优先传入：M-RoPE 模型要读
         ``pos[j*n + i]``（j=0..3），依赖 ``decode_embd`` 的缺省布局太脆，
         这里自己算，换后端 / 改默认值都不会悄悄错位。
 
@@ -467,7 +467,7 @@ class QwenLLMDecoder:
 
         Raises:
             BaseException: 预热过程中出现的任何真实错误都**先记日志再原样抛出**
-                （规格 §12.2：「预热不得吞错」）。预热是启动阶段的一次性调用，
+                （预热不得吞错）。预热是启动阶段的一次性调用，
                 吞掉错误只会把故障推迟到第一段音频，还会让坏模型看起来能加载。
         """
         self._ensure_alive()

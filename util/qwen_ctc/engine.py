@@ -12,21 +12,22 @@ Qwen3-ASR 推理引擎：纯 CTC / 两遍 / 纯 LLM 三模式编排
 
 模式不是配置直接决定的：CTC 头可能不存在，也可能维度不匹配（0.6B 的编码器
 输出 1024 维，没有任何 CTC 头）。所以 `initialize()` 先如实探测「CTC 头可用性」，
-再交给 `resolve_mode()` 按规格 §7.2 的矩阵判定，并把结果固化到 `mode` /
+再交给 `resolve_mode()` 按「是否拆分编码器 × 是否有解码器 × CTC 头是否可用」
+的矩阵判定，并把结果固化到 `mode` /
 `has_timestamps` 两个属性上。`enable_ctc` 只是**请求**而非门槛：请求了两遍但
 CTC 头不可用时降级为纯 LLM 并打 WARNING，不是启动失败。
 
-加载顺序（规格 §5.3，顺序本身是正确性的一部分）：
+加载顺序（顺序本身是正确性的一部分，不能重排）：
 
 1. llama.cpp 运行时（DLL + backend）——必须在任何 torch/transformers 导入之前；
    **只在配了解码器时才加载**（纯 CTC 不需要 LLM，也就不需要 llama.cpp 的 DLL）；
-2. 解码器 GGUF + LlamaContext（配了路径但文件不存在 = 硬错误，规格 §7.4(2)）；
+2. 解码器 GGUF + LlamaContext（配了路径但文件不存在 = 硬错误，不许静默降级）；
 3. ONNX 编码器（这一步才惰性 import transformers 的 WhisperFeatureExtractor）；
 4. ONNX CTC 头（只有 `enable_ctc=True` 且路径非空时才加载）；
 5. 维度校验 + 模式判定；
 6. 解码器预热（把 ~2s 的首帧开销挪到启动阶段，失败向上抛、绝不吞掉）。
 
-本模块保留规格里三个「静默出错」的坑的固化实现：
+本模块固化实现了三个会「静默出错」的坑（都不会抛异常，只会算错）：
 
 1. **帧率是 13 fps，不是 50**：有效输出帧数 = `full*13 + ceil(leave/8)`。
 2. **特征不补到 30 秒**：`padding=False` 取真实长度，再零填到 3000 帧桶。
@@ -120,7 +121,7 @@ def resolve_mode(
     ctc_usable: bool,
 ) -> str:
     """
-    按规格 §7.2 的模式矩阵判定推理模式。
+    按「拆分编码器 × 解码器 × CTC 头可用性」的矩阵判定推理模式。
 
     **判定顺序本身是语义的一部分**，不能重排：
 
@@ -217,7 +218,7 @@ class QwenCTCEngine:
     # ── 初始化 ────────────────────────────────────────────────────────
     def initialize(self) -> "QwenCTCEngine":
         """
-        按规格 §5.3 的顺序装配引擎并判定模式。
+        按模块开头列的「加载顺序」装配引擎并判定模式。
 
         任何一步失败都会把已建好的资源关掉再原样抛出（不吞错）。
         """
@@ -237,13 +238,13 @@ class QwenCTCEngine:
 
         # ①＋② llama.cpp 运行时 + 解码器（可选）
         #
-        # 纯 CTC 模式完全不碰 llama.cpp / GGUF：规格 §10.2 里纯 CTC 只需要
+        # 纯 CTC 模式完全不碰 llama.cpp / GGUF：它只需要
         # encoder + CTC 头 + tokens + preprocessor，`bin/` 缺 DLL 不该拖死一个
-        # 用不到 LLM 的部署。有解码器时 init_lib() 仍先于建 encoder（§5.3 的
-        # 顺序约束不变：llama.cpp 运行时必须早于 transformers 的导入）。
+        # 用不到 LLM 的部署。有解码器时 init_lib() 仍先于建 encoder（上面列出的
+        # 加载顺序不变：llama.cpp 运行时必须早于 transformers 的导入）。
         if cfg.decoder_gguf_path:
             if not Path(cfg.decoder_gguf_path).is_file():
-                # 规格 §7.4(2)：配了路径但文件不存在是硬错误。静默降级会把
+                # 配了路径但文件不存在是硬错误。静默降级会把
                 # 「想要两遍」变成「无标点的纯 CTC」，而且用户只看到一条 WARNING
                 raise ValueError(
                     f"解码器 GGUF 不存在: {cfg.decoder_gguf_path}；"
@@ -285,7 +286,7 @@ class QwenCTCEngine:
                 ctc_path, sess_options=so, providers=providers
             )
         elif cfg.enable_ctc:
-            # 规格 §7.3：CTC 头缺失必须让用户看见，不能静默
+            # CTC 头缺失必须让用户看见，不能静默
             if ctc_path:
                 self.logger.warning(f"CTC 头不存在，已忽略: {ctc_path}")
             elif cfg.decoder_gguf_path:
@@ -537,7 +538,7 @@ class QwenCTCEngine:
         if not llm_text:
             # 空串当作静音段：两遍模式丢这一段（CTC 文本也不回退），避免把
             # CTC 的噪声字混进来。只有 LLM **抛异常** 时才回退 CTC 文本（见上面的
-            # except 分支，规格 §7.6）。
+            # except 分支）。
             return "", [], []
 
         duration = len(chunk) / float(SAMPLE_RATE)

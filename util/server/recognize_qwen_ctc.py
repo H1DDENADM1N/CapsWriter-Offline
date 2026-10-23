@@ -183,7 +183,7 @@ def recognize(
             if joined or not result.text:
                 result.text = joined
         else:
-            # 已知限制（规格 §7.2 的取舍）：merge_by_text 的重叠搜索窗口只有
+            # 已知限制（纯 LLM 模式的取舍）：merge_by_text 的重叠搜索窗口只有
             # TextMerge.OVERLAP_CHARS(=5) 个字符。中文短重叠（3-4 字）与英文
             # ≤16 字符的重叠都能正确合并；但英文长句的片段重叠往往超过 5 个
             # 字符，此时找不到重叠、整段会重复一遍（实测：
@@ -191,7 +191,7 @@ def recognize(
             # "accurate and fast in most cases" →
             # "…accurate and fastaccurate and fast in most cases"）。
             # 纯 LLM 模式既没有 token 也没有时间戳，没有更可靠的拼接依据，
-            # 这里宁可重复也不丢字 —— 这是规格认可的退化，不是 bug。
+            # 这里宁可重复也不丢字 —— 这是刻意接受的退化，不是 bug。
             result.text = merge_by_text(
                 result.text, stream.result.text, logger=_logger
             )

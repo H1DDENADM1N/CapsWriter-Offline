@@ -40,10 +40,10 @@ Task 5 覆盖 `util/qwen_ctc/llm.py`（Qwen3-ASR LLM 二遍解码器）：
 18. `n_prefill + n_predict > n_ctx` 时把上限收紧到 `n_ctx - n_prefill` 并留 WARNING；
 19. 0.6B 解码器（n_embd=1024）能直接吃拆分 encoder 的输出（只断非空，避开跨尺寸差异）；
 20. `warmup()` 正常路径不抛异常，且同一段音频连续两次生成结果一致（KV 清理生效）；
-21. `warmup()` 遇真实错误时先记 ERROR 日志再原样抛出，绝不吞错（规格 §12.2）。
+21. `warmup()` 遇真实错误时先记 ERROR 日志再原样抛出，绝不吞错。
 
 Task 6 覆盖 `util/qwen_ctc/engine.py`（三模式编排）：
-22. 模式判定矩阵（规格 §7.2 每一行）+ 非法组合必须抛 `ValueError`；且 0.6B 前端的
+22. 模式判定矩阵的每一行 + 非法组合必须抛 `ValueError`；且 0.6B 前端的
     「无 CTC 头」检查必须先于「纯 CTC」分支（否则 `(True, False, True, False)` 会被
     误判成纯 CTC）；
 23. `QwenCTCConfig` 的 7 个新字段默认值，以及 `create_qwen_ctc_engine` 暴露的 7 个
@@ -53,17 +53,17 @@ Task 6 覆盖 `util/qwen_ctc/engine.py`（三模式编排）：
 25. 静音不崩、>30s 长音频切块偏移连续、同一引擎连续两次识别结果一致；
 26. 0.6B 拆分 encoder 无 CTC 头时自动降级纯 LLM（能正常启动）；解码器维度不符、
     0.6B 只配一端、纯 CTC 缺 CTC 头都必须显式抛错；
-27. 配了解码器路径但 GGUF 不存在 = 硬错误（§7.4(2)）；纯 CTC 不加载 llama.cpp
-    运行时（`bin/` 缺 DLL 也能起，§7.2 / §10.2）；两遍文本必须 == 纯 LLM 文本
-    且 != 纯 CTC 文本（§12.3）。
+27. 配了解码器路径但 GGUF 不存在 = 硬错误；纯 CTC 不加载 llama.cpp
+    运行时（`bin/` 缺 DLL 也能起）；两遍文本必须 == 纯 LLM 文本
+    且 != 纯 CTC 文本。
 
 Task 7 覆盖「配置面」（`util/config.py` + 四个模板）：
 28. 四个模板都必须有 10 个新键，且派生只读键严格写成 `${model_paths.*}` 占位符、
     顺序固定在既有派生键之后 / `verbose` 之前、每个键都带一行 `#` 注释（两个可为空
     的 encoder 键的注释必须出现「留空」），四者同构；
-29. `configs/default config.toml` 的整行注释数 = 333（323 + 10）；
+29. `configs/default config.toml` 的整行注释数 = 334（324 + 10）；
 30. `ModelPaths` / `QwenCTCArgs` 的 10 个新字段全部用 `.get()`（老配置不能 KeyError），
-    默认值与规格 §6.1 / §6.3 一致，且运行时真值取自 `model_paths`（不能把模板里
+    默认值与四个模板的出厂值一致，且运行时真值取自 `model_paths`（不能把模板里
     未展开的 `${...}` 占位符当成路径）；
 31. 拿「删掉 10 个新键」的老配置喂给 `util/config.py` 必须能正常加载，且回退成
     纯 CTC（`decoder_gguf_path` 空、`enable_ctc` 仍为 True）。
@@ -76,7 +76,7 @@ Task 8 覆盖启动体检（`util/server/check_model.py`）：
     「既未配置解码器又禁用 CTC」、「0.6B 前后端只配一端」与
     「纯 CTC 缺 CTC 头 / tokens」，且合法组合不许误报；同时命中的两条错误
     必须把 0.6B 拆分那条排在前面（与引擎 `resolve_mode` 顺序一致）；
-34. 缺失文件提示里的 §4.3 下载命令（1.7B 一条 + 0.6B 循环三条）必须逐字保留；
+34. 缺失文件提示里的下载命令（1.7B 一条 + 0.6B 循环三条）必须逐字保留；
 35. `_qwen_plan()` 的必需文件只能来自 `QwenCTCArgs`（引擎真正收到的配置），
     不能因为 `ModelPaths.qwen_llm_path` 有默认值就去要求引擎不用的 GGUF。
 
@@ -844,7 +844,7 @@ def test_llm_warmup_and_repeat_generate_are_stable():
 
 
 def test_llm_warmup_propagates_real_errors():
-    """预热是启动调用：遇真实错误必须「先记日志、再抛出」，不能吞（规格 §12.2）"""
+    """预热是启动调用：遇真实错误必须「先记日志、再抛出」，不能吞"""
     if not _llm_models_available():
         print("  (跳过：缺少 1.7B 解码器 / encoder / 测试音频)", flush=True)
         return
@@ -948,7 +948,7 @@ def test_engine_config_exposes_new_fields_and_factory_kwargs():
 
 
 def test_engine_resolve_mode_matrix():
-    """规格 §7.2 的模式矩阵逐行断言，顺序（split 检查先行）必须错不开"""
+    """模式矩阵逐行断言，顺序（split 检查先行）必须错不开"""
     from util.qwen_ctc.engine import resolve_mode
 
     assert resolve_mode(False, True, True, True) == "two_pass"
@@ -982,7 +982,7 @@ def test_engine_resolve_mode_rejects_impossible_combos():
 
 
 def test_engine_rejects_missing_decoder_file():
-    """配了解码器路径但文件不存在 = 硬错误（规格 §7.4(2)），不许静默降级成纯 CTC
+    """配了解码器路径但文件不存在 = 硬错误，不许静默降级成纯 CTC
 
     `_llm=None` 会让「想要两遍」的用户拿到无标点的 CTC 文本，`has_timestamps`
     还是 True，只有一条 WARNING —— 所以必须在 initialize() 里就抛。
@@ -1003,7 +1003,7 @@ def test_engine_rejects_missing_decoder_file():
 
 
 def test_engine_pure_ctc_needs_no_llama_runtime():
-    """纯 CTC 不需要 llama.cpp：bin/ 缺 DLL 也必须能起（规格 §7.2 / §10.2）
+    """纯 CTC 不需要 llama.cpp：bin/ 缺 DLL 也必须能起
 
     纯 CTC 只需要 encoder + CTC 头 + tokens + preprocessor；无条件 `init_lib()`
     会让一个完全没有 LLM 的部署直接起不来。
@@ -1095,11 +1095,11 @@ def test_engine_modes_end_to_end():
     finally:
         eng.cleanup()
 
-    # 规格 §12.3：两遍文本必须与纯 LLM 文本逐字符一致。少了这条，`_decode_two_pass`
+    # 两遍文本必须与纯 LLM 文本逐字符一致。少了这条，`_decode_two_pass`
     # 的「LLM 抛异常 → 回退该段 CTC 文本」会让「每段都回退」也通过上面全部形态断言
     # （tokens 逐字符、时间戳等长又单调，纯 CTC 文本同样满足）。
     assert two_pass_text == llm_text, (
-        "两遍文本必须与纯 LLM 文本一致（§12.3）：\n"
+        "两遍文本必须与纯 LLM 文本一致：\n"
         f"  two_pass={two_pass_text!r}\n  llm     ={llm_text!r}\n"
         "  不一致说明两遍里 LLM 二遍没真正生效（可能每段都回退了 CTC 首遍）"
     )
@@ -1255,7 +1255,7 @@ def test_engine_pure_ctc_requires_ctc_head():
 # Task 7: 配置面 —— util/config.py + 四个模板
 # --------------------------------------------------------------------------
 
-# 四个模板里新增的 10 个叶子键（规格 §6.1）
+# 四个模板里新增的 10 个叶子键
 _NEW_MODEL_PATH_KEYS = (
     "qwen_llm_path",
     "qwen_ctc_encoder_frontend_path",
@@ -1395,11 +1395,11 @@ def test_templates_have_new_qwen_keys():
             assert _blank_line_after_key(text, key), f"{p} 的 {key} 注释后缺空行"
 
 
-def test_default_template_comment_count_is_333():
-    """默认模板的整行注释数从 323 变成 333（10 个新键各带一行注释）"""
+def test_default_template_comment_count_is_334():
+    """默认模板的整行注释数从 324 变成 334（10 个新键各带一行注释）"""
     p = ROOT / "configs/default config.toml"
     n = sum(1 for line in p.read_text(encoding="utf-8").splitlines() if line.strip().startswith("#"))
-    assert n == 333, f"整行注释数应为 333，实际 {n}"
+    assert n == 334, f"整行注释数应为 334，实际 {n}"
 
 
 def test_templates_are_isomorphic():
@@ -1463,7 +1463,7 @@ def test_qwen_ctc_args_reads_new_keys_with_get_fallback():
 
 
 def test_old_config_without_new_keys_still_loads():
-    """老配置（没有 10 个新键）必须能加载，并回退成纯 CTC（规格 §15.1）"""
+    """老配置（没有 10 个新键）必须能加载，并回退成纯 CTC"""
     import importlib.util
     import shutil
 
@@ -1666,7 +1666,7 @@ def test_required_qwen_files_empty_string_and_none_are_unconfigured():
 
 
 def test_qwen_mode_errors_reject_no_decoder_and_ctc_disabled():
-    """解码器为空 + enable_ctc=False ⇒ 模式层面硬错误（§7.2 唯一一行）"""
+    """解码器为空 + enable_ctc=False ⇒ 模式层面硬错误（矩阵里唯一没有推理路径的一行）"""
     from util.server.check_model import qwen_mode_errors
 
     errors = qwen_mode_errors(
@@ -1842,8 +1842,8 @@ def test_qwen_plan_reports_pure_ctc_without_ctc_head():
     assert any("纯 CTC" in e for e in errors), errors
 
 
-def test_qwen_download_commands_are_verbatim_from_spec():
-    """缺失提示里的 §4.3 下载命令必须逐字保留，不能改写命令本身"""
+def test_qwen_download_commands_are_verbatim():
+    """缺失提示里的下载命令必须逐字保留，不能改写命令本身"""
     from util.server.check_model import QWEN_DOWNLOAD_COMMANDS as cmds
 
     text = cmds.replace("\r\n", "\n")
@@ -2082,7 +2082,7 @@ def test_recognize_pure_ctc_still_calls_punctuation_model():
 
 
 def test_format_text_skipping_punc_keeps_spacing_and_numbers():
-    """spec §10.2 第 2 点：use_punc=False 只跳标点，adjust_space 与 chinese_to_num 照做
+    """use_punc=False 只跳标点，adjust_space 与 chinese_to_num 照做
 
     Task 9 评审 I3：把 `chinese_to_num` 或两个 `adjust_space` 删掉，原有 74 条用例
     全绿 —— 这个「最易写错处」原先零覆盖。
@@ -2156,7 +2156,7 @@ def test_recognize_llm_mode_clears_stale_tokens_from_cache():
 
     评审 M-3：删掉 `result.tokens = []` / `result.timestamps = []` 两行，原有
     用例全绿 —— 而后果是把上一段 CTC 的 tokens 与时间戳泄漏进纯 LLM 结果，
-    违反 spec §7.2「纯 LLM 不产时间戳」。模式在生产里不会中途切换（engine
+    违反「纯 LLM 不产时间戳」这一硬约束。模式在生产里不会中途切换（engine
     启动时固化），但缓存是按 task_id 跨请求存活的，这条护栏必须被钉住。
     """
     import util.server.recognize_qwen_ctc as m
@@ -2354,7 +2354,7 @@ if __name__ == "__main__":
         test_engine_pure_ctc_requires_ctc_head,
         test_templates_have_new_qwen_keys,
         test_templates_are_isomorphic,
-        test_default_template_comment_count_is_333,
+        test_default_template_comment_count_is_334,
         test_qwen_ctc_args_reads_new_keys_with_get_fallback,
         test_old_config_without_new_keys_still_loads,
         test_required_qwen_files_fused_pure_ctc,
@@ -2373,7 +2373,7 @@ if __name__ == "__main__":
         test_qwen_mode_errors_accepts_two_pass_without_ctc_head,
         test_qwen_plan_paths_come_from_qwen_ctc_args,
         test_qwen_plan_reports_pure_ctc_without_ctc_head,
-        test_qwen_download_commands_are_verbatim_from_spec,
+        test_qwen_download_commands_are_verbatim,
         test_recognize_llm_mode_merges_by_text,
         test_recognize_llm_mode_accumulates_across_segments,
         test_recognize_token_mode_keeps_text_mode_cache,
