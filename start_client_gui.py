@@ -53,7 +53,6 @@ from util.client.check_microphone_usage import is_microphone_in_use
 from util.client.multi_cursor_font import (
     apply_mono_font,
     mono_font_stylesheet,
-    mono_font_stylesheet_with_alpha,
 )
 from util.client.multicursor_edit import MultiCursorTextEdit
 from util.config import ClientConfig as Config
@@ -452,26 +451,68 @@ class InputDialog_Api_Key:
 
 
 class CustomTextEdit(MultiCursorTextEdit):
+    # 文本框背景色。样式表里写的是 rgba(46, 50, 54, alpha)，渐隐带必须
+    # 用同一个颜色，否则上下边缘会显出一条「更亮/更暗」的色块。
+    BACKGROUND_RGB = (46, 50, 54)
+    # 文本框圆角。比窗口圆角（12px）小一点：卡片套在圆角窗口里，
+    # 内层用同样半径会显得「角太圆」。
+    CORNER_RADIUS = 10
+    # 样式表里用来圈住自己的 ID。裸声明会漏到子控件上（见 _stylesheet），
+    # 所以必须有一个 objectName 可供选择器匹配。
+    TEXT_BOX_OBJECT_NAME = "clientTextBox"
+
     def __init__(self, parent=None, logger: Optional[Logger] = None):
         super().__init__(parent)
         self.logger = logger if logger is not None else default_logger
         self.font_size = 12
         self.min_font_size = 5
         self.max_font_size = 45
+        self.setObjectName(self.TEXT_BOX_OBJECT_NAME)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # 当前背景不透明度：时钟模式下会在 0 / 255 之间切换
+        self._background_alpha = 255
         # 等宽字体（MapleMono-NF-CN-Regular）。字体不可用时保持原字体，
         # 不静默换成 Tahoma 之类的替代品，见 multi_cursor_font 模块说明。
         apply_mono_font(self, self.font_size)
+        # 渐隐带要按圆角裁剪，否则上下两个角会被矩形色块填成直角
+        self.set_corner_radius(self.CORNER_RADIUS)
+        # 初始就带上「背景 + 圆角」样式：首次绘制前若没有这条样式表，
+        # 用户会看到一瞬间的直角方框（背景色也退回主题的默认值）。
+        self.apply_background(255)
+
+    def _apply_edge_fade_color(self) -> None:
+        """把渐隐色同步成当前背景色（含不透明度）。"""
+        red, green, blue = self.BACKGROUND_RGB
+        self.set_edge_fade(QColor(red, green, blue, self._background_alpha))
+
+    def _stylesheet(self, alpha: int) -> str:
+        """文本框样式表：等宽字体 + 字号 + 背景 + 圆角。
+
+        必须用 ID 选择器把自己圈起来，**不能写成裸声明**（``font-family: …``
+        直接跟在 ``setStyleSheet`` 里）。裸声明会被 Qt 当成 ``*`` 规则作用到
+        子控件上，而 tooltip 正是挂在触发控件下的子控件（``QTipLabel`` 的
+        父 widget 就是触发控件）：文本框这套「等宽字体 + 12.38pt」会顺着
+        控件树渗进「返回底部」按钮的提示框，把主题 ``QToolTip`` 里的字体
+        整段顶掉。而且祖先样式表的优先级高于应用级样式表，光在按钮上写
+        字体是压不住的——只有在这里收窄作用域才治本。
+        """
+        return (
+            f"QTextEdit#{self.TEXT_BOX_OBJECT_NAME} {{"
+            + mono_font_stylesheet(self.font_size, alpha)
+            + f" border-radius: {self.CORNER_RADIUS}px;"
+            + "}"
+        )
 
     def apply_font_size(self, size: int) -> None:
         """应用字号，同时保证等宽字体族不丢失。
 
         Ctrl+滚轮缩放会重设 stylesheet；族名一并写进去，避免只改字号后
-        字体退回系统默认。
+        字体退回系统默认。背景不透明度也要带上，否则在时钟模式下调一次
+        字号背景就会重新变得不透明。
         """
         self.font_size = max(self.min_font_size, min(self.max_font_size, int(size)))
-        self.setStyleSheet(mono_font_stylesheet(self.font_size))
+        self.setStyleSheet(self._stylesheet(self._background_alpha))
 
     def apply_background(self, alpha: int) -> None:
         """只改背景透明度，保留等宽字体族。
@@ -480,7 +521,9 @@ class CustomTextEdit(MultiCursorTextEdit):
         这里是一句裸 ``setStyleSheet("background-color: ...")``，会把上一步
         写进去的 ``font-family`` 整段冲掉，进出一次窗口字体就退回系统默认。
         """
-        self.setStyleSheet(mono_font_stylesheet_with_alpha(self.font_size, alpha))
+        self._background_alpha = max(0, min(255, int(alpha)))
+        self.setStyleSheet(self._stylesheet(self._background_alpha))
+        self._apply_edge_fade_color()
 
     def contextMenuEvent(self, event):
         """右键菜单弹出时通知主窗口。
@@ -520,6 +563,12 @@ class CustomTextEdit(MultiCursorTextEdit):
 
 
 class GUI(QMainWindow):
+    # 窗口圆角半径（像素）。无边框 + 半透明窗口下，只有顶层 widget 自己
+    # 画的背景才能被圆角裁剪，所以窗口背景统一走 _apply_window_background。
+    WINDOW_CORNER_RADIUS = 12
+    # 内容距窗口边缘的留白。圆角窗口四角是弧线，留白太小的话标题栏按钮
+    CONTENT_MARGIN = 0
+
     def __init__(self, logger: Optional[Logger] = None):
         self.logger = logger if logger is not None else default_logger
         super().__init__()
@@ -695,7 +744,8 @@ class GUI(QMainWindow):
         # Create a vertical layout
         self.layout = QVBoxLayout()
         self.layout.setSpacing(0)  # 设置控件间距为0像素
-        self.layout.setContentsMargins(3, 3, 3, 3)  # 设置左、上、右、下的边距
+        m = self.CONTENT_MARGIN
+        self.layout.setContentsMargins(m, m, m, m)  # 设置左、上、右、下的边距
         self.layout2 = QHBoxLayout()
         self.layout2.setSpacing(0)  # 设置控件间距为0像素
         self.layout2.setContentsMargins(0, 0, 0, 0)  # 设置左、上、右、下的边距为0像素
@@ -713,9 +763,29 @@ class GUI(QMainWindow):
 
         # Create a central widget
         central_widget = QWidget()
+        # 圆角窗口的关键：中央 widget 必须透明。它的方形背景（主题里的
+        # QWidget { background-color }）会把窗口圆角外面的区域重新填成
+        # 不透明，四角就又变回直角了。见 gui_theme_custom.css 的同名规则。
+        central_widget.setObjectName("clientCentralWidget")
         central_widget.setLayout(self.layout)
         # Set the central widget
         self.setCentralWidget(central_widget)
+        # 初始就要带圆角：窗口首次 show 之前若没有这条样式表，四角是直角
+        self._apply_window_background(255)
+
+    def _apply_window_background(self, alpha: int) -> None:
+        """设置窗口背景色与圆角（alpha=0 时窗口整体透明，时钟模式用）。
+
+        必须用「无选择器」的声明式样式表：``QMainWindow { ... }`` 这种带
+        类型选择器的写法在这个无边框半透明窗口上不会画出背景（实测整窗
+        全透明），而裸声明会作为 ``*`` 规则作用到本 widget 并被
+        QStyleSheetStyle 用圆角路径填充。
+        """
+        radius = self.WINDOW_CORNER_RADIUS
+        self.setStyleSheet(
+            f"background-color: rgba(35, 38, 41, {int(alpha)});"
+            f" border-radius: {radius}px;"
+        )
 
     def init_file_watcher(self):
         """初始化文件系统监控器"""
@@ -1818,7 +1888,7 @@ class GUI(QMainWindow):
             self.time_label.hide()  # 隐藏时间标签
         self.resize(425, 425)
         self.text_box_client.apply_background(255)
-        self.setStyleSheet("background-color: rgba(35, 38, 41, 255);")
+        self._apply_window_background(255)
         self.text_box_client.setVisible(True)  # 显示文本框
         for i in range(self.title_bar.count()):  # 显示标题栏
             widget = self.title_bar.itemAt(i).widget()
@@ -1999,8 +2069,8 @@ class GUI(QMainWindow):
                 self.berthToLeft(
                     x, y, width, height, screenWidth, screenHeight, currentScreen
                 )
-            elif (
-                x == self._right_pop_out_x(currentScreen.geometry(), width)
+            elif x == self._right_pop_out_x(
+                currentScreen.geometry(), width
             ):  # 窗口非活跃状态，从右边弹出的，恢复继续停靠在右边
                 self.berthToRight(
                     x, y, width, height, screenWidth, screenHeight, currentScreen
@@ -2045,6 +2115,8 @@ class GUI(QMainWindow):
     def enterEvent(self, event):
         super().enterEvent(event)
         self.logger.trace("[enterEvent] 鼠标进入窗口")
+        # 鼠标进来了：若此时不在底部，「回到底部」按钮要重新浮出来
+        self.text_box_client.set_pointer_inside(True)
         self._apply_inside_state()
         # 添加诊断日志：记录resize前的窗口大小
         geometry_before = self.geometry()
@@ -2102,6 +2174,8 @@ class GUI(QMainWindow):
             # 事件），此时不能按"鼠标已离开"处理，否则界面会被误隐藏。
             self.logger.trace("[leaveEvent] 鼠标仍在窗口内，忽略本次离开事件")
             return
+        # 真的离开了：藏掉「回到底部」按钮（离开窗口后本来也点不到它）
+        self.text_box_client.set_pointer_inside(False)
         self._apply_outside_state()
         self._apply_berth_logic()
 
@@ -2141,7 +2215,7 @@ class GUI(QMainWindow):
             self.text_box_client.apply_background(255)
             self.time_label.setVisible(False)
             self.adjust_time_label_position()
-            self.setStyleSheet("background-color: rgba(35, 38, 41, 255);")
+            self._apply_window_background(255)
         for i in range(self.title_bar.count()):  # 鼠标进入时显示标题栏
             widget = self.title_bar.itemAt(i).widget()
             if widget is not None:
@@ -2160,7 +2234,7 @@ class GUI(QMainWindow):
             self.text_box_client.apply_background(0)
             self.time_label.setVisible(True)
             self.adjust_time_label_position()
-            self.setStyleSheet("background-color: rgba(35, 38, 41, 0);")
+            self._apply_window_background(0)
         # 添加诊断日志：记录resize前的窗口大小
         geometry_before = self.geometry()
         self.logger.trace(
@@ -2284,7 +2358,9 @@ class GUI(QMainWindow):
 
     def _sync_hover_state(self):
         """按当前鼠标位置重新同步标题栏/底栏与时钟的显示状态。"""
-        if self._cursor_inside_window():
+        inside = self._cursor_inside_window()
+        self.text_box_client.set_pointer_inside(inside)
+        if inside:
             self._apply_inside_state()
         else:
             self._apply_outside_state()

@@ -9,11 +9,26 @@ QWidget {
     selection-color: #15f2d0;
 }
 
+/* 主窗口的圆角由 start_client_gui 的 GUI._apply_window_background 画出来
+   （无边框 + 半透明窗口，只有顶层 widget 自己的背景能被圆角裁剪）。
+   中央 widget 必须透明，否则它那层方形背景会把圆角整个盖回去。 */
+QWidget#clientCentralWidget {
+    background: transparent;
+}
+
 QToolTip {
     color: #15f2d0;
     background-color: #203032;
     border: 1px solid #263538;
     padding: 4px 6px;
+    /* 字体必须显式写死：tooltip 是挂在触发控件下的子控件，不写就继承触发
+       控件自己的字体——普通按钮是 Segoe MDL2 Assets（图标字体，中文会变成
+       方块），文本框里是 12.38pt 等宽字体，提示文字跟正文就完全两个样子。
+       注意祖先样式表里若有裸声明（``font-family: …`` 不带选择器），Qt 会把
+       它当 ``*`` 规则作用到子控件上，优先级还压过这里——所以文本框的样式表
+       也改成了 ID 选择器，见 start_client_gui.CustomTextEdit._stylesheet。 */
+    font-family: "Microsoft YaHei UI";
+    font-size: 9pt;
 }
 
 QPushButton {

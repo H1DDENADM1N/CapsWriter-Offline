@@ -25,12 +25,14 @@ from PySide6.QtGui import (  # noqa: E402
     QMouseEvent,
     QPalette,
     QTextCursor,
+    QWheelEvent,
 )
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 APP = QApplication.instance() or QApplication([])
 
 from util.client.multicursor_edit import MultiCursorTextEdit  # noqa: E402
+from util.client.multicursor_edit import ScrollToBottomButton  # noqa: E402
 
 TESTS = []
 
@@ -3718,6 +3720,363 @@ def test_replace_all_at_document_end_keeps_cursor_at_end() -> None:
         edit.verticalScrollBar().value(),
         bar.maximum(),
     )
+
+
+# ------------------------------------------- 滚动跟随与「回到底部」悬浮按钮
+#
+# 需求：滚轮一动就挂起「贴底跟随」，下方浮出「回到底部」按钮；追加日志
+# 不滚屏；用户自己滚回距底部 40px 以内才恢复贴底并隐藏按钮。下面这几条
+# 锁住的正是这三条不变量。
+
+
+def wheel(edit: MultiCursorTextEdit, delta_y: int) -> None:
+    """朝视口发一个滚轮事件（``delta_y > 0`` 向上滚）。"""
+    pos = QPointF(10, 10)
+    event = QWheelEvent(
+        pos,
+        pos,
+        QPoint(0, 0),
+        QPoint(0, delta_y),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    APP.sendEvent(edit.viewport(), event)
+    APP.processEvents()
+
+
+def scrollable_edit(rows: int = 200) -> MultiCursorTextEdit:
+    """造一个内容溢出、初始贴在底部的编辑器。"""
+    edit = make_edit("\n".join(f"log {i}" for i in range(rows)))
+    bar = edit.verticalScrollBar()
+    bar.setValue(bar.maximum())
+    APP.processEvents()
+    assert bar.maximum() > 0, "这个测试需要内容溢出视口"
+    return edit
+
+
+@test
+def test_scroll_constants_match_spec() -> None:
+    """40px 阈值 / 150ms 停手 / 28px 渐隐高度是需求里写死的值。"""
+    assert MultiCursorTextEdit.SCROLL_BOTTOM_THRESHOLD == 40
+    assert MultiCursorTextEdit.SCROLL_SETTLE_MS == 150
+    assert MultiCursorTextEdit.EDGE_FADE_HEIGHT == 28
+
+
+@test
+def test_wheel_up_suspends_follow_and_shows_button() -> None:
+    """向上滚 → 挂起贴底、浮出「回到底部」按钮。"""
+    edit = scrollable_edit()
+    assert edit.stick_to_bottom, "初始应贴底"
+    assert not edit.scroll_to_bottom_button.isVisible()
+
+    wheel(edit, 120)
+    wheel(edit, 120)
+
+    bar = edit.verticalScrollBar()
+    assert bar.value() < bar.maximum(), "滚轮没有真的滚上去"
+    assert not edit.stick_to_bottom, "上滚后仍处于贴底跟随状态"
+    assert edit.scroll_to_bottom_button.isVisible(), "没有浮出「回到底部」按钮"
+
+
+@test
+def test_append_keeps_scroll_while_user_reads_history() -> None:
+    """用户上滚看历史时，新日志不能把视图拽回底部。"""
+    edit = scrollable_edit()
+    wheel(edit, 120)
+    wheel(edit, 120)
+    bar = edit.verticalScrollBar()
+    before = bar.value()
+    assert before < bar.maximum()
+
+    edit.append_line("新的一条日志")
+    APP.processEvents()
+
+    assert bar.value() == before, (bar.value(), before)
+    assert not edit.stick_to_bottom
+    assert edit.scroll_to_bottom_button.isVisible()
+
+
+@test
+def test_wheel_back_to_bottom_restores_follow_and_hides_button() -> None:
+    """自己滚回底部 → 恢复贴底并隐藏按钮。"""
+    edit = scrollable_edit()
+    wheel(edit, 120)
+    wheel(edit, 120)
+    assert edit.scroll_to_bottom_button.isVisible()
+
+    for _ in range(200):
+        if edit.verticalScrollBar().value() == edit.verticalScrollBar().maximum():
+            break
+        wheel(edit, -120)
+
+    bar = edit.verticalScrollBar()
+    assert bar.value() == bar.maximum(), (bar.value(), bar.maximum())
+    assert edit.stick_to_bottom, "回到最底部后应恢复贴底"
+    assert not edit.scroll_to_bottom_button.isVisible(), "回到底部后按钮没隐藏"
+
+
+@test
+def test_scroll_down_into_threshold_snaps_to_bottom() -> None:
+    """往下滚进 40px 范围就吸附到底（差几个像素也算回到底部）。"""
+    edit = scrollable_edit()
+    wheel(edit, 120)
+    wheel(edit, 120)
+    bar = edit.verticalScrollBar()
+
+    # 停在阈值内、但没到底：模拟「往下滚了但差一点点」
+    bar.setValue(bar.maximum() - 10)
+    edit._begin_user_scroll()
+    edit._scroll_direction = -1  # 往下滚
+    edit._update_scroll_affordance()
+
+    assert bar.value() == bar.maximum(), (bar.value(), bar.maximum())
+    assert edit.stick_to_bottom
+
+
+@test
+def test_scroll_up_into_threshold_does_not_snap() -> None:
+    """往上滚进阈值时不能吸附，否则滚轮设成 1 行时永远滚不上去。"""
+    edit = scrollable_edit()
+    bar = edit.verticalScrollBar()
+    bar.setValue(bar.maximum() - 10)
+    edit._begin_user_scroll()
+    edit._scroll_direction = 1  # 往上滚
+    edit._update_scroll_affordance()
+
+    assert bar.value() == bar.maximum() - 10, bar.value()
+
+
+@test
+def test_scroll_button_click_returns_to_bottom() -> None:
+    """点按钮 → 回到底部、恢复贴底、按钮自己隐藏。"""
+    edit = scrollable_edit()
+    wheel(edit, 120)
+    wheel(edit, 120)
+    button = edit.scroll_to_bottom_button
+    assert button.isVisible()
+
+    button.click()
+    APP.processEvents()
+    edit.verticalScrollBar().setValue(edit.verticalScrollBar().maximum())
+    APP.processEvents()
+
+    assert edit.stick_to_bottom
+    assert not button.isVisible()
+
+
+@test
+def test_scroll_to_bottom_button_is_centered_above_bottom_edge() -> None:
+    """按钮浮在视口底部正中，且不超出视口。"""
+    edit = scrollable_edit()
+    for _ in range(4):  # 滚轮一格可能不到 40px，多滚几下才离开吸附区
+        wheel(edit, 120)
+    button = edit.scroll_to_bottom_button
+    assert button.isVisible()
+    vp = edit.viewport()
+    geo = button.geometry()
+    assert 0 <= geo.top() and geo.bottom() < vp.height(), (geo, vp.height())
+    assert abs(geo.center().x() - vp.width() // 2) <= 2, (geo.center().x(), vp.width())
+
+
+@test
+def test_enter_window_does_not_yank_scrolled_view() -> None:
+    """上滚看历史时鼠标进出窗口，不能把视图拽回底部。"""
+    edit = scrollable_edit()
+    wheel(edit, 120)
+    wheel(edit, 120)
+    bar = edit.verticalScrollBar()
+    before = bar.value()
+
+    edit.scroll_to_bottom_if_follow()
+    APP.processEvents()
+
+    assert bar.value() == before, (bar.value(), before)
+
+
+@test
+def test_page_up_suspends_follow_like_wheel() -> None:
+    """键盘翻页也算用户主动滚动：按钮亮起、新日志不再拽回底部。"""
+    edit = scrollable_edit()
+    event = QKeyEvent(
+        QEvent.Type.KeyPress,
+        Qt.Key.Key_PageUp,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    APP.sendEvent(edit, event)
+    APP.processEvents()
+
+    bar = edit.verticalScrollBar()
+    assert bar.value() < bar.maximum(), "PageUp 没有滚动视图"
+    assert not edit.stick_to_bottom
+    assert edit.scroll_to_bottom_button.isVisible()
+
+    before = bar.value()
+    edit.append_line("新日志")
+    APP.processEvents()
+    assert bar.value() == before, (bar.value(), before)
+
+
+# ------------------------------------------------------------ 上下边缘渐隐
+
+
+def fade_image(edit: MultiCursorTextEdit) -> QImage:
+    """只跑渐隐绘制，得到一张带 alpha 的遮罩图（视口坐标）。"""
+    from PySide6.QtGui import QPainter
+
+    img = QImage(edit.viewport().size(), QImage.Format.Format_ARGB32)
+    img.fill(0)
+    painter = QPainter(img)
+    try:
+        edit._paint_edge_fades(painter)
+    finally:
+        painter.end()
+    return img
+
+
+@test
+def test_edge_fade_paints_both_edges_mid_document() -> None:
+    """文档中段：上下都有内容 → 两条渐隐带都在，且越靠边越不透明。"""
+    edit = scrollable_edit()
+    bar = edit.verticalScrollBar()
+    bar.setValue(bar.maximum() // 2)
+    APP.processEvents()
+
+    img = fade_image(edit)
+    height = MultiCursorTextEdit.EDGE_FADE_HEIGHT
+    x = 4
+    top_edge = img.pixelColor(x, 0).alpha()
+    top_inner = img.pixelColor(x, height - 1).alpha()
+    bottom_edge = img.pixelColor(x, img.height() - 1).alpha()
+    bottom_inner = img.pixelColor(x, img.height() - height).alpha()
+
+    assert top_edge > 200, f"上边缘没有渐隐: {top_edge}"
+    assert top_inner < top_edge, (top_inner, top_edge)
+    assert bottom_edge > 200, f"下边缘没有渐隐: {bottom_edge}"
+    assert bottom_inner < bottom_edge, (bottom_inner, bottom_edge)
+
+
+@test
+def test_edge_fade_only_where_content_continues() -> None:
+    """滚到顶就没有上边渐隐，滚到底就没有下边渐隐（最新一行必须清晰）。"""
+    edit = scrollable_edit()
+    bar = edit.verticalScrollBar()
+    height = MultiCursorTextEdit.EDGE_FADE_HEIGHT
+
+    bar.setValue(bar.maximum())
+    APP.processEvents()
+    img = fade_image(edit)
+    assert img.pixelColor(20, 0).alpha() > 0, "底部时上边应有渐隐（上面还有内容）"
+    assert img.pixelColor(20, img.height() - 1).alpha() == 0, "已经在底部，下边不该渐隐"
+
+    bar.setValue(0)
+    APP.processEvents()
+    img = fade_image(edit)
+    assert img.pixelColor(20, 0).alpha() == 0, "已经在顶部，上边不该渐隐"
+    assert img.pixelColor(20, img.height() - 1).alpha() > 0, "顶部时下边应有渐隐"
+    assert height == 28
+
+
+@test
+def test_edge_fade_absent_when_document_fits() -> None:
+    """内容不溢出时完全没有渐隐，短文本不该被擦淡。"""
+    edit = make_edit("aaa\nbbb\nccc")
+    img = fade_image(edit)
+    for y in (0, img.height() // 2, img.height() - 1):
+        assert img.pixelColor(20, y).alpha() == 0, (y, img.pixelColor(20, y).alpha())
+
+
+@test
+def test_edge_fade_color_follows_background() -> None:
+    """渐隐带用的是文本框背景色，不是调色板默认色。"""
+    edit = scrollable_edit()
+    bar = edit.verticalScrollBar()
+    bar.setValue(bar.maximum() // 2)
+    edit.set_edge_fade(QColor(10, 20, 30, 255))
+    img = fade_image(edit)
+    edge = img.pixelColor(20, 0)
+    assert (edge.red(), edge.green(), edge.blue()) == (10, 20, 30), edge.getRgb()
+
+
+@test
+def test_scroll_button_hides_when_pointer_leaves_window() -> None:
+    """鼠标移出客户端窗口 → 按钮藏起来；移回来且仍不在底部 → 再出现。"""
+    edit = scrollable_edit()
+    wheel(edit, 120)
+    wheel(edit, 120)
+    button = edit.scroll_to_bottom_button
+    assert button.isVisible()
+
+    edit.set_pointer_inside(False)
+    APP.processEvents()
+    assert not button.isVisible(), "鼠标移出窗口后按钮还挂着"
+
+    edit.set_pointer_inside(True)
+    APP.processEvents()
+    assert button.isVisible(), "鼠标回到窗口后按钮没回来"
+
+
+@test
+def test_scroll_button_stays_hidden_at_bottom_after_pointer_returns() -> None:
+    """鼠标回到窗口时若已在底部，按钮不该出现。"""
+    edit = scrollable_edit()
+    edit.set_pointer_inside(False)
+    edit.set_pointer_inside(True)
+    APP.processEvents()
+    assert not edit.scroll_to_bottom_button.isVisible()
+
+
+@test
+def test_shift_mode_button_scrolls_to_top() -> None:
+    """Shift 悬停翻成「回到顶部」后，点它要滚到顶且不恢复贴底跟随。"""
+    edit = scrollable_edit()
+    wheel(edit, 120)
+    wheel(edit, 120)
+    button = edit.scroll_to_bottom_button
+    assert button.mode == ScrollToBottomButton.MODE_BOTTOM
+
+    button.set_mode(ScrollToBottomButton.MODE_TOP)
+    assert button.mode == ScrollToBottomButton.MODE_TOP
+    assert "顶部" in button.toolTip(), button.toolTip()
+
+    button.click()
+    APP.processEvents()
+    edit.verticalScrollBar().setValue(0)
+    APP.processEvents()
+
+    assert edit.verticalScrollBar().value() == 0
+    assert not edit.stick_to_bottom, "回到顶部后不该继续贴底跟随"
+    assert button.isVisible(), "在顶部时按钮仍要留着，方便再回到底部"
+
+
+@test
+def test_scroll_to_top_does_not_follow_new_lines() -> None:
+    """回到顶部后新日志不能把视图拽回底部。"""
+    edit = scrollable_edit()
+    edit.scroll_to_top(animated=False)
+    APP.processEvents()
+    assert edit.verticalScrollBar().value() == 0
+    assert not edit.stick_to_bottom
+
+    edit.append_line("新日志")
+    APP.processEvents()
+    assert edit.verticalScrollBar().value() == 0, "回到顶部后仍被拽回底部"
+
+
+@test
+def test_scroll_button_flip_animation_reaches_target() -> None:
+    """翻转动画要有真正的过渡：中途值介于 0 与 1 之间，最终停在目标。"""
+    edit = scrollable_edit()
+    button = edit.scroll_to_bottom_button
+    button.set_mode(ScrollToBottomButton.MODE_TOP, animated=False)
+    assert button.flip == 1.0, button.flip
+    button.set_mode(ScrollToBottomButton.MODE_BOTTOM, animated=False)
+    assert button.flip == 0.0, button.flip
+
+    button.set_mode(ScrollToBottomButton.MODE_TOP)
+    # 动画是异步的：立即读到的应该是起点附近，而不是瞬间跳到 1
+    assert 0.0 <= button.flip < 1.0, button.flip
 
 
 if __name__ == "__main__":

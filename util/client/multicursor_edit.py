@@ -18,18 +18,36 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QPoint,
+    QPropertyAnimation,
+    Property,
+    QRect,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
+    QGuiApplication,
     QKeyEvent,
+    QLinearGradient,
     QMouseEvent,
     QPainter,
+    QPainterPath,
     QPalette,
+    QPen,
     QTextCharFormat,
     QTextCursor,
+    QWheelEvent,
 )
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QApplication,
     QHBoxLayout,
     QLabel,
@@ -42,10 +60,216 @@ from PySide6.QtWidgets import (
 
 from util.client.word_segment import word_end_at, word_range_at, word_start_at
 
-__all__ = ["FindBar", "FindLineEdit", "MultiCursorTextEdit"]
+__all__ = [
+    "FindBar",
+    "FindLineEdit",
+    "MultiCursorTextEdit",
+    "ScrollToBottomButton",
+]
 
 
 SELECTION_COLOR = QColor(38, 79, 120, 160)
+
+
+class ScrollToBottomButton(QAbstractButton):
+    """浮在文本框底部的滚动快捷按钮。
+
+    默认是「回到底部」（向下的 chevron）；按住 Shift 悬停时翻转为
+    「回到顶部」，图标随之转 180°。
+
+    图标为什么自绘而不是用 ``Segoe MDL2 Assets`` 的字形：字体字形没法做
+    旋转动画，只能在两个字符之间硬切，看起来像闪了一下。这里画一条
+    chevron 路径，翻转就是一个 0→180° 的缓动旋转，配合同样缓动的
+    底色/描边变化，切换才顺。
+
+    焦点策略固定为 ``NoFocus``：点完按钮焦点仍在文本框上，用户可以立刻
+    继续输入，不必再点一次编辑区。
+    """
+
+    SIZE = 30
+    # 距视口底边的间距。取 6px 让它整体落进底部渐隐带（28px）里：
+    # 内容从按钮后面淡出，视觉上是「浮在文字上方」而不是「压在文字上」。
+    MARGIN = 6
+    # 翻转动画时长（毫秒）。180° 旋转，太长会「拖」，太短会显得生硬。
+    FLIP_MS = 180
+    # 悬停配色过渡时长
+    HOVER_MS = 120
+    # Shift 键状态轮询间隔：只在悬停期间跑，40ms 足够跟手又不费 CPU
+    MODIFIER_POLL_MS = 40
+
+    MODE_BOTTOM = "bottom"
+    MODE_TOP = "top"
+
+    # 配色（与 gui_theme_custom.css 的 teal 主题一致）
+    _BG = QColor(28, 32, 35, 240)
+    _BG_HOVER = QColor(0, 178, 148, 90)
+    _BORDER = QColor(0, 178, 148, 150)
+    _BORDER_HOVER = QColor(0, 178, 148, 255)
+    _ICON = QColor(159, 230, 216)
+    _ICON_HOVER = QColor(255, 255, 255)
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setFixedSize(self.SIZE, self.SIZE)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # 自己画背景：主题的 QWidget { background-color } 会给这个子控件刷一层
+        # 不透明底，把圆角外面的角落填成方块。
+        #
+        # 规则必须用 ID 选择器限定在自己身上，不能写成裸声明
+        # （``background: transparent``）——裸声明会作为 ``*`` 规则作用到
+        # 子控件，而 tooltip 正是挂在触发控件下的子控件：背景被这条规则
+        # 抢走后就变成系统默认的白底方块，QToolTip 那套深色描边样式全丢。
+        #
+        # 字体不用在这里写：文本框的等宽字体曾经顺着控件树漏进来，但根源
+        # 在 CustomTextEdit 的样式表用了裸声明，那边已改成 ID 选择器；
+        # 这里再写一遍 font 只是重复，主题的 QToolTip 规则已经能正常生效。
+        self.setObjectName("scrollToBottomButton")
+        self.setStyleSheet(
+            "#scrollToBottomButton {"
+            " background: transparent;"
+            "}"
+        )
+        self._mode = self.MODE_BOTTOM
+        self._flip = 0.0
+        self._hover = 0.0
+        self._flip_anim = QPropertyAnimation(self, b"flip", self)
+        self._flip_anim.setDuration(self.FLIP_MS)
+        self._flip_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._hover_anim = QPropertyAnimation(self, b"hoverProgress", self)
+        self._hover_anim.setDuration(self.HOVER_MS)
+        self._hover_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        # 鼠标停在按钮上不动时也要能感知 Shift 的按下/松开
+        self._modifier_timer = QTimer(self)
+        self._modifier_timer.setInterval(self.MODIFIER_POLL_MS)
+        self._modifier_timer.timeout.connect(self.sync_modifier_state)
+        self.set_mode(self.MODE_BOTTOM, animated=False)
+        self.hide()
+
+    # ------------------------------------------------------------- 动画属性
+
+    def _get_flip(self) -> float:
+        return self._flip
+
+    def _set_flip(self, value: float) -> None:
+        self._flip = float(value)
+        self.update()
+
+    flip = Property(float, _get_flip, _set_flip)
+
+    def _get_hover_progress(self) -> float:
+        return self._hover
+
+    def _set_hover_progress(self, value: float) -> None:
+        self._hover = float(value)
+        self.update()
+
+    hoverProgress = Property(float, _get_hover_progress, _set_hover_progress)
+
+    # ----------------------------------------------------------------- 模式
+
+    @property
+    def mode(self) -> str:
+        """当前语义：``bottom`` 回到底部 / ``top`` 回到顶部。"""
+        return self._mode
+
+    def set_mode(self, mode: str, animated: bool = True) -> None:
+        """切换语义并（可选）播放 180° 翻转动画。"""
+        if mode not in (self.MODE_BOTTOM, self.MODE_TOP):
+            raise ValueError(mode)
+        self._mode = mode
+        self.setToolTip("回到顶部" if mode == self.MODE_TOP else "回到最新内容")
+        target = 1.0 if mode == self.MODE_TOP else 0.0
+        self._flip_anim.stop()
+        if not animated:
+            self._set_flip(target)
+            return
+        self._flip_anim.setStartValue(self._flip)
+        self._flip_anim.setEndValue(target)
+        self._flip_anim.start()
+
+    def sync_modifier_state(self) -> None:
+        """按当前 Shift 状态同步模式（按住 Shift = 回到顶部）。"""
+        modifiers = QGuiApplication.queryKeyboardModifiers()
+        shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+        wanted = self.MODE_TOP if shift else self.MODE_BOTTOM
+        if wanted != self._mode:
+            self.set_mode(wanted)
+
+    # ----------------------------------------------------------------- 事件
+
+    def enterEvent(self, event) -> None:  # noqa: N802 - Qt 命名
+        super().enterEvent(event)
+        self.sync_modifier_state()
+        self._modifier_timer.start()
+        self._animate_hover(1.0)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802 - Qt 命名
+        super().leaveEvent(event)
+        self._modifier_timer.stop()
+        self._animate_hover(0.0)
+        # 移开就回到默认语义：否则下次进来会「带着」上一次的 Shift 状态
+        self.set_mode(self.MODE_BOTTOM)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt 命名
+        # 移动过程中也实时判断：比等 40ms 轮询更跟手
+        self.sync_modifier_state()
+        super().mouseMoveEvent(event)
+
+    def hideEvent(self, event) -> None:  # noqa: N802 - Qt 命名
+        """藏起来就停掉轮询，并把语义复位成「回到底部」。"""
+        super().hideEvent(event)
+        self._modifier_timer.stop()
+        self.set_mode(self.MODE_BOTTOM, animated=False)
+
+    def _animate_hover(self, target: float) -> None:
+        self._hover_anim.stop()
+        self._hover_anim.setStartValue(self._hover)
+        self._hover_anim.setEndValue(target)
+        self._hover_anim.start()
+
+    # ----------------------------------------------------------------- 绘制
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt 命名
+        painter = QPainter(self)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+            radius = rect.width() / 2.0
+            hover = max(0.0, min(1.0, self._hover))
+
+            painter.setPen(QPen(_mix(self._BORDER, self._BORDER_HOVER, hover), 1.0))
+            painter.setBrush(_mix(self._BG, self._BG_HOVER, hover))
+            painter.drawRoundedRect(rect, radius, radius)
+
+            # chevron：默认朝下，flip=1 时转 180° 朝上
+            painter.save()
+            painter.translate(rect.center())
+            painter.rotate(180.0 * self._flip)
+            path = QPainterPath()
+            path.moveTo(-4.6, -2.2)
+            path.lineTo(0.0, 2.6)
+            path.lineTo(4.6, -2.2)
+            pen = QPen(_mix(self._ICON, self._ICON_HOVER, hover), 1.8)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)
+            painter.restore()
+        finally:
+            painter.end()
+
+
+def _mix(start: QColor, end: QColor, ratio: float) -> QColor:
+    """两色线性插值（含 alpha），用于悬停渐变。"""
+    t = max(0.0, min(1.0, float(ratio)))
+    return QColor(
+        round(start.red() + (end.red() - start.red()) * t),
+        round(start.green() + (end.green() - start.green()) * t),
+        round(start.blue() + (end.blue() - start.blue()) * t),
+        round(start.alpha() + (end.alpha() - start.alpha()) * t),
+    )
 
 
 class FindLineEdit(QLineEdit):
@@ -328,9 +552,36 @@ class FindBar(QWidget):
 
 
 class MultiCursorTextEdit(QTextEdit):
-    """带多光标编辑与「跟随末尾」开关的文本框。"""
+    """带多光标编辑、「跟随末尾」开关与滚动渐隐的文本框。
+
+    滚动行为分两层（见「滚动跟随与回到底部」一节）：
+
+    - ``follow_caret``：监听开关，决定新日志到达时光标是否跟到末尾；
+    - ``stick_to_bottom``：视图是否贴底，由**用户滚轮**驱动，
+      用户往上翻看历史时挂起，滚回底部附近才恢复。
+    """
 
     extra_cursor_count_changed = Signal(int)
+
+    # 距底部多少像素内算「已经在底部」：用户滚进这个范围就恢复贴底跟随
+    SCROLL_BOTTOM_THRESHOLD = 40
+    # 滚轮停止多久算「滚动结束」（毫秒）
+    SCROLL_SETTLE_MS = 150
+    # 点击按钮后的平滑滚动时长（毫秒）
+    SCROLL_ANIM_MS = 180
+    # 会改变滚动位置的按键：同样算「用户主动滚动」，见 event()
+    SCROLL_KEYS = frozenset(
+        {
+            Qt.Key.Key_PageUp,
+            Qt.Key.Key_PageDown,
+            Qt.Key.Key_Home,
+            Qt.Key.Key_End,
+            Qt.Key.Key_Up,
+            Qt.Key.Key_Down,
+        }
+    )
+    # 上下边缘渐隐带的高度（像素）
+    EDGE_FADE_HEIGHT = 28
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -370,6 +621,29 @@ class MultiCursorTextEdit(QTextEdit):
         self._redo_log: list[dict] = []
         self.find_bar = FindBar(self)
         self.find_bar.hide()
+        # ---- 滚动跟随 / 回到底部 ----
+        self._stick_to_bottom = True
+        self._user_scrolling = False
+        self._updating_scroll = False
+        # 鼠标是否在客户端窗口内：不在时不显示「回到底部」按钮
+        self._pointer_inside = True
+        # 最近一次滚动的方向：-1 向下（朝底部）、1 向上。只有朝下滚才吸附。
+        self._scroll_direction = 0
+        self._scroll_button: Optional[ScrollToBottomButton] = None
+        self._scroll_animation: Optional[QPropertyAnimation] = None
+        self._scroll_settle_timer = QTimer(self)
+        self._scroll_settle_timer.setSingleShot(True)
+        self._scroll_settle_timer.setInterval(self.SCROLL_SETTLE_MS)
+        self._scroll_settle_timer.timeout.connect(self._on_scroll_settled)
+        self.verticalScrollBar().valueChanged.connect(self._update_scroll_affordance)
+        self.verticalScrollBar().rangeChanged.connect(self._update_scroll_affordance)
+        # 视口尺寸变了（改窗口大小、查找栏展开/收起）都要把按钮重新摆正
+        self.viewport().installEventFilter(self)
+        # ---- 上下边缘渐隐 ----
+        self._edge_fade_height = int(self.EDGE_FADE_HEIGHT)
+        self._edge_fade_color: Optional[QColor] = None
+        # 视口圆角：渐隐带要按它裁剪，否则会把背景圆角涂成直角
+        self._corner_radius = 0
 
     # ----------------------------------------------------------- 跟随末尾开关
 
@@ -385,34 +659,366 @@ class MultiCursorTextEdit(QTextEdit):
     def append_line(self, line: str) -> None:
         """追加一行日志。
 
-        ``follow_caret`` 为真时行为等同 ``QTextEdit.append``（光标与滚动条
-        跟随末尾）；为假时保留用户的光标、选区与滚动位置。
+        ``follow_caret`` 为真且视图贴底时行为等同 ``QTextEdit.append``
+        （光标与滚动条跟随末尾）；否则保留用户的光标、选区与滚动位置。
 
         有选区时**不**把光标拉到末尾：``moveCursor(End)`` 会顺手清掉选区，
         用户刚「全选」的内容会在下一条日志到达时消失。
+
+        用户用滚轮翻上去看历史时（``stick_to_bottom`` 为假）即使还在监听
+        也不能滚屏：``QTextEdit.append`` 会把视图带到插入点，用户正在读的
+        那几行会在下一条日志到达时被顶走。这种情况走「快照 → 追加 → 还原」。
         """
-        if self._follow_caret:
+        if self._follow_caret and self._stick_to_bottom:
+            self._stop_scroll_animation()
             if not self.textCursor().hasSelection():
                 self.moveCursor(QTextCursor.MoveOperation.End)
             self.append(line)
+            self._update_scroll_affordance()
             return
+        self._stop_scroll_animation()
         saved = self._snapshot_state()
         self.append(line)
         self._restore_state(saved)
+        self._update_scroll_affordance()
 
     def scroll_to_bottom_if_follow(self) -> None:
-        """仅在跟随末尾时把光标与滚动条推到最后一行。
+        """仅在跟随末尾且视图贴底时把光标与滚动条推到最后一行。
 
         同样不能在有选区时调用 ``moveCursor(End)``——它会把选区清掉。
         右键菜单关闭后窗口会补发一次 enterEvent（鼠标重新进入窗口），
         本方法正是从 enterEvent 调用的，所以这里必须保住选区。
+
+        「视图贴底」这一条同样重要：用户上滚读历史时，鼠标进出窗口
+        （enterEvent 会调本方法）不该把他拽回底部——那正是「翻上去就被
+        拽下来」的另一种形态。此时只把「回到底部」按钮亮着。
         """
         if not self._follow_caret:
+            return
+        if not self._stick_to_bottom:
+            self._update_scroll_affordance()
             return
         if not self.textCursor().hasSelection():
             self.moveCursor(QTextCursor.MoveOperation.End)
         bar = self.verticalScrollBar()
         bar.setValue(bar.maximum())
+        self._update_scroll_affordance()
+
+    # ------------------------------------------------ 滚动跟随与「回到底部」
+    #
+    # 语音输入时日志一直在追加，默认行为是「贴底跟随」：新内容一到就滚到
+    # 最底部。但用户一旦用滚轮往上翻看历史，继续贴底就把人拽回去了。
+    # 所以「跟随」被拆成两个互不干扰的状态：
+    #
+    # - ``_follow_caret``：监听开关（「监听」复选框），决定光标跟不跟末尾；
+    # - ``_stick_to_bottom``：视图贴不贴底，由**滚轮**驱动，上滚即挂起。
+    #
+    # 挂起期间追加日志只保位置、不滚屏，并在下方浮出「回到底部」按钮；
+    # 用户自己滚回距底部 ``SCROLL_BOTTOM_THRESHOLD`` 像素以内时恢复贴底
+    # 并隐藏按钮。滚轮停手 ``SCROLL_SETTLE_MS`` 毫秒后才认为「滚动结束」，
+    # 避免快速连滚时按钮反复闪。
+
+    @property
+    def stick_to_bottom(self) -> bool:
+        """视图当前是否贴底跟随（用户上滚后为 False）。"""
+        return self._stick_to_bottom
+
+    @property
+    def scroll_to_bottom_button(self) -> ScrollToBottomButton:
+        """「回到底部」悬浮按钮；首次访问时创建。"""
+        button = self._scroll_button
+        if button is None:
+            button = self._create_scroll_button()
+        return button
+
+    def scroll_to_bottom(self, animated: bool = True) -> None:
+        """滚到最底部并恢复贴底跟随（按钮点击 / 外部调用）。"""
+        self._stick_to_bottom = True
+        self._animate_scroll_to(self.verticalScrollBar().maximum(), animated)
+
+    def scroll_to_top(self, animated: bool = True) -> None:
+        """滚到最顶部并**挂起**贴底跟随。
+
+        挂起是必须的：否则下一条日志一到，视图又被拽回底部，用户刚翻上去
+        的内容就白翻了。挂起后按钮继续亮着，点它就能回来。
+        """
+        self._stick_to_bottom = False
+        self._animate_scroll_to(0, animated)
+
+    def _animate_scroll_to(self, target: int, animated: bool) -> None:
+        """把滚动条缓动到 ``target``；``animated=False`` 时直接跳。"""
+        bar = self.verticalScrollBar()
+        target = max(bar.minimum(), min(bar.maximum(), int(target)))
+        self._stop_scroll_animation()
+        if not animated or bar.value() == target:
+            bar.setValue(target)
+            self._update_scroll_affordance()
+            return
+        # 平滑滚动：滚动条值走一段缓动，比瞬间跳过去更像聊天类界面。
+        # 动画对象必须存在 self 上，否则函数返回后就被回收、动画不动。
+        animation = QPropertyAnimation(bar, b"value", self)
+        animation.setDuration(self.SCROLL_ANIM_MS)
+        animation.setStartValue(bar.value())
+        animation.setEndValue(target)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.start()
+        self._scroll_animation = animation
+
+    def _stop_scroll_animation(self) -> None:
+        """打断正在进行的平滑滚动。
+
+        追加日志或用户滚轮都会立刻改变滚动位置，此时动画还按旧的目标值
+        继续走，会把视图从刚滚到的位置又拉回去。停止已停止的动画是空操作。
+        """
+        animation = self._scroll_animation
+        if animation is not None:
+            animation.stop()
+
+    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt 命名
+        """滚轮 = 用户主动滚动：立刻挂起贴底跟随，再交给 Qt 滚动。"""
+        self._stop_scroll_animation()
+        # 记下方向：只有「往下滚」才允许吸附到底。系统把滚轮设成 1 行时
+        # 一格只有十几像素，一进 40px 范围就吸附的话用户根本滚不上去。
+        self._scroll_direction = -1 if event.angleDelta().y() < 0 else 1
+        self._begin_user_scroll()
+        super().wheelEvent(event)
+        self._update_scroll_affordance()
+
+    def _begin_user_scroll(self) -> None:
+        """标记「用户正在滚动」并开始 150ms 的停手计时。"""
+        self._user_scrolling = True
+        self._stick_to_bottom = False
+        self._scroll_settle_timer.start(self.SCROLL_SETTLE_MS)
+
+    def _on_scroll_settled(self) -> None:
+        """滚轮停手：结束「正在滚动」状态并重算按钮显隐。"""
+        self._user_scrolling = False
+        self._update_scroll_affordance()
+
+    def event(self, event) -> bool:  # noqa: N802 - Qt 命名
+        """键盘滚动（PgUp/PgDn/Home/End/方向键）同样算「用户主动滚动」。
+
+        不这么做的话：用户按 PgUp 翻上去，按钮会亮（位置变了），但
+        ``stick_to_bottom`` 还是真——下一条日志一来视图又被拽回底部，
+        按钮和实际行为对不上。
+        """
+        if (
+            event.type() == QEvent.Type.KeyPress
+            and event.key() in self.SCROLL_KEYS
+        ):
+            self._scroll_direction = (
+                -1
+                if event.key()
+                in (Qt.Key.Key_PageDown, Qt.Key.Key_Down, Qt.Key.Key_End)
+                else 1
+            )
+            self._begin_user_scroll()
+            handled = super().event(event)
+            self._update_scroll_affordance()
+            return handled
+        return super().event(event)
+
+    def _update_scroll_affordance(self) -> None:
+        """按当前滚动位置同步「贴底跟随」与「回到底部」按钮。
+
+        连接在滚动条的 ``valueChanged`` / ``rangeChanged`` 上，因此追加
+        日志、缩放字号、改窗口大小都会走到这里。
+        """
+        if self._updating_scroll:
+            return
+        self._updating_scroll = True
+        try:
+            bar = self.verticalScrollBar()
+            distance = bar.maximum() - bar.value()
+            at_bottom = distance <= self.SCROLL_BOTTOM_THRESHOLD
+            if at_bottom:
+                self._stick_to_bottom = True
+                # 用户自己往下滚进 40px 范围：顺手吸附到底，省得差几个像素
+                if (
+                    self._user_scrolling
+                    and distance > 0
+                    and self._scroll_direction < 0
+                ):
+                    bar.setValue(bar.maximum())
+            self._set_scroll_button_visible(bar.maximum() > 0 and not at_bottom)
+        finally:
+            self._updating_scroll = False
+
+    def _create_scroll_button(self) -> ScrollToBottomButton:
+        button = ScrollToBottomButton(self.viewport())
+        button.clicked.connect(self._on_scroll_button_clicked)
+        self._scroll_button = button
+        self._reposition_scroll_button()
+        return button
+
+    def _on_scroll_button_clicked(self) -> None:
+        """按按钮当前的语义滚动：默认回到底部，Shift 悬停时回到顶部。"""
+        button = self._scroll_button
+        if button is not None and button.mode == ScrollToBottomButton.MODE_TOP:
+            self.scroll_to_top(animated=True)
+        else:
+            self.scroll_to_bottom(animated=True)
+
+    def set_pointer_inside(self, inside: bool) -> None:
+        """鼠标是否在客户端窗口内。
+
+        按钮只在鼠标进入窗口时出现：鼠标移出窗口后它还挂着，会让人以为
+        窗口里有个「多出来的控件」，而且离开时本来也点不到它。
+        """
+        inside = bool(inside)
+        if inside == self._pointer_inside:
+            return
+        self._pointer_inside = inside
+        self._update_scroll_affordance()
+
+    def _set_scroll_button_visible(self, visible: bool) -> None:
+        # 鼠标不在窗口里时一律不显示（滚动位置再「不在底部」也不显示）
+        visible = visible and self._pointer_inside
+        button = self._scroll_button
+        if not visible:
+            if button is not None and button.isVisible():
+                button.hide()
+            return
+        if button is None:
+            button = self._create_scroll_button()
+        if not button.isVisible():
+            button.show()
+        button.raise_()
+        self._reposition_scroll_button()
+
+    def _reposition_scroll_button(self) -> None:
+        """把按钮摆在视口底部正中（视口坐标，随视口大小变化）。"""
+        button = self._scroll_button
+        if button is None:
+            return
+        viewport = self.viewport()
+        x = (viewport.width() - button.width()) // 2
+        y = viewport.height() - button.height() - ScrollToBottomButton.MARGIN
+        button.move(max(0, x), max(0, y))
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802 - Qt 命名
+        if obj is self.viewport() and event.type() == QEvent.Type.Resize:
+            self._reposition_scroll_button()
+        return super().eventFilter(obj, event)
+
+    # --------------------------------------------------------- 上下边缘渐隐
+
+    def set_edge_fade(
+        self,
+        color: Optional[QColor] = None,
+        height: Optional[int] = None,
+    ) -> None:
+        """设置边缘渐隐的颜色与高度。
+
+        ``color`` 必须**等于**文本框自身的背景色（含透明度），渐隐带才
+        不会显出一条色块——它做的就是把文字往背景色上「擦淡」。
+        传 ``None`` 表示继续用调色板里的 Base 色。
+        """
+        if color is not None:
+            self._edge_fade_color = QColor(color)
+        if height is not None:
+            self._edge_fade_height = max(0, int(height))
+        self.viewport().update()
+
+    def set_corner_radius(self, radius: int) -> None:
+        """声明视口的圆角半径，渐隐带按这个圆角裁剪。
+
+        圆角是**样式表**画在背景上的，渐隐带却是自己往视口上涂的矩形。
+        不裁剪的话，上下两条渐隐带会把两个圆角重新涂成直角——背景圆角
+        还在，只是被盖住了，看起来像「只有中间圆了」。
+        """
+        self._corner_radius = max(0, int(radius))
+        self.viewport().update()
+
+    def _paint_edge_fades(self, painter: QPainter) -> None:
+        """在视口上下边缘画出渐隐遮罩。
+
+        只有**该方向还有内容**时才画：滚到顶就没有上边渐隐、滚到底就没有
+        下边渐隐。这样最新的一行永远是清晰可读的，同时渐隐本身也成了
+        「上面/下面还有内容」的提示。
+        """
+        height = int(self._edge_fade_height)
+        if height <= 0:
+            return
+        bar = self.verticalScrollBar()
+        if bar.maximum() <= 0:
+            return  # 内容没有溢出，没有可渐隐的东西
+        rect = self.viewport().rect()
+        if rect.height() <= height * 2:
+            return  # 视口太矮，两条渐隐带会吃掉整块内容
+        color = self._edge_fade_color
+        if color is None:
+            color = self.palette().color(QPalette.ColorRole.Base)
+        painter.save()
+        if self._corner_radius > 0:
+            # 裁剪路径必须用**控件**的圆角矩形，不能拿视口矩形套控件的半径：
+            # 视口比控件内缩了边框那几像素，圆弧会整体往里偏，四个角各留下
+            # 一条月牙形缺口——缺口里的文字压不暗，看上去就像文字从圆角漏
+            # 出来。半径不变、圆心换成控件的圆心，圆弧才和背景圆角重合。
+            offset = self.viewport().mapTo(self, QPoint(0, 0))
+            clip = QPainterPath()
+            clip.addRoundedRect(
+                QRectF(
+                    -offset.x(),
+                    -offset.y(),
+                    self.width(),
+                    self.height(),
+                ),
+                self._corner_radius,
+                self._corner_radius,
+            )
+            painter.setClipPath(clip)
+        try:
+            if bar.value() > 0:
+                self._paint_fade_band(
+                    painter,
+                    color,
+                    rect.left(),
+                    rect.top(),
+                    rect.width(),
+                    height,
+                    top=True,
+                )
+            if bar.value() < bar.maximum():
+                self._paint_fade_band(
+                    painter,
+                    color,
+                    rect.left(),
+                    rect.bottom() - height + 1,
+                    rect.width(),
+                    height,
+                    top=False,
+                )
+        finally:
+            painter.restore()
+
+    @staticmethod
+    def _paint_fade_band(
+        painter: QPainter,
+        color: QColor,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        top: bool,
+    ) -> None:
+        """画一条渐隐带：靠边不透明（把文字擦成背景色），向内渐透明。
+
+        中间几个色标让衰减比线性更「陡」一些（近似 (1-t)^2）：线性渐变
+        在视觉上会有明显的「一半位置还很浓」的断层感。
+        """
+        gradient = QLinearGradient(x, y, x, y + height)
+        for position, factor in (
+            (0.0, 1.0),
+            (0.25, 0.82),
+            (0.5, 0.55),
+            (0.75, 0.26),
+            (1.0, 0.0),
+        ):
+            stop = QColor(color)
+            stop.setAlpha(int(round(color.alpha() * factor)))
+            gradient.setColorAt(position if top else 1.0 - position, stop)
+        painter.fillRect(QRect(x, y, width, height), gradient)
 
     # ------------------------------------------------------------- 状态快照
 
@@ -438,23 +1044,28 @@ class MultiCursorTextEdit(QTextEdit):
         super().resizeEvent(event)
         if self.find_bar.isVisible():
             self.find_bar.reposition()
+        self._reposition_scroll_button()
 
     # ------------------------------------------------------------- 副光标绘制
 
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt 命名
-        """在视口自身上绘制副光标。
+        """在视口自身上绘制边缘渐隐与副光标。
 
         直接与文字共用同一次绘制，避免透明子控件在不同平台/DPI 下
         被合成器丢弃（那正是「只看到选区、看不到竖线」的原因）。
+
+        顺序：正文 → 上下渐隐 → 副光标。渐隐要压在文字上（它做的就是把
+        文字擦淡），但要在光标之下——光标是操作指示，不该跟着文字一起
+        变淡。
         """
         super().paintEvent(event)
-        if not self._extra_cursors:
-            return
         painter = QPainter(self.viewport())
         try:
-            # 主光标也在同一相位里重画：多光标模式下 Qt 自带光标已被隐藏，
-            # 两者必须由同一段代码、同一相位画出来才能真同步。
-            self._paint_all_carets(painter, self._caret_phase and self.hasFocus())
+            self._paint_edge_fades(painter)
+            if self._extra_cursors:
+                # 主光标也在同一相位里重画：多光标模式下 Qt 自带光标已被隐藏，
+                # 两者必须由同一段代码、同一相位画出来才能真同步。
+                self._paint_all_carets(painter, self._caret_phase and self.hasFocus())
         finally:
             painter.end()
 

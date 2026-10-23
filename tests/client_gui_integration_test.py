@@ -25,6 +25,7 @@ from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtGui import QKeyEvent, QTextCursor  # noqa: E402
 from PySide6.QtCore import QEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QMainWindow  # noqa: E402
 
 APP = QApplication.instance() or QApplication([])
 
@@ -217,6 +218,95 @@ def test_apply_font_size_clamps_and_keeps_font() -> None:
 
 
 @test
+def test_text_box_has_rounded_corners() -> None:
+    """文本框圆角写在样式表里，且切背景/切字号都不能把它冲掉。"""
+    box = make_box("x")
+    radius = f"border-radius: {gui_module.CustomTextEdit.CORNER_RADIUS}px"
+    assert radius in box.styleSheet(), box.styleSheet()
+
+    box.apply_background(0)
+    assert radius in box.styleSheet(), "切背景后圆角丢了"
+    box.apply_font_size(18)
+    assert radius in box.styleSheet(), "切字号后圆角丢了"
+
+
+@test
+def test_window_background_carries_corner_radius() -> None:
+    """窗口背景样式里带圆角；alpha=0（时钟模式）时仍然全透明。
+
+    这里只借用 ``GUI._apply_window_background`` 的样式表构造逻辑，不启动
+    整个客户端（那会拉起子进程和托盘图标）。
+    """
+
+    class _WindowStub(QMainWindow):
+        WINDOW_CORNER_RADIUS = gui_module.GUI.WINDOW_CORNER_RADIUS
+        _apply_window_background = gui_module.GUI._apply_window_background
+
+    win = _WindowStub()
+    win._apply_window_background(255)
+    sheet = win.styleSheet()
+    assert f"border-radius: {gui_module.GUI.WINDOW_CORNER_RADIUS}px" in sheet, sheet
+    assert "rgba(35, 38, 41, 255)" in sheet, sheet
+
+    win._apply_window_background(0)
+    assert "rgba(35, 38, 41, 0)" in win.styleSheet(), win.styleSheet()
+    assert "border-radius" in win.styleSheet()
+
+
+@test
+def test_central_widget_is_transparent_in_theme() -> None:
+    """中央 widget 必须在主题里被设成透明，否则方形背景会盖掉窗口圆角。"""
+    css_path = (
+        Path(__file__).resolve().parents[1]
+        / "util"
+        / "client"
+        / "gui_theme_custom.css"
+    )
+    css = css_path.read_text(encoding="utf-8")
+    assert "QWidget#clientCentralWidget" in css, "主题里缺少中央 widget 透明规则"
+    block = css.split("QWidget#clientCentralWidget", 1)[1].split("}", 1)[0]
+    assert "transparent" in block, block
+
+
+@test
+def test_edge_fade_reaches_the_corners() -> None:
+    """渐隐必须盖住视口的四个角——它们在卡片圆角**内侧**。
+
+    踩过的坑：裁剪路径原来是「视口矩形 + 控件半径」，而视口比控件内缩了
+    边框那 4px，圆弧于是整体往里偏，四个角各留下一条月牙形缺口。缺口里
+    的文字压不暗，看上去就像文字从圆角漏出来。
+    """
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QImage, QPainter
+
+    box = make_box("\n".join(f"log {i}" for i in range(200)))
+    # 复现真实文本框的几何：主题里 QTextEdit 带 4px 内边距，视口因此比控件
+    # 内缩 4px——这正是当初裁剪路径算错、四个角漏出月牙缺口的前提。
+    box.setStyleSheet(
+        "QTextEdit { border: none; padding: 4px;"
+        " background-color: #2e3236; border-radius: 10px; }"
+    )
+    bar = box.verticalScrollBar()
+    bar.setValue(bar.maximum() // 2)
+    box.set_edge_fade(gui_module.QColor(46, 50, 54, 255))
+    APP.processEvents()
+    assert box.viewport().mapTo(box, QPoint(0, 0)) == QPoint(4, 4), "内边距没生效"
+
+    img = QImage(box.viewport().size(), QImage.Format.Format_ARGB32)
+    img.fill(0)
+    painter = QPainter(img)
+    try:
+        box._paint_edge_fades(painter)
+    finally:
+        painter.end()
+
+    w, h = img.width(), img.height()
+    for x, y in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
+        alpha = img.pixelColor(x, y).alpha()
+        assert alpha > 200, (x, y, alpha)
+
+
+@test
 def test_multi_cursor_edit_works_in_client_box() -> None:
     """客户端文本框里能真正用上多光标同步输入。"""
     box = make_box("ab\nab")
@@ -287,6 +377,121 @@ def test_right_pop_out_is_one_pixel_right_of_naive_formula() -> None:
     width = 425
     assert gui_module.GUI._right_pop_out_x(screen, width) == screen.right() - width + 1
     assert gui_module.GUI._right_pop_out_x(screen, width) == (screen.right() - width) + 1
+
+
+@test
+def test_window_leave_hides_scroll_button() -> None:
+    """鼠标离开客户端窗口时藏起「回到底部」按钮，进入时按位置重新显示。
+
+    这条走的是 GUI 的 enterEvent / leaveEvent → set_pointer_inside 的接线，
+    编辑器自身的显隐逻辑另有单测覆盖。
+    """
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtCore import QPoint, QPointF
+
+    # 只构造界面：不拉起子进程、不装文件监控、不建托盘图标
+    gui_module.GUI.start_script = lambda self: None
+    gui_module.GUI.init_file_watcher = lambda self: None
+    gui_module.GUI.create_systray_icon = lambda self: None
+    gui = gui_module.GUI()
+    gui.show()
+    APP.processEvents()
+    box = gui.text_box_client
+    for i in range(60):
+        box.append_line(f"log {i}")
+    APP.processEvents()
+
+    pos = QPointF(20, 20)
+    for _ in range(4):  # 多滚几格，离开窗口时的布局变化不会再把它算成「在底部」
+        APP.sendEvent(
+            box.viewport(),
+            QWheelEvent(
+                pos,
+                pos,
+                QPoint(0, 0),
+                QPoint(0, 120),
+                Qt.MouseButton.NoButton,
+                Qt.KeyboardModifier.NoModifier,
+                Qt.ScrollPhase.NoScrollPhase,
+                False,
+            ),
+        )
+    APP.processEvents()
+    button = box.scroll_to_bottom_button
+    assert button.isVisible(), "上滚后按钮没出现"
+
+    # 真实光标位置在测试里不可控，直接按「不在窗口内」处理
+    gui._cursor_inside_window = lambda: False
+    APP.sendEvent(gui, QEvent(QEvent.Type.Leave))
+    APP.processEvents()
+    assert not button.isVisible(), "鼠标离开窗口后按钮还挂着"
+
+    APP.sendEvent(gui, QEvent(QEvent.Type.Enter))
+    APP.processEvents()
+    assert button.isVisible(), "鼠标回到窗口且不在底部时按钮没回来"
+
+    gui.close()
+
+
+@test
+def test_text_box_stylesheet_is_scoped_to_itself() -> None:
+    """文本框样式表必须用 ID 选择器圈住，不能留裸声明。
+
+    裸声明（``font-family: …`` 直接跟在 ``setStyleSheet`` 里）会被 Qt 当成
+    ``*`` 规则作用到**子控件**上，而 tooltip 正是挂在触发控件下的子控件：
+    文本框这套「等宽字体 + 12.38pt」会顺着控件树渗进「返回底部」按钮的
+    提示框，把主题 ``QToolTip`` 的字体整段顶掉。
+    """
+    box = make_box("x")
+    sheet = box.styleSheet().strip()
+    name = gui_module.CustomTextEdit.TEXT_BOX_OBJECT_NAME
+    assert box.objectName() == name, box.objectName()
+    assert sheet.startswith(f"QTextEdit#{name} {{"), sheet
+    assert sheet.endswith("}"), sheet
+    # 花括号外不该再有声明——那正是会漏到子控件的那部分
+    assert sheet.count("{") == 1 and sheet.count("}") == 1, sheet
+
+
+@test
+def test_scroll_button_tooltip_follows_theme_style() -> None:
+    """自绘按钮的 tooltip 必须吃主题 ``QToolTip`` 的字体。
+
+    拿同一窗口里普通按钮（``clear_button``）的 tooltip 当参照：两者的
+    字体族和字号必须一致，且不能是文本框的等宽字体。
+    """
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QToolTip
+
+    from util.client.multi_cursor_font import MONO_FONT_FAMILY
+
+    # 只构造界面：不拉起子进程、不装文件监控、不建托盘图标
+    gui_module.GUI.start_script = lambda self: None
+    gui_module.GUI.init_file_watcher = lambda self: None
+    gui_module.GUI.create_systray_icon = lambda self: None
+    gui = gui_module.GUI()
+    gui.show()
+    APP.processEvents()
+
+    def tip_font(widget):
+        QToolTip.showText(gui.mapToGlobal(QPoint(80, 160)), "回到最新内容", widget)
+        APP.processEvents()
+        for top in APP.topLevelWidgets():
+            if top.metaObject().className() == "QTipLabel":
+                font = top.font()
+                top.hide()
+                return font
+        return None
+
+    ref = tip_font(gui.clear_button)
+    btn = tip_font(gui.text_box_client.scroll_to_bottom_button)
+    gui.close()
+
+    assert ref is not None and btn is not None, "tooltip 没弹出来"
+    assert btn.family() != MONO_FONT_FAMILY, f"按钮 tooltip 用了等宽字体 {btn.family()}"
+    assert (btn.family(), btn.pointSize()) == (ref.family(), ref.pointSize()), (
+        f"按钮 tooltip 是 {btn.family()} {btn.pointSize()}pt，"
+        f"主题里是 {ref.family()} {ref.pointSize()}pt"
+    )
 
 
 def main() -> int:
