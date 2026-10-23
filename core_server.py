@@ -122,6 +122,8 @@ async def main(logger: Optional[Logger] = None):
         Config.speech_recognition_port,
         subprotocols=["binary"],
         max_size=None,
+        ping_interval=60,
+        ping_timeout=60,
     )
 
     # 负责发送结果的 coroutine

@@ -113,6 +113,8 @@ class FileTranscriber:
                     prog_str = f"    发送进度：{progress:.2f}s"
                 console.print(prog_str, end="\r")
 
+                # base64.b64encode 和 json.dumps 是 CPU 密集型操作，卸载到线程防止阻塞事件循环
+                encoded_data = await asyncio.to_thread(base64.b64encode, data)
                 message = {
                     "task_id": self.task_id,
                     "seg_duration": Config.file_seg_duration,
@@ -121,9 +123,9 @@ class FileTranscriber:
                     "time_start": time.time(),
                     "time_frame": time.time(),
                     "source": "file",
-                    "data": base64.b64encode(data).decode("utf-8"),
+                    "data": encoded_data.decode("utf-8"),
                 }
-                await websocket.send(json.dumps(message))
+                await websocket.send(await asyncio.to_thread(json.dumps, message))
 
             # 发送结束标志
             final_message = {

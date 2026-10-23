@@ -31,6 +31,8 @@ async def check_websocket() -> bool:
                 subprotocols=["binary"],
                 max_size=None,
                 proxy=None,  # websockets>=16.0 默认走代理，本地连接需显式禁用
+                ping_interval=60,
+                ping_timeout=60,
             )
             return True
     else:

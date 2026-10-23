@@ -109,8 +109,11 @@ async def main_file(files: List[Path], logger: Optional[Logger] = None):
                 # 为每个文件重新建立连接
                 transcriber = FileTranscriber(file, logger=_logger)
                 if await transcriber.check():
-                    await transcriber.send()
-                    await transcriber.receive()
+                    # 并发运行发送和接收，避免 TCP 缓冲区填满导致服务端阻塞
+                    await asyncio.gather(
+                        transcriber.send(),
+                        transcriber.receive(),
+                    )
 
                 # 处理完成后关闭连接，为下一个文件做准备
                 if Cosmic.websocket:
