@@ -9,14 +9,14 @@ __pycache__
 /models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17
 /models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12
 /models/paraformer-offline-zh
-/models/qwen-ctc-aiinfra4/*.onnx
-/models/qwen-ctc-aiinfra4/tokens.txt
+/models/qwen-ctc/*.onnx
+/models/qwen-ctc/tokens.txt
 /202*
 /logs
 /util/fun_asr_gguf/bin
-/models/qwen-ctc-aiinfra4/*.gguf
-/models/qwen-ctc-aiinfra4-06b/*.onnx
-/models/qwen-ctc-aiinfra4-06b/*.gguf
+/models/qwen-ctc/*.gguf
+/models/qwen-ctc/06b/*.onnx
+/models/qwen-ctc/06b/*.gguf
 /util/qwen_ctc/bin
 configs/my config.toml
 dev/tools/es.exe
@@ -34,3 +34,4 @@ edit_config_gui/src-tauri/gen
 *.embd.npy
 /.workbuddy-ai
 *.7z
+/.archify

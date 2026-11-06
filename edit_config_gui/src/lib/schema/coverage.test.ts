@@ -203,7 +203,7 @@ describe('schema 覆盖率', () => {
 
     // ① 默认值：模板里的值就是 GUI 输入框的初值
     expect(byPath.get('model_paths.qwen_llm_path')?.default).toBe(
-      'models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf',
+      'models/qwen-ctc/qwen3_asr_llm.q4_k.gguf',
     );
     expect(byPath.get('model_paths.qwen_ctc_encoder_frontend_path')?.default).toBe(
       '',

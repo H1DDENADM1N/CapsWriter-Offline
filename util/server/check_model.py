@@ -10,13 +10,13 @@ from util.server.cosmic import console
 # 缺失文件时原样展示，命令本身一个字符都不要改写。
 QWEN_DOWNLOAD_COMMANDS = """\
 # 1.7B 解码器
-curl -4 -L -C - -o models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf \\
+curl -4 -L -C - -o models/qwen-ctc/qwen3_asr_llm.q4_k.gguf \\
   "https://modelscope.cn/models/luciacx/Qwen3-ASR-GGUF-1.7B-mixed/resolve/master/qwen3_asr_llm.q4_k.gguf"
 
 # 0.6B 全套
-mkdir -p models/qwen-ctc-aiinfra4-06b
+mkdir -p models/qwen-ctc/06b
 for f in qwen3_asr_encoder_frontend.int4.onnx qwen3_asr_encoder_backend.int4.onnx qwen3_asr_llm.q4_k.gguf; do
-  curl -4 -L -C - -o "models/qwen-ctc-aiinfra4-06b/$f" \\
+  curl -4 -L -C - -o "models/qwen-ctc/06b/$f" \\
     "https://modelscope.cn/models/luciacx/Qwen3-ASR-GGUF-0.6B-mixed/resolve/master/$f"
 done"""
 

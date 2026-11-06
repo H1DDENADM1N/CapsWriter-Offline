@@ -88,8 +88,8 @@ Task 9 覆盖服务端拼接 / 标点分支（`util/server/recognize_qwen_ctc.py
     照旧；中间段（`is_final=False`）同样不调标点且 `text_accu == text`；
 39. 纯 CTC 模式行为不变：`Config.format_punc` 打开时仍必须调用标点模型。
 
-需要模型文件 models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf
-（0.6B 用例需要 models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
+需要模型文件 models/qwen-ctc/qwen3_asr_llm.q4_k.gguf
+（0.6B 用例需要 models/qwen-ctc/06b/qwen3_asr_llm.q4_k.gguf，缺失则跳过）。
 """
 
 import contextlib
@@ -111,11 +111,11 @@ sys.path.append(str(ROOT))
 # 四个模板必须完全同构：仓库根 + configs/ 下的三个
 TEMPLATES = [ROOT / "config.toml"] + sorted((ROOT / "configs").glob("* config.toml"))
 
-DECODER_17B = ROOT / "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
-DECODER_06B = ROOT / "models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf"
+DECODER_17B = ROOT / "models/qwen-ctc/qwen3_asr_llm.q4_k.gguf"
+DECODER_06B = ROOT / "models/qwen-ctc/06b/qwen3_asr_llm.q4_k.gguf"
 
-MODEL_DIR_17B = ROOT / "models/qwen-ctc-aiinfra4"
-MODEL_DIR_06B = ROOT / "models/qwen-ctc-aiinfra4-06b"
+MODEL_DIR_17B = ROOT / "models/qwen-ctc"
+MODEL_DIR_06B = ROOT / "models/qwen-ctc/06b"
 # 只有 1.7B 目录带 preprocessor_config.json；0.6B 的拆分 encoder 也复用它
 PREPROCESSOR_DIR = MODEL_DIR_17B
 ENCODER_17B = MODEL_DIR_17B / "Qwen3-ASR-Encoder.q4.onnx"
@@ -129,7 +129,11 @@ AUDIO_EN = (
     ROOT
     / "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/test_wavs/en.wav"
 )
+# CTC 头：默认 a7_avg5（与 config.toml 的默认指向一致）；没有默认头时退回旧的 v1
+# 头，只为让只装了回退头的环境仍能跑用例。
 CTC_17B = MODEL_DIR_17B / "Qwen3-ASR-CTC.fp16.onnx"
+if not CTC_17B.is_file():
+    CTC_17B = MODEL_DIR_17B / "Qwen3-ASR-CTC.v1.fp16.onnx"
 TOKENS_17B = MODEL_DIR_17B / "tokens.txt"
 
 
@@ -1340,7 +1344,7 @@ def test_templates_have_new_qwen_keys():
         for key in _NEW_MODEL_PATH_KEYS:
             assert key in mp, f"{p} 缺 model_paths.{key}"
         assert str(mp["qwen_llm_path"]) == (
-            "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
+            "models/qwen-ctc/qwen3_asr_llm.q4_k.gguf"
         ), f"{p} 的 qwen_llm_path 默认值不对：{mp['qwen_llm_path']}"
         assert str(mp["qwen_ctc_encoder_frontend_path"]) == ""
         assert str(mp["qwen_ctc_encoder_backend_path"]) == ""
@@ -1517,7 +1521,7 @@ def test_old_config_without_new_keys_still_loads():
     assert mod.QwenCTCArgs.encoder_backend_path == ""
     # ModelPaths 的 3 个新字段也必须用回退值填充，而不是炸掉
     assert mod.ModelPaths.qwen_llm_path == Path(
-        "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
+        "models/qwen-ctc/qwen3_asr_llm.q4_k.gguf"
     )
     assert mod.ModelPaths.qwen_ctc_encoder_frontend_path is None, (
         "空路径必须是 None 而不是 Path('.')，否则 if ModelPaths.xxx 会误判成已配置"
@@ -1848,18 +1852,18 @@ def test_qwen_download_commands_are_verbatim():
 
     text = cmds.replace("\r\n", "\n")
     # 1.7B：一条 curl（含续行反斜杠）
-    assert "-o models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf \\\n" in text
+    assert "-o models/qwen-ctc/qwen3_asr_llm.q4_k.gguf \\\n" in text
     assert (
         "https://modelscope.cn/models/luciacx/Qwen3-ASR-GGUF-1.7B-mixed/resolve/master/"
         "qwen3_asr_llm.q4_k.gguf"
     ) in text
     # 0.6B：mkdir + for 循环里的三条 curl
-    assert "mkdir -p models/qwen-ctc-aiinfra4-06b" in text
+    assert "mkdir -p models/qwen-ctc/06b" in text
     assert (
         "for f in qwen3_asr_encoder_frontend.int4.onnx "
         "qwen3_asr_encoder_backend.int4.onnx qwen3_asr_llm.q4_k.gguf; do"
     ) in text
-    assert 'curl -4 -L -C - -o "models/qwen-ctc-aiinfra4-06b/$f" \\\n' in text
+    assert 'curl -4 -L -C - -o "models/qwen-ctc/06b/$f" \\\n' in text
     assert (
         "https://modelscope.cn/models/luciacx/Qwen3-ASR-GGUF-0.6B-mixed/resolve/master/$f"
     ) in text

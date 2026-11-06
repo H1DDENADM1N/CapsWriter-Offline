@@ -1,0 +1,11 @@
+# 模型分卷清单：QwenCTC（Qwen3-ASR 编码器 + CTC 头 + LLM 解码器）一套
+#
+# 与 dev\archive_list.txt（程序包）分开：程序包里一个模型文件都不放，模型按分卷单独下载。
+# 条目用「相对项目根目录」的写法，包内层级与仓库一致——解压出来的 models\ 直接覆盖到
+# 软件根目录即可。模型文件本体在 .gitignore 里，仓库只跟踪 config.json /
+# preprocessor_config.json / release.json / validation.json 这几个小文件。
+#
+# 目录里 12 个文件 + 06b\：默认 a7_avg5 CTC 头（fp16，另有 q4f16 / hqqf16 两个 int4
+# 可选）、v1 头（可选回退）、编码器、词表、特征配置、1.7B 解码器；06b\ 是 0.6B 三件套。
+models\qwen-ctc
+models\模型下载方式.txt

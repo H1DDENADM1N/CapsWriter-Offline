@@ -74,12 +74,12 @@ def _qwen_recognizer(
 ):
     """造一个形状与 QwenCTCEngine 一致的假对象。"""
     config = SimpleNamespace(
-        encoder_onnx_path="models/qwen-ctc-aiinfra4/Qwen3-ASR-Encoder.q4.onnx",
+        encoder_onnx_path="models/qwen-ctc/Qwen3-ASR-Encoder.q4.onnx",
         encoder_frontend_path=(
-            "models/qwen-ctc-aiinfra4-06b/qwen3_asr_encoder_frontend.int4.onnx"
+            "models/qwen-ctc/06b/qwen3_asr_encoder_frontend.int4.onnx"
         ),
         encoder_backend_path=(
-            "models/qwen-ctc-aiinfra4-06b/qwen3_asr_encoder_backend.int4.onnx"
+            "models/qwen-ctc/06b/qwen3_asr_encoder_backend.int4.onnx"
         ),
         enable_ctc=enable_ctc,
         llm_n_ctx=4096,
@@ -95,7 +95,7 @@ def _qwen_recognizer(
         _ctc=object() if has_ctc_head else None,
         _llm=(
             SimpleNamespace(
-                path=Path("models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf")
+                path=Path("models/qwen-ctc/qwen3_asr_llm.q4_k.gguf")
             )
             if has_llm
             else None

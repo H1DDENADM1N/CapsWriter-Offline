@@ -1,0 +1,46 @@
+{
+  "version": "a7_avg5",
+  "repo_id": "JazerJu/glm-asr-ctc-bench",
+  "checkpoint_steps": [
+    412000,
+    414000,
+    416000,
+    418000,
+    420000
+  ],
+  "averaging": "arithmetic mean of ctc_decoder parameters from the five checkpoints",
+  "head_parameters": 85448596,
+  "config_caveat": "global_step is the first averaged step; val_loss=0.0 is a placeholder",
+  "encoder_and_vocabulary_unchanged": true,
+  "onnx_serialization": "topologically sorted nodes; no tensor changes",
+  "files": {
+    "Qwen3-ASR-CTC.fp16.onnx": {
+      "size_bytes": 170998749,
+      "sha256": "e1a12c21a2675fcaad81ea25a19c3123c9a0ad63b5b71f9e8bdb9ca566c6105d"
+    },
+    "Qwen3-ASR-CTC.hqqf16.onnx": {
+      "size_bytes": 45628114,
+      "sha256": "1c5cff8e6b2cfe60129e6dcd8bc3d3356bbd9568c9ed2ddf80b90f546787f278"
+    },
+    "Qwen3-ASR-CTC.q4.onnx": {
+      "size_bytes": 46163665,
+      "sha256": "c7680a4965c9b1eb77fd1c40c778bed69bfd5761be30cba4f47c84122e964146"
+    },
+    "Qwen3-ASR-CTC.q4f16.onnx": {
+      "size_bytes": 44628958,
+      "sha256": "9c55e9426f660280e24136861f0a1bc4503b6a4aec657beddcbb5cd01a49c719"
+    },
+    "README.md": {
+      "size_bytes": 2035,
+      "sha256": "4bb8ed21d28dfe1e62627511c6a839f9cc3769b438ffe56a5fdd088dee2e9649"
+    },
+    "config.json": {
+      "size_bytes": 524,
+      "sha256": "bb840639b19c0d556aa65a6e16e18ae1ac6de98399271e05e070e36e4ff0f216"
+    },
+    "validation.json": {
+      "size_bytes": 1633,
+      "sha256": "8cb274676257a6a0b1f0318fe4a6c6312bab316fe24b91484274dc294de4f2ec"
+    }
+  }
+}

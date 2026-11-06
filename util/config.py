@@ -15,7 +15,7 @@ with config_toml_path.open("r", encoding="utf-8") as f:
 # Qwen3-ASR LLM 解码器（GGUF）的默认下载位置。
 # 只给 ModelPaths 的展示/校验用；QwenCTCArgs 里解码器路径的默认值是空串（= 纯 CTC），
 # 保证从旧版本升级上来的配置行为不变。
-DEFAULT_QWEN_LLM_PATH = "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
+DEFAULT_QWEN_LLM_PATH = "models/qwen-ctc/qwen3_asr_llm.q4_k.gguf"
 
 
 # 调试配置

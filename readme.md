@@ -38,6 +38,25 @@
 <details>
 <summary><h1">展开最近更新</h1></summary>
 
+## 整理模型目录：`models/qwen-ctc/` 一个文件夹装全套
+>
+> 此前 `QwenCTC` 的文件散在 `models/qwen-ctc-aiinfra4/`、`models/qwen-ctc-aiinfra4-06b/` 与 `models/qwen-ctc-a7avg5/` 三个目录里，升级时很容易只换其中一个。现在统一到 `models/qwen-ctc/`：编码器、`tokens.txt`、`preprocessor_config.json`、1.7B 解码器与各 CTC 头（`a7_avg5` 的 fp16 / q4f16 / hqqf16，以及回退用的 `v1`）都在这一层；0.6B 三件套放子目录 `models/qwen-ctc/06b/`（它的解码器与 1.7B **同名**，不能平铺）。
+>
+> 已过时的 `aiinfra4`（v2）CTC 头三件套（`Qwen3-ASR-CTC.fp16.onnx` / `.q4.onnx` / `.q4f16.onnx`）**已删除**，它把英文串成中文译文的问题由 `a7_avg5` 修掉；`v1` 保留作可选回退。
+>
+> 仓库里的 `config.toml` 与 `configs/` 三个模板已全部指向新目录。**老配置需要手动迁移**：把 `models/qwen-ctc-aiinfra4/` 改成 `models/qwen-ctc/`、`models/qwen-ctc-aiinfra4-06b/` 改成 `models/qwen-ctc/06b/`，CTC 头路径改成 `models/qwen-ctc/Qwen3-ASR-CTC.fp16.onnx`（原本指向 `v1` / `v2` 的都要改，v2 文件已不存在）。
+## 换用上游 `a7_avg5` CTC 头，修掉纯英文音频串中文
+>
+> `QwenCTC` 的 CTC 头从 `aiinfra4`（v2）换到上游 2026-11 的 **`a7_avg5`**：上游清理了 **2,445 段**「英文语音配中文翻译字幕」的训练段后继续训练，并算术平均末段 5 个 checkpoint（step 412000 / 414000 / 416000 / 418000 / 420000）。29 篇 TED 纯英文音频的 CTC 输出汉字数从 **157** 降到 **5**（fp16 头）/ **6**（hqqf16 头）；中英长音频 CER 同时下降（中文 17 段 15.96% → 14.35%，英文 6 段 6.39% → 5.59%，均为 fp16 头）。
+>
+> 此前正是因为这项串味，`config.toml` 默认退回 v1 头，代价是中文数字写成「二零二六年」。`a7_avg5` 属 aiinfra4 一脉、保留阿拉伯数字，所以默认改回新头；v1 只作**可选回退**保留（见 [models/模型下载方式.txt](models/模型下载方式.txt)）。
+>
+> 头文件、编码器、`tokens.txt`、`preprocessor_config.json` 与 1.7B 解码器**都在同一个目录** `models/qwen-ctc/`，换头不必重下 1.28 GB 解码器。默认 **fp16**（170,998,749 字节）；另有 **q4f16**（44,628,958 字节）与 **hqqf16**（45,628,114 字节）两个 int4 版本，体积约 1/4，改 `[model_paths].qwen_ctc_ctc_path` 一行即可换用，**但 DirectML 只能用 fp16 头**（两个量化头是 MatMulNBits 图，DML 没有对应实现）。
+>
+> 引擎侧**一行没改**：`a7` 的 ONNX 图输入 `enc_output [batch,time,2048]`、输出 `logits [batch,time,72468]`，与 v1/v2 的签名完全一致（fp32 I/O + fp16 权重），`blank_id` / `unk_id` / 13 fps / 词表都不变，`util/qwen_ctc/engine.py` 换头即用。已在本机 onnxruntime 1.24.4 CPU 上把三个头都跑过：加载、前向、端到端解码都正常，三份文件的 sha256 与上游 `validation.json` 完全一致。
+>
+> 已知残余（上游如实说明，未清零）：TED 29 篇里仍有 5~6 次汉字输出；贪心偶发半个汉字（155 段中 1 段）；中文时间戳沿用 v1 的偏差结论（起点偏晚约 100 ms、终点偏早约 80 ms）。
+
 ## 新增 客户端文本框滚动跟随、上下边缘渐隐、圆角与「回到底部」悬浮按钮
 >
 > 语音输入时日志一直在追加，此前「跟随末尾」只有一个开关：用户用滚轮往上翻看历史，下一条日志一到就被顶回底部。现在跟随拆成两个互不干扰的状态——`follow_caret`（「监听」开关，决定光标跟不跟末尾）与 `stick_to_bottom`（视图贴不贴底，由**滚轮**驱动）。上滚即挂起跟随，日志照常追加但不动视图；滚回距底 **40 px** 内自动恢复。键盘 `PgUp` / `PgDn` / `Home` / `End` / 方向键同样算主动滚动，否则按钮亮着而行为对不上。
@@ -58,7 +77,7 @@
 >
 > 服务端新增第 4 个可选语音识别模型 `QwenCTC`：Qwen3-ASR 编码器（ONNX，int4）+ CTC 头，纯 CPU 推理，**输出带字级时间戳**，可直接转录生成 SRT 字幕。
 >
-> 在 `config.toml` 中设置 `model = "QwenCTC"` 启用，模型文件按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载到 `models/qwen-ctc-aiinfra4/`。
+> 在 `config.toml` 中设置 `model = "QwenCTC"` 启用，模型文件按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载：编码器、`tokens.txt`、`preprocessor_config.json`、LLM 解码器与 CTC 头**全部放 `models/qwen-ctc/`**（0.6B 三件套在子目录 `models/qwen-ctc/06b/`）。
 >
 > 特点：**出厂默认是「两遍」模式**——CTC 首遍出字级时间戳、LLM 二遍出文本与标点，文本与标点最好，代价是更慢、更占内存。把 `[model_paths].qwen_llm_path` 留空则退回**纯 CTC**：无 LLM 二遍，纯 CPU 推理，识别速度快（30 秒音频约 2 秒）、内存占用小，标点改由服务端自带的标点模型补全（`format_punc`）；把 `[qwen_ctc_args].enable_ctc` 设为 `false` 则是**纯 LLM**：只有文本、没有时间戳。三种模式都支持中英混说。**注意：`config.toml` 模板里 `qwen_llm_path` 已预填 1.7B 解码器路径，所以出厂默认就是「两遍」模式，首次启动需要先按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载 1.28 GB 的解码器；不想要就把它留空退回纯 CTC。**
 >
@@ -70,9 +89,13 @@
 > | 非空 | `true`（默认） | 两遍：CTC 首遍 → LLM 二遍 | LLM 文本（自带标点）+ 经 Needleman-Wunsch（NW）对齐到 LLM 文本的 CTC 字级时间戳 |
 > | 非空 | `false` | 纯 LLM | 只有 LLM 文本，**无时间戳** |
 >
-> 0.6B 版本：`qwen3_asr_llm.q4_k.gguf`（hidden 1024）**必须配 0.6B 自己的编码器前后端 ONNX**（`models/qwen-ctc-aiinfra4-06b/`，下载命令见 [models/模型下载方式.txt](models/模型下载方式.txt)）；1.7B 的融合编码器输出 2048 维，与 0.6B 解码器不兼容。0.6B **没有 CTC 头**，只能纯 LLM / 两遍模式下 CTC 首遍会被自动跳过（引擎打 WARNING 后按纯 LLM 跑）。
+> 0.6B 版本：`qwen3_asr_llm.q4_k.gguf`（hidden 1024）**必须配 0.6B 自己的编码器前后端 ONNX**（`models/qwen-ctc/06b/`，下载命令见 [models/模型下载方式.txt](models/模型下载方式.txt)）；1.7B 的融合编码器输出 2048 维，与 0.6B 解码器不兼容。0.6B **没有 CTC 头**，只能纯 LLM / 两遍模式下 CTC 首遍会被自动跳过（引擎打 WARNING 后按纯 LLM 跑）。
 >
-> ⚠️ 官方提供的 `aiinfra4` 版 CTC 头（`Qwen3-ASR-CTC.fp16.onnx`）在**AI 技术领域的英文内容**上会把英文词转写成对应中文译文（如 `we` → `我们`、`or` → `或`、`thank` → `谢谢`）。原因是该头在中英对照字幕语料上续训过，学到了「英文语音 → 中文字幕」这层映射，属**领域偏置**，不是解码错误（同一编码器 + 同一 `tokens.txt`，只换 CTC 头行为就不同）。所以 `config.toml` 默认指向 **v1 头** `Qwen3-ASR-CTC.v1.fp16.onnx`，按 [models/模型下载方式.txt](models/模型下载方式.txt) 下载 v1 那个文件即可；v1 的代价是中文数字写成「二零二六年」这种汉字形式，想要阿拉伯数字再换回 `aiinfra4` 版。
+> CTC 头默认用上游 **`a7_avg5`**（`models/qwen-ctc/Qwen3-ASR-CTC.fp16.onnx`）。更早的官方 `aiinfra4`（v2）头在**AI 技术领域的英文内容**上会把英文词转写成对应中文译文（如 `we` → `我们`、`or` → `或`、`thank` → `谢谢`）：该头在中英对照字幕语料上续训过，学到了「英文语音 → 中文字幕」这层映射，属**领域偏置**，不是解码错误（同一编码器 + 同一 `tokens.txt`，只换 CTC 头行为就不同）。`a7_avg5` 清掉那批语料里 2,445 段「英文语音配中文字幕」的样本后续训，把这类输出从 29 篇 TED 的 **157 次**压到 **5~6 次**（未清零），同时保留 aiinfra4 一脉的阿拉伯数字写法。
+>
+> 旧的 `v1` 头（`Qwen3-ASR-CTC.v1.fp16.onnx`，中文数字写「二零二六年」）保留为**可选回退**：把 `[model_paths].qwen_ctc_ctc_path` 改成 `models/qwen-ctc/Qwen3-ASR-CTC.v1.fp16.onnx` 即可。换头只改这一行——编码器、`tokens.txt`、`preprocessor_config.json` 都不要动。
+>
+> 精度与设备：默认 **fp16** 头（171 MB），CPU 与 DirectML 都能跑；`q4f16`（44.6 MB）与 `hqqf16`（45.6 MB）是 int4 权重 + fp16 激活，体积约 1/4，同机实测 CPU 上比 fp16 头慢约 10%（含编码器的单段解码），**但 DirectML 跑不了**（MatMulNBits 算子没有 DML 实现），用 DML 时必须留 fp16 头。
 >
 > 客户端无需任何改动：服务端/客户端协议未变，转录文件、简繁转换、翻译全部照常工作。唯一的差别是**纯 LLM 模式没有字级时间戳**，因此不生成 SRT 字幕（txt / json / merge.txt 照常落盘），客户端日志会说明「当前识别模式没有字级时间戳，未生成 SRT 字幕」。
 
@@ -396,7 +419,7 @@
 >
 > 标点：纯 CTC 由服务端自带的标点模型补全（`format_punc = true`），两遍 / 纯 LLM 由 LLM 自带
 >
-> 注意：官方 `aiinfra4` 版 CTC 头在 AI 技术领域的英文上会串味成中文，默认已改用 v1 头
+> 注意：CTC 头默认用上游 `a7_avg5`（修掉了 `aiinfra4` 版把 AI 技术领域英文串成中文的问题）；旧的 `v1` 头保留为可选回退
 >
 > 不影响简繁转换和翻译
 
@@ -680,7 +703,7 @@ Copyright (c) 2026 H1DDENADM1N, JoanthanWu (graphical interface package branch)
    - Fun-ASR 权重：适用 [FunASR Model Open Source License Agreement v1.1](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE)，允许自由使用与修改，但**必须标注来源并保留模型名称**。
    - 中译英模型 [Helsinki-NLP/opus-mt-zh-en](https://huggingface.co/Helsinki-NLP/opus-mt-zh-en)：**CC-BY-4.0**，再分发需署名 Helsinki-NLP / OPUS-MT / Tatoeba。
    - Qwen3-ASR + CTC 头（`QwenCTC` 模型）：编码器来自 [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)，CTC 头与 ONNX 导出来自 [JazerJu/glm-asr-ctc-bench](https://huggingface.co/JazerJu/glm-asr-ctc-bench)，均为 **Apache-2.0**；参考实现 [JazerJu/bench-asr-ctc](https://github.com/JazerJu/bench-asr-ctc) 为 Apache-2.0、[JazerJu/Qwen3-ASR-CTC-GGUF](https://github.com/JazerJu/Qwen3-ASR-CTC-GGUF) 为 MIT。**再分发需标注 Qwen 团队与 JazerJu**，详见 [models/ATTRIBUTION.md](models/ATTRIBUTION.md) 第 6 节。
-   - Qwen3-ASR LLM 解码器（`qwen3_asr_llm.q4_k.gguf`，GGUF，arch `qwen3vl`，Q4_K）：导出脚本与参考实现来自 [HaujetZhao/Qwen3-ASR-GGUF](https://github.com/HaujetZhao/Qwen3-ASR-GGUF)，上游权重为 [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) 与 [Qwen/Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)，**Apache-2.0**。HaujetZhao 的导出仓库**未声明许可证**（无 LICENSE 文件、GitHub API `license: None`、README 无许可段落、ModelScope 镜像 `luciacx/*` 的 License 字段为空），即**导出产物本身未声明许可**；本项目未修改权重、仅原样分发，且该模型为**可选**、不随包默认分发。0.6B 三件套（编码器前后端 int4 ONNX + 解码器 GGUF，`models/qwen-ctc-aiinfra4-06b/`）同理。详见 [models/ATTRIBUTION.md](models/ATTRIBUTION.md) 第 6 节。
+   - Qwen3-ASR LLM 解码器（`qwen3_asr_llm.q4_k.gguf`，GGUF，arch `qwen3vl`，Q4_K）：导出脚本与参考实现来自 [HaujetZhao/Qwen3-ASR-GGUF](https://github.com/HaujetZhao/Qwen3-ASR-GGUF)，上游权重为 [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) 与 [Qwen/Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)，**Apache-2.0**。HaujetZhao 的导出仓库**未声明许可证**（无 LICENSE 文件、GitHub API `license: None`、README 无许可段落、ModelScope 镜像 `luciacx/*` 的 License 字段为空），即**导出产物本身未声明许可**；本项目未修改权重、仅原样分发，且该模型为**可选**、不随包默认分发。0.6B 三件套（编码器前后端 int4 ONNX + 解码器 GGUF，`models/qwen-ctc/06b/`）同理。详见 [models/ATTRIBUTION.md](models/ATTRIBUTION.md) 第 6 节。
 
 6. **在线翻译服务**
    [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate)（AGPL-3.0）仅通过 HTTP API 调用，本项目**不复制其代码**，故 AGPL 不传染；[DeepLX](https://github.com/OwO-Network/DeepLX) 以 MIT 许可发布，其 `deeplx_windows_amd64.exe` 随包分发。
@@ -1601,19 +1624,19 @@ opus_mt_dir = "models/Helsinki-NLP--opus-mt-zh-en"
 # 离线翻译模型目录
 
 
-qwen_ctc_encoder_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-Encoder.q4.onnx"
+qwen_ctc_encoder_path = "models/qwen-ctc/Qwen3-ASR-Encoder.q4.onnx"
 # Qwen3-ASR 编码器模型路径
 
-qwen_ctc_ctc_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx"
-# Qwen3-ASR CTC 头模型路径
+qwen_ctc_ctc_path = "models/qwen-ctc/Qwen3-ASR-CTC.fp16.onnx"
+# Qwen3-ASR CTC 头模型路径（默认 a7_avg5；v1 回退改用 Qwen3-ASR-CTC.v1.fp16.onnx，省体积改用 .q4f16 / .hqqf16）
 
-qwen_ctc_tokens_path = "models/qwen-ctc-aiinfra4/tokens.txt"
+qwen_ctc_tokens_path = "models/qwen-ctc/tokens.txt"
 # Qwen3-ASR CTC 紧凑词表路径（base64 原始字节）
 
-qwen_ctc_preprocessor_path = "models/qwen-ctc-aiinfra4"
+qwen_ctc_preprocessor_path = "models/qwen-ctc"
 # Qwen3-ASR 特征提取器配置目录（preprocessor_config.json）
 
-qwen_llm_path = "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
+qwen_llm_path = "models/qwen-ctc/qwen3_asr_llm.q4_k.gguf"
 # Qwen3-ASR LLM 解码器（GGUF）路径，留空则退回纯 CTC 模式
 
 qwen_ctc_encoder_frontend_path = ""
@@ -1805,7 +1828,8 @@ verbose = false
 `QwenCTC` 相关共 **26 个键**（`configs/default config.toml` 为唯一基准，完整清单见上面的 `config.toml` 配置块）。最常改的是下面这些：
 
 - `[model_paths]`（可编辑）
-  - `qwen_llm_path`：LLM 解码器 GGUF 路径，默认 `models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf`；**留空则退回纯 CTC**
+  - `qwen_ctc_ctc_path`：CTC 头路径，默认 `models/qwen-ctc/Qwen3-ASR-CTC.fp16.onnx`；换成同目录的 `Qwen3-ASR-CTC.q4f16.onnx` 或 `Qwen3-ASR-CTC.hqqf16.onnx` 可把该文件从 171 MB 降到约 45 MB（**DirectML 只能用 fp16**）
+  - `qwen_llm_path`：LLM 解码器 GGUF 路径，默认 `models/qwen-ctc/qwen3_asr_llm.q4_k.gguf`；**留空则退回纯 CTC**
   - `qwen_ctc_encoder_frontend_path` / `qwen_ctc_encoder_backend_path`：0.6B 编码器前端 / 后端 ONNX 路径，默认留空（留空即用 1.7B 融合编码器）
 - `[qwen_ctc_args]`
   - `enable_ctc`：是否启用 CTC 首遍，默认 `true`
@@ -1897,13 +1921,14 @@ verbose = false
 
 ### QwenCTC（Qwen3-ASR + CTC 头）
 
-- [JazerJu/glm-asr-ctc-bench](https://huggingface.co/JazerJu/glm-asr-ctc-bench)（模型权重，Apache-2.0）
+- [JazerJu/glm-asr-ctc-bench](https://huggingface.co/JazerJu/glm-asr-ctc-bench)（模型权重，Apache-2.0；`a7_avg5` 的 ONNX 头在它的 `qwen-ctc-a7avg5/` 子目录）
+- [JazerJu/qwen3-asr-ctc-aiinfra](https://huggingface.co/JazerJu/qwen3-asr-ctc-aiinfra)（PyTorch 权重与 `a7_avg5/config.json`、`release.json`）
 - [JazerJu/bench-asr-ctc](https://github.com/JazerJu/bench-asr-ctc)（评测与导出参考实现，Apache-2.0）
 - [JazerJu/Qwen3-ASR-CTC-GGUF](https://github.com/JazerJu/Qwen3-ASR-CTC-GGUF)（参考实现，MIT）
 
-具体文件与 `curl` 命令见 [models/模型下载方式.txt](models/模型下载方式.txt) 的「Qwen3-ASR + CTC 头」一节，下载后放到 `models/qwen-ctc-aiinfra4/`。
+具体文件与 `curl` 命令见 [models/模型下载方式.txt](models/模型下载方式.txt) 的「Qwen3-ASR + CTC 头」一节：编码器、`tokens.txt`、`preprocessor_config.json`、LLM 解码器与各 CTC 头都放到 `models/qwen-ctc/`，0.6B 三件套放到 `models/qwen-ctc/06b/`。
 
-> ⚠️ `aiinfra4` 版的 CTC 头（`Qwen3-ASR-CTC.fp16.onnx`）会把 AI 技术领域的英文转写成中文译文（`we` → `我们`），原因见上文「新增 可选模型 `QwenCTC`」。默认配置已指向 v1 头，下载时按 [models/模型下载方式.txt](models/模型下载方式.txt) 取 `Qwen3-ASR-CTC.v1.fp16.onnx` 即可（与 v2 放在同一目录、文件名不同），**无需改配置**。
+> ⚠️ 更早的 `aiinfra4`（v2）版 CTC 头会把 AI 技术领域的英文转写成中文译文（`we` → `我们`），原因见上文「新增 可选模型 `QwenCTC`」。该项目已删除 v2 的三个头文件，默认换成 `a7_avg5`（`models/qwen-ctc/Qwen3-ASR-CTC.fp16.onnx`）；**从旧版升级的用户**需把配置里的 `models/qwen-ctc-aiinfra4/` 改成 `models/qwen-ctc/`、`models/qwen-ctc-aiinfra4-06b/` 改成 `models/qwen-ctc/06b/`，并把 CTC 头路径指向新默认头（原本指 v1 / v2 的都要改）。旧的 `v1` 头（`Qwen3-ASR-CTC.v1.fp16.onnx`）仍可按需下载作为回退。
 
 标点符号模型：
 

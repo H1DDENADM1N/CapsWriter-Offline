@@ -5,22 +5,28 @@ Qwen3-CTC 头的「语言串味」诊断工具
 用途：排查 Qwen3-ASR + CTC 头在某些音频上把外文转写成中文（译文）的问题。
 
 背景（2026-10 排查结论）：
-    `models/qwen-ctc-aiinfra4/` 的 CTC 头（v2，global_step 339707）是在
+    旧的 aiinfra4 版 CTC 头（v2，global_step 339707，现已删除）是在
     「AI-infra 中英混读语料」上续训的，语料为中英对照字幕，于是 CTC 头学到
     了「英文语音 -> 中文字幕」这层映射。遇到 AI 技术领域的英文内容时，
     会把英文单词替换成对应的中文词（we -> 我们，or -> 或，intro to -> intro 到）。
     这不是解码 bug：换一个 CTC 头（v1）就完全消失。
 
+现状（2026-11）：
+    默认头已换成上游 `a7_avg5`，与编码器、词表同放在 `models/qwen-ctc/`。它清掉
+    那批语料里 2445 段「英文语音配中文字幕」的样本后续训，并算术平均末段 5 个
+    checkpoint，把 29 篇 TED 纯英文音频上的汉字输出从 157 次压到 5~6 次（未清零）。
+    v1 头保留在同目录作可选回退（v2 已删除）。本工具仍可用来复测，或对比 v1 看差异。
+
 用法：
     # 1) 抽音频（任意格式 -> 16k 单声道 wav）
     ffmpeg -i input.mp4 -vn -ac 1 -ar 16000 out.wav
 
-    # 2) 扫描整段音频，统计每个 30s 片段的中文占比
+    # 2) 扫描整段音频，统计每个 30s 片段的中文占比（默认头 a7）
     .venv/Scripts/python.exe dev/qwen_ctc_lang_check.py out.wav
 
-    # 3) 对比两个 CTC 头（验证是否与头有关）
+    # 3) 对比多个 CTC 头（验证是否与头有关）
     .venv/Scripts/python.exe dev/qwen_ctc_lang_check.py out.wav \
-        --heads v1 v2
+        --heads a7 v1
 
     # 4) 用独立引擎（SenseVoice）交叉验证音频里到底有没有中文人声
     .venv/Scripts/python.exe dev/qwen_ctc_lang_check.py out.wav --cross-check
@@ -41,14 +47,14 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-MODEL_DIR = ROOT / "models" / "qwen-ctc-aiinfra4"
+MODEL_DIR = ROOT / "models" / "qwen-ctc"  # 编码器、词表、特征配置与各头都在同一个目录
 
-# 可选的 CTC 头：名字 -> 文件名
+# 可选的 CTC 头：名字 -> 完整路径
 HEADS = {
-    "v1": "Qwen3-ASR-CTC.v1.fp16.onnx",
-    "v2": "Qwen3-ASR-CTC.fp16.onnx",
-    "v2-q4": "Qwen3-ASR-CTC.q4.onnx",
-    "v2-q4f16": "Qwen3-ASR-CTC.q4f16.onnx",
+    "a7": MODEL_DIR / "Qwen3-ASR-CTC.fp16.onnx",
+    "a7-q4f16": MODEL_DIR / "Qwen3-ASR-CTC.q4f16.onnx",
+    "a7-hqqf16": MODEL_DIR / "Qwen3-ASR-CTC.hqqf16.onnx",
+    "v1": MODEL_DIR / "Qwen3-ASR-CTC.v1.fp16.onnx",
 }
 
 SEGMENT_SEC = 30.0  # 编码器的 30 秒桶
@@ -175,9 +181,9 @@ def main():
     ap.add_argument(
         "--heads",
         nargs="+",
-        default=["v2"],
+        default=["a7"],
         choices=list(HEADS),
-        help="要测试的 CTC 头（默认 v2 = aiinfra4）",
+        help="要测试的 CTC 头（默认 a7 = a7_avg5；v1 为旧头）",
     )
     ap.add_argument(
         "--cross-check",
@@ -200,7 +206,7 @@ def main():
     print(f"音频: {wav.name}  {dur:.1f}s")
 
     for name in args.heads:
-        path = MODEL_DIR / HEADS[name]
+        path = HEADS[name]
         if not path.exists():
             print(f"（跳过 {name}：{path.name} 不存在）")
             continue

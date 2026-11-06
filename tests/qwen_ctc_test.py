@@ -11,8 +11,8 @@ Qwen3-ASR + CTC 头 引擎测试
    写错的典型症状）、token 与时间戳一一对应、时间戳单调。
 3. **拼接**：多段带重叠的音频拼起来，重复段不能被输出两遍。
 
-需要模型文件（默认 models/qwen-ctc-aiinfra4/）。没有模型时前两组用例会
-自动跳过，只跑纯逻辑那一组。
+需要模型文件（编码器、词表与默认 CTC 头都在 models/qwen-ctc/）。没有模型时
+前两组用例会自动跳过，只跑纯逻辑那一组。
 """
 
 import sys
@@ -26,14 +26,27 @@ sys.path.append(".")
 from util.qwen_ctc import QwenCTCEngine, QwenCTCConfig  # noqa: E402
 from util.qwen_ctc.tokens import decode_bytes, load_tokens  # noqa: E402
 
-MODEL_DIR = Path("models/qwen-ctc-aiinfra4")
+MODEL_DIR = Path("models/qwen-ctc")  # 编码器、词表、特征配置与各头都在同一目录
 SAMPLE_RATE = 16000
+
+# 引擎用例优先跑默认头（a7_avg5）；没有 a7 时退回旧的 v1 头，两个都没有就跳过引擎用例。
+CTC_CANDIDATES = [
+    MODEL_DIR / "Qwen3-ASR-CTC.fp16.onnx",
+    MODEL_DIR / "Qwen3-ASR-CTC.v1.fp16.onnx",
+]
+
+
+def _ctc_path() -> Path | None:
+    for p in CTC_CANDIDATES:
+        if p.exists():
+            return p
+    return None
 
 # 引擎用例需要一段真实语音。仓库自带的 SenseVoice 测试音频最方便，
 # 也可以自己放一个 30s 左右的音频到 dev/test_asset_30s.wav。
 AUDIO_CANDIDATES = [
     Path("dev/test_asset_30s.wav"),
-    Path("models/qwen-ctc-aiinfra4/test.wav"),
+    Path("models/qwen-ctc/test.wav"),
     Path(
         "models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/test_wavs/zh.wav"
     ),
@@ -103,16 +116,16 @@ def test_segment_split():
 
 # ── 2. 引擎（需要模型文件） ────────────────────────────────────────────
 def _model_available() -> bool:
-    return (MODEL_DIR / "Qwen3-ASR-Encoder.q4.onnx").exists() and (
-        MODEL_DIR / "Qwen3-ASR-CTC.fp16.onnx"
-    ).exists()
+    return (MODEL_DIR / "Qwen3-ASR-Encoder.q4.onnx").exists() and _ctc_path() is not None
 
 
 def _make_engine() -> QwenCTCEngine:
+    ctc = _ctc_path()
+    assert ctc is not None
     return QwenCTCEngine(
         QwenCTCConfig(
             encoder_onnx_path=str(MODEL_DIR / "Qwen3-ASR-Encoder.q4.onnx"),
-            ctc_onnx_path=str(MODEL_DIR / "Qwen3-ASR-CTC.fp16.onnx"),
+            ctc_onnx_path=str(ctc),
             tokens_path=str(MODEL_DIR / "tokens.txt"),
             preprocessor_path=str(MODEL_DIR),
             num_threads=6,

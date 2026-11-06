@@ -739,26 +739,26 @@ opus_mt_dir = "models/Helsinki-NLP--opus-mt-zh-en"
 # 离线翻译模型目录
 
 
-qwen_ctc_encoder_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-Encoder.q4.onnx"
+qwen_ctc_encoder_path = "models/qwen-ctc/Qwen3-ASR-Encoder.q4.onnx"
 # Qwen3-ASR 编码器模型路径
 
-qwen_ctc_ctc_path = "models/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx"
-# Qwen3-ASR CTC 头模型路径
+qwen_ctc_ctc_path = "models/qwen-ctc/Qwen3-ASR-CTC.fp16.onnx"
+# Qwen3-ASR CTC 头模型路径（默认 a7_avg5；v1 回退改用 Qwen3-ASR-CTC.v1.fp16.onnx，省体积改用 .q4f16 / .hqqf16）
 
-qwen_ctc_tokens_path = "models/qwen-ctc-aiinfra4/tokens.txt"
+qwen_ctc_tokens_path = "models/qwen-ctc/tokens.txt"
 # Qwen3-ASR CTC 紧凑词表路径（base64 原始字节）
 
-qwen_ctc_preprocessor_path = "models/qwen-ctc-aiinfra4"
+qwen_ctc_preprocessor_path = "models/qwen-ctc"
 # Qwen3-ASR 特征提取器配置目录（preprocessor_config.json）
 
-qwen_llm_path = "models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf"
+qwen_llm_path = "models/qwen-ctc/qwen3_asr_llm.q4_k.gguf"
 # Qwen3-ASR LLM 解码器（GGUF）路径，留空则退回纯 CTC 模式
 
 qwen_ctc_encoder_frontend_path = ""
-# 0.6B 编码器前端（ONNX）路径，留空则用上面的融合编码器（1.7B）
+# 0.6B 编码器前端（ONNX）路径（例：models/qwen-ctc/06b/qwen3_asr_encoder_frontend.int4.onnx），留空则用上面的融合编码器（1.7B）
 
 qwen_ctc_encoder_backend_path = ""
-# 0.6B 编码器后端（ONNX）路径，留空则用上面的融合编码器（1.7B）
+# 0.6B 编码器后端（ONNX）路径（例：models/qwen-ctc/06b/qwen3_asr_encoder_backend.int4.onnx），留空则用上面的融合编码器（1.7B）
 
 # ======================FunASR 参数配置==================================
 [funasr_args]

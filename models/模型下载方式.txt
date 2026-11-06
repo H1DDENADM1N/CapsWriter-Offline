@@ -18,39 +18,52 @@ git clone https://www.modelscope.cn/csukuangfj/sherpa-onnx-punct-ct-transformer-
 
 
 Qwen3-ASR + CTC 头语音模型（可选，config.toml 里 server.model 设为 "QwenCTC"）：
-mkdir qwen-ctc-aiinfra4
+mkdir -p qwen-ctc
 
 # 编码器（int4 量化，30 秒桶）
-curl -L -o qwen-ctc-aiinfra4/Qwen3-ASR-Encoder.q4.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/Qwen3-ASR-Encoder.q4.onnx
+curl -L -o qwen-ctc/Qwen3-ASR-Encoder.q4.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/Qwen3-ASR-Encoder.q4.onnx
 
-# CTC 头（fp16，CPU 推理最快；也可换 .q4.onnx / .q4f16.onnx）
-curl -L -o qwen-ctc-aiinfra4/Qwen3-ASR-CTC.fp16.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc-aiinfra4/Qwen3-ASR-CTC.fp16.onnx
+# CTC 头 a7_avg5（默认使用；fp16，170,998,749 字节，CPU 推理最快）
+# a7_avg5 取代了旧的 aiinfra4（v2）头（v2 已从本项目删除）：清理 2445 段「英文语音配中文字幕」训练段后续训，
+# 并平均末段 5 个 checkpoint，纯英文音频上的中文串味从 157 次降到 5~6 次（29 篇 TED）。
+curl -L -o qwen-ctc/Qwen3-ASR-CTC.fp16.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc-a7avg5/Qwen3-ASR-CTC.fp16.onnx
 
-# CTC 头（v1 版，默认使用）
-# v1 与 v2(aiinfra4) 的区别：v2 在中英对照字幕语料上续训过，会把 AI 技术领域的
-# 英文语音转写成中文译文（we -> 我们），v1 不会；代价是 v1 把中文数字写成
-# 「二零二六年」这种汉字形式。想要阿拉伯数字则改用上面的 v2 版。
-curl -L -o qwen-ctc-aiinfra4/Qwen3-ASR-CTC.v1.fp16.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/Qwen3-ASR-CTC.fp16.onnx
+# CTC 头 a7_avg5 的小体积版本（可选，换成下面任一个后把 config.toml 的
+# [model_paths].qwen_ctc_ctc_path 指向它；DirectML 只能用上面的 fp16，量化图跑不了）
+#   q4f16  44,628,958 字节，int4 权重 + fp16 激活
+#   hqqf16 45,628,114 字节，HQQ int4 权重 + fp16 激活（上游作者本人用这个）
+curl -L -o qwen-ctc/Qwen3-ASR-CTC.q4f16.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc-a7avg5/Qwen3-ASR-CTC.q4f16.onnx
+curl -L -o qwen-ctc/Qwen3-ASR-CTC.hqqf16.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc-a7avg5/Qwen3-ASR-CTC.hqqf16.onnx
 
-# 紧凑词表（base64 原始字节，共 72466 条）
-curl -L -o qwen-ctc-aiinfra4/tokens.txt https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/tokens.txt
+# 紧凑词表（base64 原始字节，共 72466 条；各头共用，换头不用换词表）
+curl -L -o qwen-ctc/tokens.txt https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/tokens.txt
 
 # 特征提取器配置
-curl -L -o qwen-ctc-aiinfra4/preprocessor_config.json https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/preprocessor_config.json
+curl -L -o qwen-ctc/preprocessor_config.json https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/preprocessor_config.json
 
-# CTC 头结构信息（config.json）
-curl -L -o qwen-ctc-aiinfra4/config.json https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc-aiinfra4/config.json
+# CTC 头结构信息（config.json）与 a7_avg5 的 release.json / validation.json
+# 都随仓库提供（models/qwen-ctc/ 下），不必下载；validation.json 里记着四个 ONNX 的 sha256。
 
-将 qwen-ctc-aiinfra4 文件夹放到软件根目录的 models\ 下
+# 可选回退：旧的 v1 头（a7 万一在你某类音频上更差时改 qwen_ctc_ctc_path 指向它）
+# v1 与 a7 的区别：a7 属 aiinfra4 一脉，中文数字写阿拉伯数字；v1 写成「二零二六年」这种汉字。
+# v1 不会英文串中文，但整体准确率更差。
+curl -L -o qwen-ctc/Qwen3-ASR-CTC.v1.fp16.onnx https://huggingface.co/JazerJu/glm-asr-ctc-bench/resolve/main/qwen-ctc/Qwen3-ASR-CTC.fp16.onnx
+
+将 qwen-ctc 这一个文件夹放到软件根目录的 models\ 下
+（编码器、词表、特征配置、解码器与各 CTC 头都在同一目录；0.6B 三件套在 models/qwen-ctc/06b/）
+
+qwen-ctc/ 里的 config.json、release.json、validation.json 随仓库提供，
+其中 validation.json 记着四个 ONNX 的字节数与 sha256，可用来校验下载是否完整：
+certutil -hashfile models\qwen-ctc\Qwen3-ASR-CTC.fp16.onnx SHA256
 
 LLM 解码器（用于「CTC 首遍 + LLM 二遍」或纯 LLM 模式）：
 config.toml 模板里 [model_paths].qwen_llm_path 已预填下面这个路径，
 所以**不下载它，服务端会在启动体检阶段硬错误退出**；不想用就把该键留空退回纯 CTC。
 
 # 1.7B 解码器（GGUF，Q4_K，1,282,434,624 字节 ≈ 1.22 GiB）
-# 与上面的 qwen-ctc-aiinfra4 编码器搭配，放到 models/qwen-ctc-aiinfra4/ 下
-mkdir -p models/qwen-ctc-aiinfra4
-curl -4 -L -C - -o models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf \
+# 与上面的 qwen-ctc/ 编码器搭配，放到 models/qwen-ctc/ 下
+mkdir -p models/qwen-ctc
+curl -4 -L -C - -o models/qwen-ctc/qwen3_asr_llm.q4_k.gguf \
   "https://modelscope.cn/models/luciacx/Qwen3-ASR-GGUF-1.7B-mixed/resolve/master/qwen3_asr_llm.q4_k.gguf"
 
 下载后无需改配置（模板已指向该文件），并确认
@@ -63,17 +76,17 @@ curl -4 -L -C - -o models/qwen-ctc-aiinfra4/qwen3_asr_llm.q4_k.gguf \
 # 编码器前端 int4 ONNX（20,343,991 字节）
 # 编码器后端 int4 ONNX（94,750,816 字节）
 # 0.6B 解码器 GGUF，Q4_K（484,215,360 字节 ≈ 461 MiB）
-# 三个文件都放到 models/qwen-ctc-aiinfra4-06b/ 下
-mkdir -p models/qwen-ctc-aiinfra4-06b
+# 三个文件都放到 models/qwen-ctc/06b/ 下
+mkdir -p models/qwen-ctc/06b
 for f in qwen3_asr_encoder_frontend.int4.onnx qwen3_asr_encoder_backend.int4.onnx qwen3_asr_llm.q4_k.gguf; do
-  curl -4 -L -C - -o "models/qwen-ctc-aiinfra4-06b/$f" \
+  curl -4 -L -C - -o "models/qwen-ctc/06b/$f" \
     "https://modelscope.cn/models/luciacx/Qwen3-ASR-GGUF-0.6B-mixed/resolve/master/$f"
 done
 
 必须在 config.toml 里同时配置这三个键（缺一个都会退回 1.7B 的假设，导致维度不匹配）：
-  [model_paths].qwen_llm_path = "models/qwen-ctc-aiinfra4-06b/qwen3_asr_llm.q4_k.gguf"
-  [model_paths].qwen_ctc_encoder_frontend_path = "models/qwen-ctc-aiinfra4-06b/qwen3_asr_encoder_frontend.int4.onnx"
-  [model_paths].qwen_ctc_encoder_backend_path = "models/qwen-ctc-aiinfra4-06b/qwen3_asr_encoder_backend.int4.onnx"
+  [model_paths].qwen_llm_path = "models/qwen-ctc/06b/qwen3_asr_llm.q4_k.gguf"
+  [model_paths].qwen_ctc_encoder_frontend_path = "models/qwen-ctc/06b/qwen3_asr_encoder_frontend.int4.onnx"
+  [model_paths].qwen_ctc_encoder_backend_path = "models/qwen-ctc/06b/qwen3_asr_encoder_backend.int4.onnx"
 0.6B 解码器 hidden 为 1024，与 1.7B 融合编码器的 2048 维输出不兼容，不能混用。
 0.6B 没有 CTC 头：即使 [qwen_ctc_args].enable_ctc = true，引擎也会打 WARNING 后按纯 LLM 运行（无字级时间戳）。
 

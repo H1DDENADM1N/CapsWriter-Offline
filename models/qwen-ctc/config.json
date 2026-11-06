@@ -19,8 +19,8 @@
   "frame_rate_hz": 13,
   "frame_shift_sec": 0.076923,
   "sample_rate": 16000,
-  "global_step": 339707,
-  "val_loss": 0.532074,
+  "global_step": 412000,
+  "val_loss": 0.0,
   "params": 85448596,
   "torch_dtype": "float32"
 }

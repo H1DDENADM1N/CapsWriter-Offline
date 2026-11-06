@@ -63,7 +63,8 @@
 
 ## 6. Qwen3-ASR + CTC 头 语音识别模型
 
-- **目录**：`qwen-ctc-aiinfra4/`
+- **目录**：`qwen-ctc/`（编码器、词表、特征配置、1.7B 解码器与各 CTC 头都在这一层）、
+  `qwen-ctc/06b/`（0.6B 编码器前后端与解码器）
 - **编码器上游**：[Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B)（阿里巴巴通义千问）
 - **CTC 头与 ONNX 导出**：[JazerJu/qwen3-asr-ctc](https://huggingface.co/JazerJu/qwen3-asr-ctc)、
   [JazerJu/glm-asr-ctc-bench](https://huggingface.co/JazerJu/glm-asr-ctc-bench)（JazerJu）
@@ -78,24 +79,33 @@
   [HaujetZhao/Qwen3-ASR-GGUF](https://github.com/HaujetZhao/Qwen3-ASR-GGUF) 仓库**没有 LICENSE 文件**，
   GitHub API 返回 `license: None`，README 无许可段落；ModelScope 镜像（`luciacx/*`）的 License 字段为空。
   即**导出产物本身未声明许可证**。本项目未修改权重、仅原样分发。该模型**不进源码仓库**
-  （`/models/qwen-ctc-aiinfra4/*.gguf` 已 gitignore），但 `config.toml` 模板已预填它的路径，
+  （`/models/qwen-ctc/*.gguf` 已 gitignore），但 `config.toml` 模板已预填它的路径，
   因此在整合包/本机 `models/` 目录里默认预置了 1.7B 解码器；纯源码检出且未下载该文件时，
   服务端会在启动体检阶段报缺失并给出下载命令，把 `model_paths.qwen_llm_path` 留空即可退回纯 CTC。
 
 ### 模型文件构成
 
+`qwen-ctc/`（编码器、词表、特征配置、1.7B 解码器与各 CTC 头都在同一层）：
+
 | 文件 | 说明 |
 | --- | --- |
 | `Qwen3-ASR-Encoder.q4.onnx` | Qwen3-ASR 编码器（int4 量化，30 秒桶，输入 `input_features [128,3000]`） |
-| `Qwen3-ASR-CTC.fp16.onnx` | CTC 头（fp16，输出 `logits [batch,time,72468]`） |
-| `Qwen3-ASR-CTC.q4.onnx` | CTC 头（int4 量化，可选） |
-| `Qwen3-ASR-CTC.q4f16.onnx` | CTC 头（int4 量化 + fp16 激活，可选） |
-| `tokens.txt` | 紧凑词表，每行 `base64(原始字节)\t<id>`，共 72466 条 |
+| `Qwen3-ASR-CTC.fp16.onnx` | **默认 CTC 头** `a7_avg5`（fp16 权重 + fp32 I/O，170,998,749 B）；输入 `enc_output [batch,time,2048]`、输出 `logits [batch,time,72468]` |
+| `Qwen3-ASR-CTC.q4f16.onnx` | `a7_avg5` 头（RTN int4 权重 + fp16 激活，44,628,958 B，可选；DirectML 不支持 MatMulNBits） |
+| `Qwen3-ASR-CTC.hqqf16.onnx` | `a7_avg5` 头（HQQ int4 权重 + fp16 激活，45,628,114 B，可选；同上不支持 DirectML） |
+| `Qwen3-ASR-CTC.v1.fp16.onnx` | v1 CTC 头（fp16，96,786,216 B），可选回退（中文数字写「二零二六年」） |
+| `tokens.txt` | 紧凑词表，每行 `base64(原始字节)\t<id>`，共 72466 条（各头共用） |
 | `preprocessor_config.json` | WhisperFeatureExtractor 配置（128 mel / hop 160 / 30 秒桶） |
-| `config.json` | CTC 头结构与训练信息 |
+| `config.json` | CTC 头结构与训练信息（`global_step` 412000 是首个平均步，`val_loss` 为占位） |
+| `release.json` | 发布说明：末段 5 个 checkpoint（412000 / 414000 / 416000 / 418000 / 420000）的 `ctc_decoder` 参数算术平均；编码器与词表不变 |
+| `validation.json` | 四个 ONNX 的字节数与 sha256（onnxruntime 1.27.0 下的 CPU logits 一致性校验） |
 | `qwen3_asr_llm.q4_k.gguf` | Qwen3-ASR LLM 解码器（GGUF，arch `qwen3vl`，Q4_K 量化，1,282,434,624 B ≈ 1.28 GB）；用于「CTC 首遍 + LLM 二遍」或纯 LLM 模式，路径已由 `config.toml` 模板预填（留空退回纯 CTC） |
 
-### 0.6B 全套（`qwen-ctc-aiinfra4-06b/`）
+> **已删除**（目录整理时移除，不再随项目分发）：`aiinfra4`（v2）CTC 头三件套
+> `Qwen3-ASR-CTC.fp16.onnx` / `.q4.onnx` / `.q4f16.onnx`。该头在中英对照字幕语料上续训过，
+> 会把 AI 技术领域的英文转写成中文译文（`we` → `我们`），已由 `a7_avg5` 取代。
+
+### 0.6B 全套（`qwen-ctc/06b/`）
 
 | 文件 | 说明 |
 | --- | --- |
@@ -126,5 +136,6 @@
 | `sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12` | Apache-2.0 | 需保留版权与许可声明 | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
 | `Fun-ASR-Nano-GGUF-2026-02-09` | FunASR 模型协议 v1.1 | **必须**标注来源并保留模型名称 | [MODEL_LICENSE](https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE) |
 | `Helsinki-NLP--opus-mt-zh-en` | **CC-BY-4.0** | **必须**署名 Helsinki-NLP / OPUS-MT / Tatoeba | [CC-BY-4.0.txt](../LICENSES/CC-BY-4.0.txt) |
-| `qwen-ctc-aiinfra4` | Apache-2.0（编码器） / MIT（参考实现） / 导出产物未声明许可（解码器 GGUF） | **必须**标注 Qwen 团队 / JazerJu / HaujetZhao | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
-| `qwen-ctc-aiinfra4-06b` | Apache-2.0（上游权重 Qwen3-ASR-0.6B） / 导出产物未声明许可 | **必须**标注 Qwen 团队 / HaujetZhao | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
+| `qwen-ctc` | Apache-2.0（编码器与 CTC 头） / MIT（参考实现） / 导出产物未声明许可（解码器 GGUF） | **必须**标注 Qwen 团队 / JazerJu / HaujetZhao | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
+| `qwen-ctc/06b` | Apache-2.0（上游权重 Qwen3-ASR-0.6B） / 导出产物未声明许可 | **必须**标注 Qwen 团队 / HaujetZhao | [Apache-2.0.txt](../LICENSES/Apache-2.0.txt) |
+

@@ -1,4 +1,9 @@
-# archive.ps1 —— 按 archive_list.txt 打包发布用的 7z 压缩包
+# archive.ps1 —— 按清单文件打包发布用的 7z 压缩包
+#
+# 清单默认为 dev\archive_list.txt（程序包）；模型分卷另用一份清单，靠 -ListFile 切换：
+#   .\dev\archive.ps1 -ArchiveName "CapsWriter-Offline-GUI-v9.0.0_2026-11-06.7z"
+#   .\dev\archive.ps1 -ListFile dev\archive_list_models_qwen_ctc.txt `
+#                      -ArchiveName "models_Part3(qwenasr_ctc)_for_CapsWriter-Offline-GUI_2026-11-06.7z"
 #
 # 列表里只放「运行时需要的东西」：可执行的 exe、PyStand 要跑的 .py、runtime/、
 # 模型之外的必需数据（keywords.txt、hot-*.txt、configs/）等。
@@ -16,6 +21,10 @@
 param(
     [string]$ArchiveName = "backup.7z",
     [string]$EsPath = "dev\tools\es.exe",
+    # 打包清单。程序包用默认的 dev\archive_list.txt；模型分卷另有一份清单
+    # （dev\archive_list_models_qwen_ctc.txt 等），靠这个参数切换，免得为了打
+    # 第二个包去改默认清单——改默认清单最容易忘改回去，把模型塞进程序包里。
+    [string]$ListFile = "dev\archive_list.txt",
     [switch]$SkipPycacheCleanup
 )
 
@@ -24,7 +33,7 @@ param(
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $sevenZip = "C:\Program Files\7-Zip\7z.exe"
-$listFile = "dev\archive_list.txt"
+$listFile = $ListFile
 
 # 脚本位于 dev\ 下，项目根目录是它的上一级
 $projectRoot = Split-Path -Parent $PSScriptRoot

@@ -1,0 +1,54 @@
+{
+  "Qwen3-ASR-CTC.fp16.onnx": {
+    "source_sha256": "c229a5a8c3d63b1d203b5b75f5cba1a84263996b9e4d18abf9632385a0a6a2a1",
+    "sha256": "e1a12c21a2675fcaad81ea25a19c3123c9a0ad63b5b71f9e8bdb9ca566c6105d",
+    "size_bytes": 170998749,
+    "onnx_checker": "pass",
+    "cpu_logits_equal_after_topological_sort": true,
+    "test_input_shape": [
+      1,
+      39,
+      2048
+    ],
+    "onnxruntime": "1.27.0"
+  },
+  "Qwen3-ASR-CTC.q4.onnx": {
+    "source_sha256": "c7680a4965c9b1eb77fd1c40c778bed69bfd5761be30cba4f47c84122e964146",
+    "sha256": "c7680a4965c9b1eb77fd1c40c778bed69bfd5761be30cba4f47c84122e964146",
+    "size_bytes": 46163665,
+    "onnx_checker": "pass",
+    "cpu_logits_equal_after_topological_sort": true,
+    "test_input_shape": [
+      1,
+      39,
+      2048
+    ],
+    "onnxruntime": "1.27.0"
+  },
+  "Qwen3-ASR-CTC.q4f16.onnx": {
+    "source_sha256": "26388cd9195b72d451ed47c26795e749cb07f27dcb007ee05a484e8965076ef4",
+    "sha256": "9c55e9426f660280e24136861f0a1bc4503b6a4aec657beddcbb5cd01a49c719",
+    "size_bytes": 44628958,
+    "onnx_checker": "pass",
+    "cpu_logits_equal_after_topological_sort": true,
+    "test_input_shape": [
+      1,
+      39,
+      2048
+    ],
+    "onnxruntime": "1.27.0"
+  },
+  "Qwen3-ASR-CTC.hqqf16.onnx": {
+    "source_sha256": "4f60063b612c8ad12fdc9195bba265c1598bc21266106402af197db9c2f6584c",
+    "sha256": "1c5cff8e6b2cfe60129e6dcd8bc3d3356bbd9568c9ed2ddf80b90f546787f278",
+    "size_bytes": 45628114,
+    "onnx_checker": "pass",
+    "cpu_logits_equal_after_topological_sort": true,
+    "test_input_shape": [
+      1,
+      39,
+      2048
+    ],
+    "onnxruntime": "1.27.0"
+  }
+}
